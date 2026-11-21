@@ -14,7 +14,7 @@ Design approved and updated after the team sync. Next: implementation plan.
 | # | Work | Owner | Status | Notes |
 |---|---|---|---|---|
 | 0 | Design doc | Vivek | done | updated after 14:50 sync |
-| 1 | Implementation plan | Vivek | doing | |
+| 1 | Implementation plan | Vivek | in review | `docs/superpowers/plans/2026-11-21-action-arm-skills.md` |
 | 2 | Vendor SO-101 model; MuJoCo 4.0.1 vs 3.17 check | Vivek | todo | |
 | 3 | IK (`arms/ik.py`) | Vivek | todo | |
 | 4 | Primitives protocol (`arms/primitives.py`) | Vivek | todo | post draft to Hardware (#19) |
