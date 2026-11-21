@@ -171,8 +171,10 @@ def test_dark_and_green_regions_are_ignored_but_small_spots_kept() -> None:
     cv2.rectangle(top, (250, 10), (350, 110), (150, 210, 140), -1)  # mint-green arm
     cv2.circle(top, (200, 250), 6, (25, 25, 25), -1)  # dark cap of a piece, ~1 cm2
     cv2.circle(top, (100, 250), 15, (150, 60, 20), -1)  # blue lip balm
+    cv2.rectangle(top, (150, 150), (290, 200), (90, 25, 10), -1)  # big dark-blue piece, 70 cm2
     lab = cv2.cvtColor(top, cv2.COLOR_BGR2LAB).astype(np.float32)
     m = _ignored(top, lab, {"grow": 0.01})
     assert m[60, 60] and m[60, 300]
     assert m[60, 118]  # grown by 1 cm past the arm's edge
-    assert not m[250, 200] and not m[250, 100] and not m[200, 200]
+    assert not m[250, 200] and not m[250, 100]
+    assert not m[175, 220]  # dark but blue: a piece, not an arm

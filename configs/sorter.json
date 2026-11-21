@@ -45,8 +45,9 @@
     "box_margin": 0.02,
     "arm_mask_radius": 0.04,
     "ignore": {
-      "note": "Never pieces: large dark regions (black arm, wrist cameras, cables) and green ones (green arm), grown by 'grow' m. OpenCV hue 0..180, Lab L 0..255.",
+      "note": "Never pieces: large dark colourless regions (black arm, wrist cameras, cables; Lab chroma < dark_chroma_max, so a dark blue piece still counts) and green ones (green arm), grown by 'grow' m. OpenCV hue 0..180, Lab L 0..255.",
       "dark_l_max": 75,
+      "dark_chroma_max": 20,
       "green_hue": [30, 75],
       "green_s_min": 50,
       "min_area_cm2": 15.0,

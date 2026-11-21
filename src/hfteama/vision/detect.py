@@ -224,13 +224,15 @@ def find_pieces(
 
 
 def _ignored(top, lab, ig: dict):
-    """Mask of large dark or green regions (the black and the green arm, the wrist cameras,
-    cables), grown by ig["grow"] m so their edges and servo wires go too. Small dark or green
-    spots (a cap, a logo) stay: pieces are never removed for a detail."""
+    """Mask of large dark grey/black or green regions (the black and the green arm, the
+    wrist cameras, cables), grown by ig["grow"] m so their edges and servo wires go too.
+    Small dark or green spots (a cap, a logo) stay: pieces are never removed for a detail."""
     import cv2
 
     hsv = cv2.cvtColor(top, cv2.COLOR_BGR2HSV)
-    dark = lab[..., 0] < ig.get("dark_l_max", 75)
+    # dark AND colourless (the black arm, cameras, cables); a dark blue lip balm is not
+    chroma = np.hypot(lab[..., 1] - 128, lab[..., 2] - 128)
+    dark = (lab[..., 0] < ig.get("dark_l_max", 75)) & (chroma < ig.get("dark_chroma_max", 20))
     h0, h1 = ig.get("green_hue", (30, 75))  # OpenCV hue, 0..180
     green = (hsv[..., 0] >= h0) & (hsv[..., 0] <= h1) & (hsv[..., 1] >= ig.get("green_s_min", 50))
     m = ((dark | green) * 255).astype(np.uint8)
