@@ -2,11 +2,12 @@
   "rakesh": {
     "base": [
       0.138,
-      0.37
+      0.39
     ],
     "yaw_deg": -90.0,
     "z_offset": -0.015,
     "fit_rms_mm": 0.0,
-    "points": 1
+    "points": 1,
+    "note": "base y +2 cm by hand (distance from the table's back edge to the base was not measured)"
   }
 }
