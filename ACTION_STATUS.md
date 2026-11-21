@@ -59,3 +59,7 @@ Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_s
   `--backend real` in `scripts/measure_durations.py`, handoff `docs/handoff/action-to-hardware.md`
   (staged checklist; draft comment for #19/#20 at its end, not posted). Merged origin/main and
   origin/action again (Hardware's multi-pair CLI, Sahil's studio and cameras).
+- 2026-11-21 ~16:15: Independent whole-branch review done; its 2 critical and 8 important findings are fixed
+  with tests (stop latch, commands on the last command, bus lock, idle heartbeat, validate before moving,
+  park/execute races, handoff doc). 8 minors deferred (list in the ledger / final report). 199 tests green.
+  Not run on hardware.
