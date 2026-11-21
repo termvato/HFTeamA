@@ -1,0 +1,17 @@
+{
+  "note": "Copy to configs/camera.json and fill from calibration (Hardware). T_base_cam: camera pose in arm base_arm's base frame, 4x4, metres, OpenCV camera axes (x right, y down, z forward); or give T_table_cam directly. K: 3x3 intrinsics at image_size [w, h]. table_bounds_m: [[xmin, ymin], [xmax, ymax]] in the table frame; detections outside are dropped. This example: camera 1 m above the table centre (0.45, 0.20), looking straight down, image x along table +x.",
+  "base_arm": "arm_a",
+  "T_base_cam": [
+    [0.0, -1.0, 0.0, 0.20],
+    [-1.0, 0.0, 0.0, -0.45],
+    [0.0, 0.0, -1.0, 1.00],
+    [0.0, 0.0, 0.0, 1.0]
+  ],
+  "K": [
+    [600.0, 0.0, 320.0],
+    [0.0, 600.0, 240.0],
+    [0.0, 0.0, 1.0]
+  ],
+  "image_size": [640, 480],
+  "table_bounds_m": [[-0.10, -0.10], [1.00, 0.55]]
+}

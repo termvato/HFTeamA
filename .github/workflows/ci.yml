@@ -12,6 +12,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev,sched,view]" "pillow>=10.0"  # pillow: perception tests (no torch in CI)
       - run: ruff check .
       - run: pytest

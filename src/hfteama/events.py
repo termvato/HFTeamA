@@ -40,6 +40,11 @@ class EventLog:
             f.write(json.dumps(asdict(event)) + "\n")
 
     def read(self) -> list[Event]:
+        """All complete events. A last line still being written (no newline yet) is skipped, so
+        the log can be read while the executor writes it."""
         if not self.path.exists():
             return []
-        return [Event(**json.loads(line)) for line in self.path.read_text().splitlines() if line]
+        text = self.path.read_text()
+        lines = text.split("\n")
+        complete = lines[:-1]  # the part after the last newline is unfinished (or empty)
+        return [Event(**json.loads(line)) for line in complete if line]

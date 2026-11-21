@@ -16,11 +16,12 @@ class Assignment:
 @dataclass
 class Plan:
     assignments: list[Assignment]
-    solver: str  # "heft" | "cpsat"
+    solver: str  # "greedy" | "heft" | "cpsat" (or "retimed:<solver>")
     makespan: float  # predicted finish time
     lower_bound: float = 0.0
     binding: str = ""  # "arms" | "order" | "resource:<name>"
     info: dict[str, float] = field(default_factory=dict)  # solve time, gap, ...
+    blocked: list[str] = field(default_factory=list)  # steps no available arm can do
 
     def by_arm(self) -> dict[str, list[Assignment]]:
         out: dict[str, list[Assignment]] = {}

@@ -35,3 +35,5 @@ runs/
 
 # Sorter preview/plan images
 outputs/
+vla/camera_check.jpg
+MUJOCO_LOG.TXT

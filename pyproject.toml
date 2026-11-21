@@ -13,7 +13,13 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 sched = ["ortools>=9.10"]
 view = ["dash>=2.17", "plotly>=5.22"]
-sim = ["mujoco>=3.2"]
+sim = ["mujoco>=4.0.1"]
+# Local Qwen VLM from Hugging Face (decomposer, step check). Install torch for your GPU first.
+vlm = ["transformers>=4.57", "accelerate>=1.0", "torch>=2.4", "torchvision", "bitsandbytes>=0.45", "pillow>=10.0"]
+# Top camera: grab frames (ffmpeg) and calibrate from the ArUco markers on the table.
+camera = ["opencv-python>=4.7,<5", "imageio-ffmpeg>=0.5"]
+# Plug-in detection (hfteama.discovery): USB serial numbers, on Linux, macOS and Windows.
+arms = ["pyserial>=3.5"]
 # Real arms: LeRobot installed from source (see docs/plan.md), not pinned here.
 dev = [
     "pytest>=8.0",
@@ -30,11 +36,17 @@ packages = ["src/hfteama"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["sim: needs MuJoCo (pip install -e \".[sim]\")"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["*.md"]  # never reformat code blocks inside docs
 target-version = "py310"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/validation/*" = ["E501", "E401", "E702", "F401", "I001"]  # one-off check scripts
+"vla/*" = ["E501"]  # LeRobot helper scripts with long command lines

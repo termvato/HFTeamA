@@ -1,0 +1,49 @@
+{
+  "note": "The real hacklab table (two SO-101 side by side, 0.40 m centre to centre) in the table frame of configs/hacklab_table.json. Base poses are camera estimates (+-3-5 cm) until measured by touching markers (Operations blocker #2). park_q is vato_follower's measured resting pose; rakesh_follower's is ASSUMED the same: measure it. grip_holding_min_pct is a placeholder until measured per arm. speed_scale 0.3 = 30 % speed.",
+  "arms": {
+    "rakesh_follower": {
+      "pair": "rakesh",
+      "base": [
+        0.089,
+        0.42,
+        0.0
+      ],
+      "yaw": -1.5708,
+      "table_z": 0.0,
+      "park_q": [
+        -0.11,
+        -1.7,
+        1.56,
+        1.337,
+        -1.618
+      ],
+      "grip_holding_min_pct": 15.0,
+      "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
+      "offsets_deg": {}
+    },
+    "vato_follower": {
+      "pair": "hacklab",
+      "base": [
+        0.488,
+        0.44,
+        0.0
+      ],
+      "yaw": -1.5708,
+      "table_z": 0.0,
+      "park_q": [
+        -0.11,
+        -1.7,
+        1.56,
+        1.337,
+        -1.618
+      ],
+      "grip_holding_min_pct": 15.0,
+      "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
+      "offsets_deg": {}
+    }
+  }
+}

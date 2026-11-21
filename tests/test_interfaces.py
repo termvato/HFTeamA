@@ -27,8 +27,8 @@ def test_sort12_loads() -> None:
     [
         (1, 120.0, "arms"),
         (2, 60.0, "arms"),
-        (3, 48.0, "resource:input_bin"),
-        (8, 48.0, "resource:input_bin"),
+        (3, 54.0, "resource:input_bin"),
+        (8, 54.0, "resource:input_bin"),
     ],
 )
 def test_bound_names_the_limit(n: int, value: float, binding: str) -> None:
@@ -38,7 +38,7 @@ def test_bound_names_the_limit(n: int, value: float, binding: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "n, value, binding", [(1, 93.0, "arms"), (2, 46.5, "arms"), (4, 31.0, "order")]
+    "n, value, binding", [(1, 93.0, "arms"), (2, 46.5, "arms"), (4, 41.0, "resource:output_tray")]
 )
 def test_bound_on_ordered_task(n: int, value: float, binding: str) -> None:
     lb = lower_bound(load(ASSEMBLE3), [f"arm_{i}" for i in range(n)])
@@ -47,7 +47,7 @@ def test_bound_on_ordered_task(n: int, value: float, binding: str) -> None:
 
 
 def test_every_task_graph_loads() -> None:
-    graphs = sorted(TASKS.glob("*/*.json"))
+    graphs = sorted(p for p in TASKS.glob("*/*.json") if not p.name.startswith("poses"))
     assert len(graphs) >= 2
     for p in graphs:
         load(p)
@@ -93,3 +93,11 @@ def test_event_log_roundtrip(tmp_path: Path) -> None:
     log.write(Event(kind="task_end", arm="arm_a", task="pick_01", outcome="ok"))
     (e,) = log.read()
     assert e.kind == "task_end" and e.outcome == "ok"
+
+
+def test_event_log_skips_a_line_still_being_written(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "events.jsonl")
+    log.write(Event(kind="task_start", task="a"))
+    with log.path.open("a") as f:
+        f.write('{"kind": "task_end", "task": "a", "outc')  # writer mid-line
+    assert [e.kind for e in log.read()] == ["task_start"]

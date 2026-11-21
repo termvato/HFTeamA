@@ -264,15 +264,15 @@ footer { font-size: 13px; color: var(--muted); }
         <tbody>
           <tr><td class="path">taskgraph/</td><td>task graph format, loader, validator</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
           <tr><td class="path">scheduler/</td><td>plan format and lower bound</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
-          <tr><td class="path">scheduler/</td><td>planning (fast and best plans), plan checker</td><td>Operations</td><td><span class="pill todo">to build</span></td></tr>
-          <tr><td class="path">executor/</td><td>running the plan, re-splitting</td><td>Operations</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">scheduler/</td><td>planning (fast and best plans), plan checker</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
+          <tr><td class="path">executor/</td><td>running the plan, re-splitting</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
           <tr><td class="path">events.py</td><td>event log</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
           <tr><td class="path">arms/base.py</td><td>arm contract</td><td>all teams agree</td><td><span class="pill done">done</span></td></tr>
           <tr><td class="path">arms/skills.py</td><td>skill registry</td><td>Action</td><td><span class="pill done">done</span></td></tr>
-          <tr><td class="path">arms/</td><td>skills on real arms</td><td>Action</td><td><span class="pill todo">to build</span></td></tr>
-          <tr><td class="path">arms/</td><td>safe real arms, plug-in detection</td><td>Hardware</td><td><span class="pill todo">to build</span></td></tr>
-          <tr><td class="path">arms/</td><td>simulated arms</td><td>Action</td><td><span class="pill todo">to build</span></td></tr>
-          <tr><td class="path">view/</td><td>live screen, fake arms for testing</td><td>Operations</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">arms/</td><td>skills on real arms</td><td>Action</td><td><span class="pill done">written, not yet run on a real arm</span></td></tr>
+          <tr><td class="path">arms/</td><td>safe real arms, plug-in detection</td><td>Hardware</td><td><span class="pill done">plug-in detection done; real motion pending</span></td></tr>
+          <tr><td class="path">arms/</td><td>simulated arms</td><td>Action</td><td><span class="pill done">done in MuJoCo (Action's branch)</span></td></tr>
+          <tr><td class="path">view/</td><td>live screen, fake arms for testing</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
           <tr><td class="path">tasks/</td><td>one folder per task</td><td>task owner</td><td><span class="pill done">2 examples</span></td></tr>
         </tbody>
       </table>
@@ -295,7 +295,7 @@ footer { font-size: 13px; color: var(--muted); }
     <p class="note" style="border-left-color:var(--chain)"><b>Two-hand steps unlocked by a second arm.</b> A step that needs two arms (hold and insert, handoff) stays blocked while one arm is plugged in; plugging in arm 2 makes it runnable, so a new arm adds capability as well as speed. Fits the current task graph via <code>needs_arms: 2</code>. Not in the core build.</p>
   </section>
 
-  <footer>Repo termvato/HFTeamA, branch termvato. Status as of Saturday 21 November 2026.</footer>
+  <footer>Repo termvato/HFTeamA, branch termvato. Status table updated Saturday 21 November 2026, 18:20; the diagram's dashed boxes show the morning plan.</footer>
 </div>
 
 </body>
