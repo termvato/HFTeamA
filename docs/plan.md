@@ -50,13 +50,28 @@ These are the only things teams must agree on. Change them together, not alone.
 | Sunday evening | Full demo run: 3 real arms plus sim arms, a failure, the speed-up curve |
 | Sunday night | Code freeze, rehearsal, backup video |
 
+## Product (demo): a visual sorting system
+
+Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
+
+| Feature | What the user sees |
+|---|---|
+| Go button | Objects on the table, press Go. No other input needed. |
+| VLM as the brain | A camera VLM looks at the table, decides the categories itself, and assigns each object to a bin. |
+| Estimate before Go | Approximate time for the arms plugged in now, plus a what-if row for 1 / 2 / 3 / 4 arms. |
+| Live countdown | Predicted finish time, updated whenever an arm joins, leaves or a step fails. |
+| Why it stops speeding up | The binding limit in words (arms, step order, or a shared area), plus steps that only became possible because a new arm can reach them. |
+| Failures | Says what happened ("grasp failed, retrying", "arm lost, moving its work", "too slow") and recovers; a camera check confirms every step. |
+| Scene changes | New or moved objects mid-run: the camera notices, the VLM re-reads the table, the plan and countdown update. |
+| Simulated arms | Only in the what-if estimate; they do not execute in the live run. |
+
 ## Demo
 
-1. One arm works through a batch; predicted finish time on screen.
-2. Plug in a second arm mid-run: it is detected, the work re-splits, the finish time drops.
-3. Plug in the third: a smaller drop, and the screen names the bottleneck.
-4. Remove or fail an arm: its work flows back to the others.
-5. Simulated arms extend the curve past 3 to show where it flattens.
+1. Objects on the table, one arm plugged in: the screen shows the VLM's grouping and the estimate (with what-if for more arms).
+2. Press Go. Plug in a second arm mid-run: it is detected, the work re-splits, the countdown drops.
+3. Plug in the third: a smaller drop, and the screen names the limit.
+4. Drop a part or unplug an arm: the screen says what happened and the work flows to the others.
+5. Drop a new object on the table: it is picked up by the re-scan and sorted too.
 
 ## Later extensions (not in the core build)
 
