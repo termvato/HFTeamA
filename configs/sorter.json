@@ -72,14 +72,14 @@
     "grasp_z": 0.0,
     "approach_z": 0.05
   },
-  "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.5 cm in from the back tag on its side (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
+  "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.3 cm in from the back tag on its side (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
   "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m).",
   "arms": {
     "rakesh": {
       "pair": "rakesh",
       "colour": "black",
       "base": [
-        0.565,
+        0.567,
         -0.015
       ],
       "yaw_deg": 90.0,
@@ -89,7 +89,7 @@
       },
       "aim_offset": [
         0.04,
-        0.062
+        0.06
       ],
       "mask_radius": 0.12
     },
@@ -97,7 +97,7 @@
       "pair": "hacklab",
       "colour": "green",
       "base": [
-        0.165,
+        0.163,
         -0.015
       ],
       "yaw_deg": 90.0,
