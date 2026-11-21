@@ -23,9 +23,9 @@ lerobot-record "${ROBOT_ARGS[@]}" "${TELEOP_ARGS[@]}" \
     --dataset.single_task="$TASK" \
     --dataset.fps="$FPS" \
     --dataset.num_episodes="$NUM_EPISODES" \
-    --dataset.episode_time_s="$EPISODE_TIME_S" \
+    --dataset.episode_time_s="$( (( EPISODE_TIME_S > 0 )) && echo "$EPISODE_TIME_S" || echo 3600)" \
     --dataset.reset_time_s="$RESET_TIME_S" \
     --dataset.push_to_hub=true \
     --dataset.private="$PRIVATE" \
-    --dataset.tags='["so101","sorting","hfteama"]' \
+    --dataset.tags='["so101","stacking","hfteama"]' \
     "${EXTRA[@]}"
