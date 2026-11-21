@@ -742,6 +742,8 @@ class Jog:
                 "piece_yaw_deg": round(float(np.degrees(p.yaw)), 1),
                 "aim": [round(float(target[0]), 4), round(float(target[1]), 4)],
                 "heading_deg": round(float(np.degrees(heading)), 1),
+                # the width the aim was computed for (jaw_width_gain): removed before fitting
+                "width": round(float(self.arm.object_width or p.width), 4),
                 "placement": [pl.x, pl.y, round(float(np.degrees(pl.yaw)), 2), pl.z],
             },
         )
@@ -886,6 +888,9 @@ def cmd_fit_grasps(args) -> int:
     entries = json.loads(GRASPS_FILE.read_text()).get(side, []) if GRASPS_FILE.exists() else []
     skipped = [e for e in entries if e.get("excluded")]
     entries = [e for e in entries if not e.get("excluded")]
+    if args.since:
+        entries = [e for e in entries if e.get("time", "") >= args.since]
+        print(f"{len(entries)} grasps since {args.since}")
     if skipped:
         print(f"({len(skipped)} grasps marked excluded in {GRASPS_FILE.name})")
     if not entries:
@@ -899,6 +904,14 @@ def cmd_fit_grasps(args) -> int:
             x, y, yaw, z = e["placement"]
             then = Placement(x, y, np.radians(yaw), z)
             e["aim"] = list(pl.to_table(then.to_arm(e["aim"]))[:2])
+    # take out the width part of the jaw offset (ArmModel.aim), so pieces of every width
+    # fit the same jaw_offset; grasps logged before widths were stored count as jaw_ref_width
+    a = cfg["arms"][side]
+    ref, k = a.get("jaw_ref_width", 0.025), a.get("jaw_width_gain", 0.0)
+    for e in entries:
+        along = k * (e.get("width", ref) - ref)
+        h = np.radians(e["heading_deg"])
+        e["aim"] = [e["aim"][0] - along * np.cos(h), e["aim"][1] - along * np.sin(h)]
     gain = None
     if len(entries) >= 8:
         from hfteama.sorter.geometry import fit_aim_affine
@@ -1075,6 +1088,7 @@ def add_parser(sub) -> None:
     fg = ss.add_parser("fit-grasps", help="Fit grasp aim offsets from the grasps jog logged")
     fg.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
     fg.add_argument("--save", action="store_true", help="Save without asking")
+    fg.add_argument("--since", help='Only grasps logged from this time, e.g. "2026-11-21 22:00"')
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")

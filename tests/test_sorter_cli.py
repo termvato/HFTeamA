@@ -278,3 +278,50 @@ def test_piece_still_there() -> None:
     scene = Scene(box=None, pieces=[Piece(0.6, 0.2, 0.05, 0.02, 0.0, 8.0)])
     assert piece_still_there(scene, 0.61, 0.21)
     assert not piece_still_there(scene, 0.65, 0.2)
+
+
+def test_fit_grasps_removes_the_width_part(monkeypatch, capsys, tmp_path) -> None:
+    """Small pieces and boxes logged together fit one jaw offset once the width part
+    (jaw_width_gain) is taken out."""
+    import json
+
+    import numpy as np
+
+    import hfteama.sorter.geometry as geometry
+    from hfteama.sorter.geometry import Placement, load_config
+    from hfteama.sorter.plan import ArmModel
+
+    cfg = load_config()
+    a = cfg["arms"]["rakesh"]
+    pl = Placement.from_config(a)
+    arm = ArmModel(
+        "rakesh",
+        pl,
+        None,
+        (0.01, 0.03),
+        (0.02, -0.005),
+        jaw_ref_width=a["jaw_ref_width"],
+        jaw_width_gain=a["jaw_width_gain"],
+    )
+    rng = np.random.default_rng(3)
+    entries = []
+    for i in range(6):
+        cam = (0.65 + rng.uniform(-0.05, 0.05), 0.15 + rng.uniform(-0.05, 0.05))
+        h, w = rng.uniform(-np.pi, np.pi), (0.025, 0.058)[i % 2]
+        entries.append(
+            {
+                "time": f"2026-11-21 22:0{i}:00",
+                "camera": list(cam),
+                "aim": list(arm.aim(*cam, h, w)),
+                "heading_deg": float(np.degrees(h)),
+                "width": w,
+            }
+        )
+    grasps, places = tmp_path / "g.json", tmp_path / "p.json"
+    grasps.write_text(json.dumps({"rakesh": entries}))
+    monkeypatch.setattr(geometry, "GRASPS_FILE", grasps)
+    monkeypatch.setattr(geometry, "PLACEMENTS_FILE", places)
+    assert main(["sort", "fit-grasps", "rakesh", "--save"]) == 0
+    saved = json.loads(places.read_text())["rakesh"]
+    assert saved["aim_offset"] == pytest.approx([0.01, 0.03], abs=1e-4)
+    assert saved["jaw_offset"] == pytest.approx([0.02, -0.005], abs=1e-4)

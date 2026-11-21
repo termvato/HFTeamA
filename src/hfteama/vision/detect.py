@@ -295,8 +295,11 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
     arm_chains: the arms' current polylines in the table frame (from FK), masked out with
     their shadows; without them only a disc around each base is masked."""
     tags = {int(k): tuple(v) for k, v in cfg["table"]["tags"].items()}
-    extent = region_extent(tags)
     bc, pc = cfg["box"], cfg["pieces"]
+    # the area searched for pieces: the tag rectangle grown by region_margin on every side
+    m = pc.get("region_margin", 0.0)
+    x0, x1, y0, y1 = region_extent(tags)
+    extent = (x0 - m, x1 + m, y0 - m, y1 + m)
     box = find_box(image, pose, intr, extent, bc["diameter"], bc["height"])
     discs = [(*a["base"], a.get("mask_radius", 0.12)) for a in cfg["arms"].values()]
     polys = []
