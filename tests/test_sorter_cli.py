@@ -21,3 +21,16 @@ def test_goto_needs_a_target() -> None:
 def test_run_refuses_saved_image_on_real_arms() -> None:
     with pytest.raises(SystemExit, match="dry-run"):
         main(["sort", "run", "--image", "x.jpg"])
+
+
+def test_arm_not_plugged_in_is_refused_not_swapped(monkeypatch) -> None:
+    # the config's fallback port may now belong to the other arm: never use it
+    import hfteama.hardware.pairs as pairs
+    from hfteama.sorter.geometry import load_config
+    from hfteama.sorter.robot import ArmDriver
+
+    monkeypatch.setattr(pairs, "find_port_by_serial", lambda serial: None)
+    cfg = load_config()
+    drv = ArmDriver("right", cfg["arms"]["right"], cfg["motion"])
+    with pytest.raises(SystemExit, match="not connected"):
+        drv.connect()

@@ -42,6 +42,17 @@ class ArmDriver:
 
     def connect(self) -> ArmDriver:
         from hfteama.hardware.multi import check_calibrations
+        from hfteama.hardware.pairs import find_port_by_serial
+
+        if self.arm.serial:
+            # never fall back to the config's port: it may now be another arm
+            port = find_port_by_serial(self.arm.serial)
+            if port is None:
+                raise SystemExit(
+                    f"{self.side} arm ({self.arm.id}, serial {self.arm.serial}) is not connected."
+                    " Plug it in (check with `hfteama pairs`)."
+                )
+            self.arm.port = port
 
         if check_calibrations([self.arm]):
             raise SystemExit(
