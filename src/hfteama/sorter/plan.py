@@ -37,6 +37,16 @@ class ArmModel:
     # the arm's left), linearly interpolated, held at the ends. Overrides aim_offset; dz (m)
     # is added to every height over that piece.
     aim_table: tuple = ()
+    # pieces this arm takes: bearing from the arm (deg, 0 = ahead, + = its left), min/max
+    bearing_range: tuple[float, float] = (-180.0, 180.0)
+
+    def bearing(self, x: float, y: float) -> float:
+        a = self.placement.to_arm([x, y])
+        return float(np.degrees(np.arctan2(a[1], a[0])))
+
+    def takes(self, x: float, y: float) -> bool:
+        lo, hi = self.bearing_range
+        return lo <= self.bearing(x, y) <= hi
 
     def correction(self, x: float, y: float) -> tuple[float, float, float]:
         """(forward, left, dz) to apply for a piece seen at table (x, y)."""
@@ -91,6 +101,8 @@ class Plan:
 
 
 def plan_pick(arm: ArmModel, piece: Piece, mc: dict, pc: dict) -> PickPlan | None:
+    if not arm.takes(piece.x, piece.y):
+        return None
     max_tilt = np.radians(mc.get("max_tilt_deg", 30.0))
     ax, ay, yaw, _, dz = arm.grasp_aim(piece, pc.get("approach_z", 0.05))
     g = arm.placement.to_arm([ax, ay, pc.get("grasp_z", 0.005) + dz])

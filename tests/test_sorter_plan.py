@@ -132,3 +132,14 @@ def test_aim_table_interpolates_by_bearing_and_holds_at_the_ends() -> None:
     assert arm.correction(*ahead) == pytest.approx((0.01, 0.035, -0.001))
     far_right = p.to_table([0.1, -0.2])  # beyond -20 deg: held at the first knot
     assert arm.correction(*far_right) == pytest.approx((0.02, 0.06, 0.0))
+
+
+def test_arm_only_takes_pieces_in_its_bearing_range() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, bearing_range=(-90.0, 5.0))
+    assert arm.takes(0.65, 0.15)  # to its right
+    assert not arm.takes(0.45, 0.15)  # to its left
+    scene = Scene(box=Box(0.6, 0.25, 0.09), pieces=[piece(0.45, 0.15), piece(0.65, 0.15)])
+    plan = make_plan(scene, {"rakesh": arm}, CFG)
+    assert [round(p.piece.x, 2) for p in plan.picks] == [0.65]
+    assert len(plan.unreachable) == 1

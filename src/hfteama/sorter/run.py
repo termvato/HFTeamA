@@ -109,6 +109,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             tuple(a.get("aim_offset", (0.0, 0.0))),
             tuple(a.get("jaw_offset", (0.0, 0.0))),
             tuple(tuple(r) for r in sorted(a.get("aim_table", []))),
+            tuple(a.get("bearing_range_deg", (-180.0, 180.0))),
         )
     return out
 
@@ -584,6 +585,15 @@ class Jog:
             print("  no such piece (scan to renumber)")
             return
         p = self.scene.pieces[i]
+        if not self.arm.takes(p.x, p.y):
+            lo, hi = self.arm.bearing_range
+            side = "left" if self.arm.bearing(p.x, p.y) > hi else "right"
+            print(
+                f"  piece {i + 1} is {abs(self.arm.bearing(p.x, p.y)):.0f} deg to the arm's {side}:"
+                f" {self.side} only takes pieces between {lo:+.0f} and {hi:+.0f} deg"
+                " (config bearing_range_deg)"
+            )
+            return
         ax, ay, yaw, _, dz = self.arm.grasp_aim(p, self.z)
         if self.move([ax, ay, self.z + dz], yaw):
             self.dz = dz

@@ -56,7 +56,7 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
             pass
 
         def look(self, arm_chains=()):
-            p = Piece(x=0.50, y=0.15, length=0.06, width=0.02, yaw=0.0, area_cm2=12.0)
+            p = Piece(x=0.65, y=0.15, length=0.06, width=0.02, yaw=0.0, area_cm2=12.0)
             return None, None, Scene(box=None, pieces=[p])
 
     class FakeDriver:
@@ -148,7 +148,7 @@ def test_jog_log_saves_a_grasp_the_gripper_reading_missed(monkeypatch, capsys, t
             pass
 
         def look(self, arm_chains=()):
-            p = Piece(x=0.50, y=0.15, length=0.06, width=0.015, yaw=0.0, area_cm2=8.0)
+            p = Piece(x=0.65, y=0.15, length=0.06, width=0.015, yaw=0.0, area_cm2=8.0)
             return None, None, Scene(box=Box(0.5, 0.25, 0.09), pieces=[p])
 
     class FakeDriver:
@@ -193,4 +193,4 @@ def test_jog_log_saves_a_grasp_the_gripper_reading_missed(monkeypatch, capsys, t
     out = capsys.readouterr().out
     assert "empty" in out and "type `log`" in out
     entries = json.loads(log.read_text())["rakesh"]
-    assert len(entries) == 1 and entries[0]["camera"] == [0.5, 0.15]
+    assert len(entries) == 1 and entries[0]["camera"] == [0.65, 0.15]
