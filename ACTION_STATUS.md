@@ -87,3 +87,8 @@ Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_s
   check-config: each object needs one arm. Merged origin/main (PR #44); 351 tests green. Diego ran our driver on
   rakesh_follower on `origin/hardware-real-arm-check` (gripper ramp, per-arm limits): not merged yet, conflicts
   in `arms/real.py` and `configs/real_arms.json`. Handoff for the next agent: `docs/handoff/claude-to-copilot.md`.
+- 2026-11-21 ~21:10: Verified against `origin/orchestrator` (dca0b9c, merges clean): Vato's `hfteama.demo` wiring
+  (`action_factory` + `build` + `with_table`, 15 cm clearance) drives our sim arms 24/24 on `tasks/hacklab` and 12/12
+  on Ops' `tasks/sort/hacklab6.json` (with sim objects at its `pick_xyz`). Fixed: rakesh's `place_04` bowl spot was
+  0.422 m from its pan axis, past the registry's 0.42 m reach, so `resolve` gave the pick/place pair no arm and the
+  batch never finished; each arm now places on its own half of the bowl.

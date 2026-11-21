@@ -73,7 +73,10 @@ Sim results: `tasks/hacklab/hacklab12.json` 24/24 ok on 2 arms; sort12 24/24 on 
 6. **Tell Operations:** Blocker #7 (place must leave the bowl) is fixed in 9421181; we changed the
    glob in their `tests/test_interfaces.py` to skip `poses*.json`; their `test_fake_arm.py` timing
    asserts flake under load; executor `timeout_measured` 1.5 cancels the occasional slow place
-   (we pass 2.5).
+   (we pass 2.5); a step `resolve` leaves with no allowed arm is never run and the batch never
+   ends (seen with a bowl spot 2 mm past the 0.42 m reach): it should be reported, not waited on.
+   Their `hacklab6.json` objects are not in any poses file, so in sim every grasp fails: the sim
+   only spawns the objects listed in `poses.json`.
 7. Post the primitives comment on #19 and #20 (draft at the end of `docs/handoff/action-to-hardware.md`).
    Ask Vivek first: posting is visible to the team.
 

@@ -111,3 +111,21 @@ def test_each_block_goes_to_its_own_spot_in_the_bowl_that_its_arm_can_reach() ->
     for i, a in enumerate(spots):
         for b in spots[i + 1 :]:
             assert np.linalg.norm(a - b) > 0.035  # blocks do not land on each other
+
+
+def test_operations_reach_model_gives_every_step_an_arm() -> None:
+    # The orchestrator (registry.resolve) drops a step no arm reaches; the executor never runs it.
+    from hfteama.registry import load_catalog, resolve
+
+    catalog = load_catalog(ROOT / "configs" / "hacklab_table.json")
+    resolved = resolve(load(HACK / "hacklab12.json"), catalog.values(), clearance_m=0.15)
+    assert not resolved.blocked
+    assert all(t.allowed_arms for t in resolved.graph.tasks.values())
+
+
+def test_each_arm_places_on_its_own_side_of_the_bowl() -> None:
+    graph, bx = load(HACK / "hacklab12.json"), _poses().locations["bowl"][0]
+    for t in graph.tasks.values():
+        if t.skill == "place":
+            side = t.args["place_xyz"][0] < bx
+            assert side == (t.allowed_arms == ("rakesh_follower",)), t.id

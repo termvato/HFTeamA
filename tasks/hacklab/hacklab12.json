@@ -1,6 +1,6 @@
 {
  "name": "hacklab12",
- "note": "Placeholder durations (s). 12 blocks, 6 in front of each arm (allowed_arms = the arm that reaches them), all sorted into the one shared bowl (a resource: one arm over it at a time).",
+ "note": "Placeholder durations (s). 12 blocks, 6 in front of each arm (allowed_arms = the arm that reaches them), all sorted into the one shared bowl (a resource: one arm over it at a time). Each arm places on its own half of the bowl.",
  "tasks": [
   {
    "id": "pick_01",
@@ -96,8 +96,8 @@
     "object": "block_03",
     "to": "bowl",
     "place_xyz": [
-     0.34,
-     0.081,
+     0.249,
+     0.126,
      0.1
     ]
    },
@@ -133,8 +133,8 @@
     "object": "block_04",
     "to": "bowl",
     "place_xyz": [
-     0.385,
-     0.081,
+     0.294,
+     0.126,
      0.1
     ]
    },
@@ -171,7 +171,7 @@
     "to": "bowl",
     "place_xyz": [
      0.249,
-     0.126,
+     0.171,
      0.1
     ]
    },
@@ -208,7 +208,7 @@
     "to": "bowl",
     "place_xyz": [
      0.294,
-     0.126,
+     0.171,
      0.1
     ]
    },
@@ -245,7 +245,7 @@
     "to": "bowl",
     "place_xyz": [
      0.34,
-     0.126,
+     0.081,
      0.1
     ]
    },
@@ -282,7 +282,7 @@
     "to": "bowl",
     "place_xyz": [
      0.385,
-     0.126,
+     0.081,
      0.1
     ]
    },
@@ -318,8 +318,8 @@
     "object": "block_09",
     "to": "bowl",
     "place_xyz": [
-     0.249,
-     0.171,
+     0.34,
+     0.126,
      0.1
     ]
    },
@@ -355,8 +355,8 @@
     "object": "block_10",
     "to": "bowl",
     "place_xyz": [
-     0.294,
-     0.171,
+     0.385,
+     0.126,
      0.1
     ]
    },
