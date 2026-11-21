@@ -7,7 +7,9 @@ Update this file whenever a task changes state (agents: Claude, Codex, Copilot a
 
 ## Now
 
-Design approved and updated after the team sync. Next: implementation plan.
+Plan done, wired to Operations' executor, real hacklab layout runs 24/24 in sim, vato_follower
+moved on the bench (parked, torque off). Next steps: `docs/handoff/claude-to-copilot.md` (first:
+integrate Diego's `origin/hardware-real-arm-check` gripper ramp and per-arm limits).
 
 ## Workstreams
 
@@ -78,3 +80,10 @@ Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_s
   (2) at rest shoulder_lift reads -1.947 rad, 0.20 past the model limit -1.745 (calibration range wider than the
   model): commands are clipped into the model limits and the first command moves it inside. Windows side: isolated
   venv C:\Users\utxowqr\hfteama-win (LeRobot 0.4.4, pyserial), run via hf.ps1. No motion command sent yet.
+- 2026-11-21 ~20:40: vato_follower on the bench (Vivek's go): connect held still, joint +-0.1 rad within 1 deg,
+  point at 12 cm 8 mm error, at 7 cm 2.3 mm; parked, torque off. Sim rebuilt for the real table
+  (`tasks/hacklab`: 2 arms 0.40 m apart facing -y, shared bowl, one spot per block): 24/24 ok after `place`
+  learned to leave the bowl (Operations' Blocker #7). Runner: `--timeout-factor` (2.5), fresh log per run;
+  check-config: each object needs one arm. Merged origin/main (PR #44); 351 tests green. Diego ran our driver on
+  rakesh_follower on `origin/hardware-real-arm-check` (gripper ramp, per-arm limits): not merged yet, conflicts
+  in `arms/real.py` and `configs/real_arms.json`. Handoff for the next agent: `docs/handoff/claude-to-copilot.md`.
