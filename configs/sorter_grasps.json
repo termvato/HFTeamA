@@ -588,14 +588,15 @@
     0.2697,
     0.0715
    ],
-   "heading_deg": 184.0,
+   "heading_deg": -86.0,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   },
   {
    "time": "2026-11-21 23:24:57",
@@ -608,14 +609,15 @@
     -0.0028,
     0.1434
    ],
-   "heading_deg": 183.9,
+   "heading_deg": -86.1,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   },
   {
    "time": "2026-11-21 23:25:56",
@@ -628,14 +630,15 @@
     0.1368,
     0.2524
    ],
-   "heading_deg": 252.9,
+   "heading_deg": -17.1,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   },
   {
    "time": "2026-11-21 23:26:45",
@@ -648,14 +651,15 @@
     0.2825,
     0.0746
    ],
-   "heading_deg": 180.8,
+   "heading_deg": -89.2,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   },
   {
    "time": "2026-11-21 23:29:19",
@@ -668,14 +672,15 @@
     0.1792,
     0.2188
    ],
-   "heading_deg": 169.4,
+   "heading_deg": -100.6,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   },
   {
    "time": "2026-11-21 23:33:43",
@@ -688,14 +693,15 @@
     0.161,
     0.2002
    ],
-   "heading_deg": 179.5,
+   "heading_deg": -90.5,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   },
   {
    "time": "2026-11-21 23:34:38",
@@ -708,14 +714,78 @@
     0.0324,
     0.1821
    ],
-   "heading_deg": 187.8,
+   "heading_deg": -82.2,
    "width": 0.058,
    "placement": [
     0.163,
     -0.015,
     90.0,
     0.0
-   ]
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
+  },
+  {
+   "time": "2026-11-21 23:36:10",
+   "camera": [
+    0.2859,
+    0.1295
+   ],
+   "piece_yaw_deg": -89.6,
+   "aim": [
+    0.2286,
+    0.145
+   ],
+   "heading_deg": -179.6,
+   "width": 0.058,
+   "placement": [
+    0.163,
+    -0.015,
+    90.0,
+    0.0
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
+  },
+  {
+   "time": "2026-11-21 23:36:40",
+   "camera": [
+    0.3474,
+    0.03
+   ],
+   "piece_yaw_deg": -179.6,
+   "aim": [
+    0.3152,
+    0.0455
+   ],
+   "heading_deg": -179.6,
+   "width": 0.058,
+   "placement": [
+    0.163,
+    -0.015,
+    90.0,
+    0.0
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
+  },
+  {
+   "time": "2026-11-21 23:37:15",
+   "camera": [
+    0.0057,
+    0.1155
+   ],
+   "piece_yaw_deg": -94.8,
+   "aim": [
+    0.0197,
+    0.1004
+   ],
+   "heading_deg": -4.8,
+   "width": 0.058,
+   "placement": [
+    0.163,
+    -0.015,
+    90.0,
+    0.0
+   ],
+   "wrist_fix": "heading +90: hacklab wrist_roll offset changed 90 -> 0"
   }
  ]
 }

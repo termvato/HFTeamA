@@ -150,15 +150,15 @@
       "yaw_deg": 90.0,
       "mask_radius": 0.12,
       "offsets_deg": {
-        "wrist_roll": 90.0
+        "wrist_roll": 0.0
       },
       "jaw_offset": [
-        0.019,
-        -0.003
+        0.003,
+        -0.0033
       ],
       "jaw_ref_width": 0.025,
       "jaw_width_gain": 0.5,
-      "note": "wrist_roll +90 and jaw offsets as rakesh (gripper geometry). aim_offset from its first 4 grasps (fixed part only); aim_gain still to fit (8+ grasps).",
+      "note": "wrist_roll offset 0 (not rakesh's 90: its logged grasps fit the shared gripper geometry only with the jaws turned 90 deg). jaw offsets as rakesh. aim_offset / aim_gain fitted on its grasps.",
       "x_range": [
         -1.0,
         0.367
@@ -171,8 +171,18 @@
         "wrist_roll.pos": -91.4
       },
       "aim_offset": [
-        -0.02,
-        -0.01
+        0.0005,
+        0.012
+      ],
+      "aim_gain": [
+        [
+          0.0116,
+          -0.0968
+        ],
+        [
+          0.0489,
+          -0.0457
+        ]
       ]
     }
   },
