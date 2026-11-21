@@ -11,6 +11,14 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 
 ## Messages to teams (read me)
 
+- **Everyone: the demo is filmed on our real setup** (plan on #1 and in `docs/plan.md`, Demo): the
+  VLM splits the task on screen, one arm sorts, the second arm is plugged in, the screen shows the
+  re-planning, the predicted time comes down, both arms work. No Isaac Sim. Layout rule: every
+  object within the first arm's reach (0.14-0.42 m from its shoulder).
+- **Everyone:** plug-in detection is on `main` (`src/hfteama/discovery.py`): a follower is noticed
+  by its USB serial; plugged in = joins and the work re-splits, unplugged = dropped at once. Arm ids
+  everywhere must be the follower ids from `configs/teleop_pairs.json` (`rakesh_follower`,
+  `vato_follower`). Arm positions: one file, `configs/real_arms.json` (Action's format).
 - **Action (Vivek, Sahil):** CI on `action` fails on lint only (`vla/cameras.py`, `vla/detect_arms.py`).
   Fix: `ruff format vla/`, then `ruff check vla/` (B023 in `detect_arms.py` is a false positive:
   `# noqa: B023`). Details on #20 and PR #24. Keep working on `action`, not personal branches.
@@ -45,13 +53,12 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 16:20
-- Done: research; repo, plan, teams, issues; architecture locked with Aravind; **core loop on fake
-  arms**: planner (greedy, HEFT, CP-SAT), executor with live re-split, durations, live screen
-  (`python -m hfteama.view --fake-arms 1`) on `orchestrator`.
-- Doing: supporting Action's real-arm driver (review notes on #20); next Operations task to pick.
-- Next: first run with a real arm once Hardware and Action have one step working.
-- Blocked on: nothing.
+- Updated: Sat 21 Nov 19:10
+- Done: planner, executor with live re-split, live screen (countdown, re-planning moment, top-view
+  map), plug-in detection, demo runner, scaling benchmark (#15), chain validated in MuJoCo.
+- Doing: getting the screen ready for filming on the real setup.
+- Next: first run with a real arm once Hardware has run Action's checklist.
+- Blocked on: a real arm doing a step through the worker.
 
 ### Aravind
 - Updated: Sat 21 Nov 16:15 (from the repo)
@@ -89,13 +96,15 @@ Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/o
 - Blocked on:
 
 ### Sahil
-- Updated: Sat 21 Nov 14:40
-- Goal: replace the scripted IK pick-and-place step with a learned policy (SmolVLA first), trained
-  on teleop data for the sort task, behind the same step interface.
-- Done: data collection in `vla/` on `action` (arm detection, calibration, teleop, recording to the
-  HF Hub). Local recording web page (live cameras, start/save/discard, upload), tested without
-  arms, not pushed yet.
-- Doing: connecting one arm and the cameras to record the single-arm dataset (~50 episodes).
-- Next: second arm, dual-arm dataset, train SmolVLA, plug it in as an arm worker. Fix CI lint on
-  `vla/detect_arms.py`.
+- Updated: Sat 21 Nov 17:44
+- Goal: replace the scripted IK pick-and-place step with a learned policy (ACT / SmolVLA), one
+  copy per arm behind the same step interface; the orchestrator splits the objects.
+- Done: recording studio in `vla/` on `action` (live top + wrist cameras, start/stop/upload),
+  using Hardware's calibrated pairs. First dataset, public:
+  [`so101_stack_single_rakesh`](https://huggingface.co/datasets/sahilrajpurkar03/so101_stack_single_rakesh)
+  (20 episodes, rakesh pair, "Put the objects in the box"). Research note: one policy on any number
+  of arms ([`vla/multi_arm_policy.md`](https://github.com/termvato/HFTeamA/blob/action/vla/multi_arm_policy.md)).
+- Doing: choosing how arms pick objects (by table side or by name), then more episodes.
+- Next: train ACT (~3-4 h on my laptop), test on arm A, then the same model on arm B; dual-arm
+  data. Fix CI lint on `vla/`.
 - Blocked on: nothing.

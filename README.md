@@ -45,10 +45,36 @@ pip install -e ".[dev,sched,view]"   # add sim for MuJoCo
 
 ## Usage
 
+### Run the demo (Operations, #21)
+
 ```bash
-hfteama
-# or
-python -m hfteama
+pip install -e ".[dev,sched,view,arms]"
+python -m hfteama.demo --backend fake --plugged rakesh_follower   # no hardware needed
+```
+
+Open http://127.0.0.1:8050 and press **Go**. The screen shows the estimate (with a what-if for more
+arms), then the countdown, the plan against what really happened, and in words what limits the
+speed. "Arm controls" on the page plugs in the next arm, removes one (slow stop) or pulls its
+cable; with real arms the same happens when a follower's USB is plugged in or out
+([`src/hfteama/discovery.py`](src/hfteama/discovery.py)).
+
+| Option | Meaning |
+|---|---|
+| `--backend fake` | arms that only wait (development, tests, the screen) |
+| `--backend sim` / `real` | Action's skill worker on MuJoCo or on the real SO-101s (needs Action's arm code from `action-arm-skills`; `real` moves arms: a person must be at the rig) |
+| `--task FILE` | the batch, e.g. `tasks/sort/sort12.json` |
+| `--planner module:function` | batch from a planner instead (the camera + VLM pipeline) |
+| `--verifier module:function` | camera check after each place step |
+| `--plugged a,b` | arms present at start; `--watch` / `--no-watch` turns USB detection on or off |
+
+Other tools: `python scripts/scaling_benchmark.py` (finish time against number of arms),
+`python scripts/bench_planners.py` (planner speed), `python scripts/real_table_plan.py` (top camera
+to plan, dry run).
+
+### Command-line tool
+
+```bash
+hfteama            # version; `hfteama --help` lists the hardware commands
 ```
 
 ### Real arms, step by step (Hardware, #19)

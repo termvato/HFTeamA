@@ -299,7 +299,7 @@ def test_vlm_plan_runs_on_executor_with_step_check(tmp_path: Path) -> None:
     # two SO-101s facing +y; obj_01 near arm a and bin_1, obj_02 near arm b and bin_2
     a = ArmNode("a", (0.0, 0.0, 0.0), base_yaw_deg=90.0, reach=SO101_REACH)
     b = ArmNode("b", (0.80, 0.0, 0.0), base_yaw_deg=90.0, reach=SO101_REACH)
-    scene = build_scene([det(0.05, 0.15), det(0.75, 0.15)], IDENTITY)
+    scene = build_scene([det(-0.10, 0.20), det(0.90, 0.20)], IDENTITY)  # 0.19 m from each
     d = Decomposer(FakeVLM([GOOD]), BINS, annotate=False).decompose(None, scene)
     graph = resolve(d.graph, [a, b]).graph
     assert graph.tasks["pick_obj_01"].allowed_arms == ("a",)

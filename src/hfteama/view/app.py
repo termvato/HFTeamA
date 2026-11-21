@@ -14,7 +14,7 @@ from dash import Dash, Input, Output, State, ctx, dcc, html
 
 from hfteama.clock import Clock
 from hfteama.events import EventLog
-from hfteama.view.state import Screen, build, clock_text
+from hfteama.view.state import Screen, build, clock_text, replan_text
 
 INK = "#17202a"
 MUTED = "#5d6b78"
@@ -52,6 +52,9 @@ body {{ margin: 0; background: #f4f6f7; color: {INK};
   background: {ACCENT}; color: #fff; cursor: pointer; }}
 .go:disabled {{ background: #9fb7c2; cursor: default; }}
 .progress {{ color: {MUTED}; font: 500 14px ui-monospace, monospace; }}
+.replan {{ background: {ACCENT}; color: #fff; border-radius: 12px; padding: 16px 22px; }}
+.replan #replan-head {{ font: 700 26px/1.2 ui-monospace, "IBM Plex Mono", monospace; }}
+.replan #replan-detail {{ font-size: 15px; opacity: .9; margin-top: 4px; }}
 .panel {{ background: #fff; border: 1px solid {LINE}; border-radius: 12px; padding: 12px 16px; }}
 .feed {{ margin: 0; padding-left: 18px; color: {INK}; font-size: 14px; line-height: 1.7; }}
 .test button {{ margin-right: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid {LINE};
@@ -75,12 +78,12 @@ def create_app(log: EventLog, controls: Any | None = None, clock: Clock | None =
         test_panel = html.Details(
             className="panel test",
             children=[
-                html.Summary("Test controls (fake arms, development only)"),
+                html.Summary("Arm controls (manual plug-in, stage fallback and tests)"),
                 html.Div(
                     className="row",
                     style={"marginTop": "10px"},
                     children=[
-                        html.Button("Add fake arm", id="t-add"),
+                        html.Button("Plug in next arm", id="t-add"),
                         dcc.Dropdown(id="t-arm", placeholder="arm", style={"width": "160px"}),
                         html.Button("Remove (slow stop)", id="t-remove"),
                         html.Button("Fail its next step", id="t-fail"),
@@ -96,6 +99,12 @@ def create_app(log: EventLog, controls: Any | None = None, clock: Clock | None =
             html.Div(
                 className="top",
                 children=[html.H1("Plug and produce"), html.Span(id="phase", className="pill")],
+            ),
+            html.Div(
+                id="replan",
+                className="replan",
+                hidden=True,
+                children=[html.Div(id="replan-head"), html.Div(id="replan-detail")],
             ),
             html.Div(
                 className="hero",
@@ -126,6 +135,12 @@ def create_app(log: EventLog, controls: Any | None = None, clock: Clock | None =
                 className="panel",
                 children=[dcc.Graph(id="gantt", config={"displayModeBar": False})],
             ),
+            html.Div(
+                id="map-panel",
+                className="panel",
+                hidden=True,
+                children=[dcc.Graph(id="map", config={"displayModeBar": False})],
+            ),
             html.Div(className="panel", children=[html.Ul(id="feed", className="feed")]),
             test_panel,
             dcc.Interval(id="tick", interval=500),
@@ -143,6 +158,11 @@ def create_app(log: EventLog, controls: Any | None = None, clock: Clock | None =
         Output("gantt", "figure"),
         Output("feed", "children"),
         Output("go", "disabled"),
+        Output("replan", "hidden"),
+        Output("replan-head", "children"),
+        Output("replan-detail", "children"),
+        Output("map-panel", "hidden"),
+        Output("map", "figure"),
         Input("tick", "n_intervals"),
     )
     def render(_: int | None):
@@ -180,6 +200,10 @@ def create_app(log: EventLog, controls: Any | None = None, clock: Clock | None =
             gantt(sc),
             feed,
             go_disabled,
+            sc.replanning is None,
+            *(replan_text(sc.replanning) if sc.replanning else ("", "")),
+            not sc.scene,
+            table_map(sc),
         )
 
     @app.callback(Output("go", "n_clicks"), Input("go", "n_clicks"), prevent_initial_call=True)
@@ -261,5 +285,93 @@ def gantt(sc: Screen) -> go.Figure:
         xaxis={"title": "seconds", "gridcolor": LINE, "zeroline": False, "rangemode": "tozero"},
         yaxis={"autorange": "reversed"},
         uniformtext={"minsize": 8, "mode": "hide"},
+    )
+    return fig
+
+
+ARM_COLOURS = ["#17202a", "#2e9e4f", "#d4880f", "#7a5aa6", "#1c6e8c", "#c0392b"]
+
+
+def table_map(sc: Screen) -> go.Figure:
+    """Top view of the table: each arm's reach, the bins, and every object in the colour of the
+    arm it is planned for (grey = waiting for an arm that can reach it, faded = sorted)."""
+    fig = go.Figure()
+    scene = sc.scene
+    if not scene:
+        return fig
+    arms = scene.get("arms", [])
+    colour = {a["id"]: ARM_COLOURS[i % len(ARM_COLOURS)] for i, a in enumerate(arms)}
+    for a in arms:
+        live = a["id"] in sc.arms
+        x, y = a["xy"]
+        for r in (a.get("r_min", 0.0), a.get("r_max", 0.0)):
+            if r and r < 5:
+                fig.add_shape(
+                    type="circle",
+                    x0=x - r,
+                    x1=x + r,
+                    y0=y - r,
+                    y1=y + r,
+                    line={
+                        "color": colour[a["id"]],
+                        "width": 1.5,
+                        "dash": "solid" if live else "dot",
+                    },
+                    opacity=0.9 if live else 0.35,
+                )
+        fig.add_scatter(
+            x=[x],
+            y=[y],
+            mode="markers+text",
+            text=[a["id"]],
+            textposition="top center",
+            marker={"size": 16, "symbol": "square", "color": colour[a["id"]]},
+            opacity=1.0 if live else 0.35,
+            showlegend=False,
+            hoverinfo="text",
+        )
+    for b in scene.get("bins", []):
+        x, y = b["xy"]
+        r = b.get("radius", 0.08)
+        fig.add_shape(
+            type="circle",
+            x0=x - r,
+            x1=x + r,
+            y0=y - r,
+            y1=y + r,
+            line={"color": "#8a6d4b", "width": 2},
+            fillcolor="rgba(180,140,90,0.25)",
+        )
+        fig.add_annotation(x=x, y=y, text=b.get("id", "bin"), showarrow=False, font={"size": 11})
+    planned = {b.task: b.arm for b in sc.plan}
+    done = {b.task for b in sc.actual if b.outcome == "ok"}
+    for o in scene.get("objects", []):
+        tasks = o.get("tasks", [])
+        arm = next((planned[t] for t in tasks if t in planned), None)
+        finished = bool(tasks) and all(t in done for t in tasks)
+        fig.add_scatter(
+            x=[o["xy"][0]],
+            y=[o["xy"][1]],
+            mode="markers+text",
+            text=[o.get("label") or o["id"]],
+            textposition="bottom center",
+            marker={
+                "size": 13,
+                "color": colour.get(arm, "#9aa5ad"),
+                "line": {"color": "#fff", "width": 1.5},
+            },
+            opacity=0.3 if finished else 1.0,
+            showlegend=False,
+            hoverinfo="text",
+        )
+    fig.update_layout(
+        height=360,
+        margin={"l": 10, "r": 10, "t": 30, "b": 10},
+        title={"text": "Who takes what (top view)", "font": {"size": 14}},
+        paper_bgcolor="#fff",
+        plot_bgcolor="#fbf6ec",
+        font={"family": "IBM Plex Sans, system-ui, sans-serif", "color": INK, "size": 12},
+        xaxis={"visible": False, "scaleanchor": "y"},
+        yaxis={"visible": False},
     )
     return fig

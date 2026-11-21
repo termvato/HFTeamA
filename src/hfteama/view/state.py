@@ -40,6 +40,8 @@ class Screen:
     done: int = 0
     total: int = 0
     feed: list[str] = field(default_factory=list)  # newest first
+    replanning: dict | None = None  # the re-planning moment, shown for REPLAN_HOLD_S seconds
+    scene: dict = field(default_factory=dict)  # table map: arms, bins, objects (if logged)
 
     @property
     def remaining(self) -> float | None:
@@ -65,6 +67,16 @@ def clock_text(seconds: float | None) -> str:
         return "--:--"
     s = max(0, round(seconds))
     return f"{s // 60}:{s % 60:02d}"
+
+
+REPLAN_HOLD_S = 4.0  # how long the screen stays on "re-planning" after arms change
+REPLAN_REASONS = {
+    "arm_added": "joined",
+    "arm_removed": "removed",
+    "arm_failed": "lost",
+    "graph_updated": "table changed",
+}
+PLANNER_NAMES = {"greedy": "nearest free arm", "heft": "critical work first", "cpsat": "optimal"}
 
 
 def build(events: Iterable[Event], clock_now: float | None = None) -> Screen:
@@ -144,6 +156,21 @@ def build(events: Iterable[Event], clock_now: float | None = None) -> Screen:
                 )
             if reason in ("arm_added", "arm_removed", "arm_failed") and sc.phase == "running":
                 sc.feed.insert(0, f"Re-split: finish now {clock_text(d.get('makespan'))}")
+            if reason in REPLAN_REASONS and sc.phase == "running":
+                sc.replanning = {
+                    "t": e.t,
+                    "what": REPLAN_REASONS[reason],
+                    "arm": d.get("arm", ""),
+                    "now": d.get("now", 0.0),
+                    "before": d.get("previous_makespan"),
+                    "after": d.get("makespan"),
+                    "considered": d.get("considered", {}),
+                    "solver": d.get("solver", ""),
+                    "arms": len(d.get("arms", {})),
+                    "unblocked": len(d.get("unblocked", [])),
+                }
+        elif e.kind == "scene":
+            sc.scene = d
     if plan_version is not None:
         sc.plan = plan_by_version.get(plan_version, [])
     if t0 is not None:
@@ -154,8 +181,39 @@ def build(events: Iterable[Event], clock_now: float | None = None) -> Screen:
             sc.actual.append(
                 Bar(tid, s.arm or "", start, max(start, sc.now), "running", "", s.data.get("skill"))
             )
+    if sc.replanning is not None:
+        age = (clock_now if clock_now is not None else last_t) - sc.replanning["t"]
+        if sc.phase != "running" or age > REPLAN_HOLD_S:
+            sc.replanning = None
+        else:
+            sc.replanning["age"] = age
     if sc.phase == "finished":
         sc.done = sc.total
     sc.limit = limit_text(sc.binding)
     sc.feed = sc.feed[:8]
     return sc
+
+
+def replan_text(r: dict) -> tuple[str, str]:
+    """Headline and detail for the re-planning moment."""
+    arm = f"Arm {r['arm']} {r['what']}" if r.get("arm") else r["what"].capitalize()
+    if r.get("age", 0.0) < 1.5:  # first beat: the system is working on it
+        n = r.get("arms", 0)
+        detail = (
+            f"comparing plans for {n} arm{'s' if n != 1 else ''}: reach, free arms, shared areas"
+        )
+        return f"{arm}: re-planning…", detail
+    now = r.get("now", 0.0)
+    before, after = r.get("before"), r.get("after")
+    plans = ", ".join(
+        f"{PLANNER_NAMES.get(k, k)} {clock_text(v - now)}"
+        for k, v in sorted(r.get("considered", {}).items(), key=lambda kv: -kv[1])
+    )
+    head = f"{arm}: new plan"
+    if before is not None and after is not None:
+        head = f"{arm}: {clock_text(before - now)} left → {clock_text(after - now)} left"
+    detail = f"plans compared: {plans}" if plans else ""
+    if r.get("unblocked"):  # more work became possible, so the time may go up, not down
+        n = r["unblocked"]
+        detail = f"{n} more step{'s' if n != 1 else ''} now within reach. " + detail
+    return head, detail

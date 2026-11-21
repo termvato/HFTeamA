@@ -68,12 +68,14 @@ class Reach:
         )
 
 
-# SO-101 from the MuJoCo Menagerie model (robotstudio_so101), same model as arms/kinematics.py:
-# fully extended horizontal reach, pan axis to the gripper frame, is 0.441 m (0.439 m at table
-# height); the pan axis is 0.0388 m in front of the base origin; hip range +-110 deg.
+# SO-101 from the MuJoCo Menagerie model (robotstudio_so101), same model as arms/kinematics.py.
+# The arm's fully extended horizontal reach is 0.441 m, but the pick skill (tool pointing down,
+# hover 8 cm, grasp, lift 10 cm) only solves in IK from ~0.14 to 0.42 m from the pan axis
+# (Action's arms/ik.py, checked on a 4 cm grid: scripts/validation/reach_vs_ik.py). The pan axis
+# is 0.0388 m in front of the base origin; hip range +-110 deg.
 SO101_REACH = Reach(
-    r_min=0.0,
-    r_max=0.44,
+    r_min=0.14,
+    r_max=0.42,
     pan_offset_m=0.0388,
     pan_limit_deg=math.degrees(LIMITS_RAD["shoulder_pan"][1]),
 )
@@ -130,6 +132,28 @@ def load_catalog(path: str | Path) -> dict[str, ArmNode]:
         if node.arm_id in out:
             raise ValueError(f"duplicate arm id {node.arm_id!r} in {path}")
         out[node.arm_id] = node
+    return out
+
+
+def load_real_arms(path: str | Path, reach: Any = "so101") -> dict[str, ArmNode]:
+    """The planner's arm catalog from Action's real-arm config (`configs/real_arms.json`), so the
+    planner and the real driver read arm positions from one file.
+
+    That file is a dict of arm id -> {"base": [x, y, z] metres in the table frame, "yaw": radians
+    about z (0 = the arm's forward is table +x), "pair": ...}; see `arms/real.py::from_config`.
+    The arm id must be the worker's `arm_id`. Optional per-arm "reach" overrides `reach`.
+    """
+    raw = json.loads(Path(path).read_text())["arms"]
+    out: dict[str, ArmNode] = {}
+    for arm_id, d in raw.items():
+        out[arm_id] = ArmNode(
+            arm_id=arm_id,
+            base_pose_m=tuple(float(v) for v in d.get("base", (0.0, 0.0, 0.0))),
+            base_yaw_deg=math.degrees(float(d.get("yaw", 0.0))),
+            reach=Reach.from_config(d.get("reach", reach)),
+            serial=d.get("serial", ""),
+            backend="real",
+        )
     return out
 
 
