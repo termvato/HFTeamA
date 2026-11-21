@@ -289,6 +289,7 @@ class MujocoDriver:
         self._target = self._table._data.qpos[self._qadr].copy()
         self._table._data.ctrl[self._act] = self._target
         self._down, self._fail_grasp, self._slow = False, False, 1.0
+        self._stop.clear()
 
     def _command(self, q6: np.ndarray) -> None:
         self._target = np.asarray(q6, float).copy()
@@ -305,8 +306,21 @@ class MujocoDriver:
             raise MotionError("stopped")
 
     def _begin(self) -> None:
+        """Start of every motion call. A latched stop stays latched until `resume()`."""
         self._check_alive()
+        if self._stop.is_set():
+            raise MotionError("stopped")
+
+    def resume(self) -> None:
         self._stop.clear()
+
+    def reachable(self, xyz: np.ndarray) -> bool:
+        xyz = np.asarray(xyz, float)
+        try:
+            check_point(xyz, self.table_z)
+        except MotionError:
+            return False
+        return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
 
     def _inject(self, kind: str) -> None:
         if kind == "grasp":
@@ -359,7 +373,7 @@ class MujocoDriver:
             waited += TICK_S
 
     def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
-        self._check_alive()
+        self._begin()
         xyz = np.asarray(xyz, float)
         check_point(xyz, self.table_z)
         result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)

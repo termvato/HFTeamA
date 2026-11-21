@@ -77,7 +77,19 @@ class ArmDriver(Protocol):
         ...
 
     def stop(self) -> None:
-        """Freeze in place; a blocked call in another thread raises MotionError("stopped")."""
+        """Freeze in place and latch.
+
+        A blocked call in another thread raises MotionError("stopped"), and so does every later
+        motion call, until `resume()`.
+        """
+        ...
+
+    def resume(self) -> None:
+        """Clear a latched `stop()`; the worker calls this at the start of each step."""
+        ...
+
+    def reachable(self, xyz: np.ndarray) -> bool:
+        """Whether `move_to(xyz)` would be accepted (above the table, IK solves). Never moves."""
         ...
 
     def park(self) -> None:

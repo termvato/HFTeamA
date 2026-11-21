@@ -166,3 +166,52 @@ def test_has_every_contract_member() -> None:
     assert w.arm_id == "arm_a" and w.backend == "fake"
     for member in ("state", "execute", "heartbeat", "cancel", "park"):
         assert callable(getattr(w, member))
+
+
+def test_a_cancelled_arm_works_again_on_the_next_step() -> None:
+    d = FakeDriver(hang_on="move_to")
+    w = _worker(d)
+    th, box = _run_in_thread(w, PICK)
+    _wait(lambda: any(n == "move_to" for n, _ in d.calls))
+    w.cancel("t1")
+    th.join(3.0)
+    d.hang_on = None
+    assert w.execute(Task(id="t2", skill="pick", args={"object": "block_01"})).outcome == Outcome.OK
+
+
+def test_execute_is_refused_while_parking() -> None:
+    d = FakeDriver(hang_on="park")
+    w = _worker(d)
+    th = threading.Thread(target=w.park)
+    th.start()
+    _wait(lambda: any(n == "park" for n, _ in d.calls))
+    assert w.state() == ArmState.PARKING
+    r = w.execute(PICK)
+    assert r.outcome == Outcome.FAILED and "parking" in r.reason
+    assert "open_gripper" not in [n for n, _ in d.calls]  # no skill ran next to the park
+    d.stop()
+    th.join(3.0)
+    assert w.state() == ArmState.DOWN
+
+
+def test_park_never_raises_and_says_why_it_failed() -> None:
+    w = _worker(FakeDriver(down_on="park"))
+    w.park()
+    assert w.state() == ArmState.DOWN
+    assert "injected" in (w.park_error or "")
+
+
+def test_park_leaves_the_arm_frozen_if_the_step_will_not_stop(monkeypatch) -> None:  # noqa: ANN001
+    def deaf(arm, task, poses):  # noqa: ANN001, ANN202
+        time.sleep(1.0)  # never looks at the stop
+
+    monkeypatch.setitem(REGISTRY, "_t_deaf", deaf)
+    monkeypatch.setattr("hfteama.arms.worker._JOIN_AFTER_STOP_S", 0.2)
+    d = FakeDriver()
+    w = _worker(d)
+    th, _box = _run_in_thread(w, Task(id="t7", skill="_t_deaf"))
+    _wait(lambda: w.state() == ArmState.BUSY)
+    w.park()
+    assert ("park", ()) not in d.calls  # a second trajectory next to a live one is the danger
+    assert w.state() == ArmState.DOWN and "did not stop" in (w.park_error or "")
+    th.join(3.0)

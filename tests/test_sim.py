@@ -133,3 +133,31 @@ def test_reset_restores_objects(table: SimTable) -> None:
     table.reset()
     assert table.object_pos("block_01") == pytest.approx([0.2, 0.0, 0.015], abs=0.002)
     assert not d.holding()
+
+
+def test_a_stop_during_ik_is_not_forgotten(table: SimTable) -> None:
+    d = table.driver("arm_a")
+    real_solve = d._kin.solve
+
+    def slow_solve(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        time.sleep(0.3)
+        return real_solve(*args, **kwargs)
+
+    d._kin.solve = slow_solve
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            d.move_to(np.array([0.2, 0.05, 0.05]))
+            box["r"] = "finished"
+        except MotionError as exc:
+            box["r"] = exc.reason
+
+    th = threading.Thread(target=run)
+    th.start()
+    time.sleep(0.1)
+    d.stop()
+    th.join(5.0)
+    assert box["r"] == "stopped"
+    d.resume()
+    d.move_to(np.array([0.2, 0.05, 0.05]))  # and the latch clears on resume

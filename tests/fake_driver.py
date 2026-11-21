@@ -28,6 +28,9 @@ class FakeDriver:
         drop_after_lift: bool = False,
         down_on: str | None = None,
         hang_on: str | None = None,
+        unreachable_above: float | None = None,
+        stall_at_move: int | None = None,
+        stall_reason: str = "stall",
     ) -> None:
         self.arm_id = arm_id
         self.table_z = table_z
@@ -36,12 +39,19 @@ class FakeDriver:
         self.drop_after_lift = drop_after_lift
         self.down_on = down_on
         self.hang_on = hang_on
+        self.unreachable_above = unreachable_above
+        self.stall_at_move = stall_at_move
+        self.stall_reason = stall_reason
+        self._moves = 0
+        self._latched = False
         self.calls: list[tuple[str, tuple]] = []
         self._held = False
         self._stopped = threading.Event()
 
     def _enter(self, name: str, *args: object) -> None:
         self.calls.append((name, args))
+        if self._latched:
+            raise MotionError("stopped")
         if self.down_on == name:
             raise ArmDown("injected")
         if self.hang_on == name:
@@ -62,6 +72,9 @@ class FakeDriver:
 
     def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
         self._enter("move_to", tuple(float(v) for v in xyz))
+        self._moves += 1
+        if self.stall_at_move == self._moves:
+            raise MotionError(self.stall_reason)
         if self.drop_after_lift and self._held:
             self._held = False
 
@@ -80,7 +93,14 @@ class FakeDriver:
 
     def stop(self) -> None:
         self.calls.append(("stop", ()))
+        self._latched = True
         self._stopped.set()
+
+    def resume(self) -> None:
+        self._latched = False
+
+    def reachable(self, xyz: np.ndarray) -> bool:
+        return self.unreachable_above is None or float(xyz[2]) <= self.unreachable_above
 
     def park(self) -> None:
         self._enter("park")

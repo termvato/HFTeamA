@@ -9,6 +9,8 @@
       "park_q": [1.85, -1.6, 1.6, 1.0, 0.0],
       "grip_holding_min_pct": 15.0,
       "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
       "offsets_deg": {}
     }
   }

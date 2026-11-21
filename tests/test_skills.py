@@ -8,7 +8,7 @@ import pytest
 
 from hfteama.arms import generic_skills as gs
 from hfteama.arms.poses import Poses
-from hfteama.arms.primitives import SkillFailed
+from hfteama.arms.primitives import MotionError, SkillFailed
 from hfteama.arms.skills import REGISTRY
 from hfteama.taskgraph import Task
 from tests.fake_driver import FakeDriver
@@ -152,3 +152,40 @@ def test_poses_load_roundtrip(tmp_path: Path) -> None:
     assert poses.arms["arm_a"]["yaw"] == 1.5
     assert Poses.empty().arms == {} and not Poses.empty().has("x", "a")
     assert isinstance(poses.point("input_bin", "arm_a"), np.ndarray)
+
+
+def test_below_table_target_is_refused_before_any_motion() -> None:
+    d = FakeDriver()
+    with pytest.raises(MotionError, match="below table"):
+        REGISTRY["pick"](d, _task("pick", pick_xyz=[0.2, 0.0, -0.05]), POSES)
+    assert d.calls == []  # the approach point is above the table, but nothing may move first
+
+
+def test_unreachable_waypoint_is_refused_before_any_motion() -> None:
+    d = FakeDriver(unreachable_above=0.09)  # the lift point of a block on the table is 0.115
+    with pytest.raises(MotionError, match="unreachable"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
+    assert d.calls == []
+
+
+def test_pick_place_validates_the_place_before_picking_anything_up() -> None:
+    d = FakeDriver()
+    task = _task("pick_place", object="block_01", place_xyz=[0.2, 0.0, -0.05])
+    with pytest.raises(MotionError, match="below table"):
+        REGISTRY["pick_place"](d, task, POSES)
+    assert d.calls == []
+
+
+def test_motion_failure_retreats_upward_before_raising() -> None:
+    d = FakeDriver(stall_at_move=2)  # stalls on the descent to the part
+    with pytest.raises(MotionError, match="stall"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
+    x, y, z = POSES.point("block_01", "arm_a")
+    assert _targets(d)[-1] == (x, y, z + gs.APPROACH_DZ)
+
+
+def test_a_stopped_motion_does_not_retreat() -> None:
+    d = FakeDriver(stall_at_move=2, stall_reason="stopped")
+    with pytest.raises(MotionError, match="stopped"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
+    assert len(_targets(d)) == 2

@@ -14,7 +14,7 @@ from collections.abc import Callable
 import numpy as np
 
 from hfteama.arms.poses import Poses
-from hfteama.arms.primitives import ArmDriver, SkillFailed
+from hfteama.arms.primitives import ArmDown, ArmDriver, MotionError, SkillFailed, check_point
 from hfteama.arms.skills import REGISTRY, SkillFn
 from hfteama.taskgraph import Task
 
@@ -61,34 +61,84 @@ def _above(p: np.ndarray, dz: float) -> np.ndarray:
     return p + np.array([0.0, 0.0, dz])
 
 
+def _validate(arm: ArmDriver, waypoints: list[np.ndarray]) -> None:
+    """Refuse a step whose every waypoint cannot be reached, before anything moves."""
+    for w in waypoints:
+        check_point(w, arm.table_z)
+        if not arm.reachable(w):
+            raise MotionError("unreachable")
+
+
+def _pick_waypoints(p: np.ndarray) -> list[np.ndarray]:
+    return [_above(p, APPROACH_DZ), _above(p, GRASP_DZ), _above(p, LIFT_DZ)]
+
+
+def _place_waypoints(p: np.ndarray) -> list[np.ndarray]:
+    return [_above(p, APPROACH_DZ), _above(p, GRASP_DZ)]
+
+
+def _retreat_on_failure(arm: ArmDriver, p: np.ndarray, run: Callable[[], None]) -> None:
+    """Run a motion sequence; if it fails part-way, lift clear of the shared area first.
+
+    A stopped or lost arm is left alone: the stop is what the caller asked for.
+    """
+    try:
+        run()
+    except MotionError as exc:
+        if exc.reason != "stopped":
+            try:
+                arm.move_to(_above(p, APPROACH_DZ))
+            except (MotionError, ArmDown):
+                pass
+        raise
+
+
+def _do_pick(arm: ArmDriver, p: np.ndarray) -> None:
+    def run() -> None:
+        arm.open_gripper()
+        arm.move_to(_above(p, APPROACH_DZ))
+        arm.move_to(_above(p, GRASP_DZ))
+        if not arm.close_gripper().holding:
+            arm.open_gripper()  # missed: leave the shared area before reporting
+            arm.move_to(_above(p, APPROACH_DZ))
+            raise SkillFailed("grasp")
+        arm.move_to(_above(p, LIFT_DZ))
+        if not arm.holding():
+            raise SkillFailed("dropped")
+
+    _retreat_on_failure(arm, p, run)
+
+
+def _do_place(arm: ArmDriver, p: np.ndarray) -> None:
+    def run() -> None:
+        arm.move_to(_above(p, APPROACH_DZ))
+        arm.move_to(_above(p, GRASP_DZ))
+        arm.open_gripper()
+        arm.move_to(_above(p, APPROACH_DZ))
+
+    _retreat_on_failure(arm, p, run)
+
+
 @_register("pick")
 def pick(arm: ArmDriver, task: Task, poses: Poses) -> None:
     p = pick_point(task, poses, arm.arm_id)
-    arm.open_gripper()
-    arm.move_to(_above(p, APPROACH_DZ))
-    arm.move_to(_above(p, GRASP_DZ))
-    if not arm.close_gripper().holding:
-        arm.open_gripper()  # missed: leave the shared area before reporting, so others can enter
-        arm.move_to(_above(p, APPROACH_DZ))
-        raise SkillFailed("grasp")
-    arm.move_to(_above(p, LIFT_DZ))
-    if not arm.holding():
-        raise SkillFailed("dropped")
+    _validate(arm, _pick_waypoints(p))
+    _do_pick(arm, p)
 
 
 @_register("place")
 def place(arm: ArmDriver, task: Task, poses: Poses) -> None:
     p = place_point(task, poses, arm.arm_id)
-    arm.move_to(_above(p, APPROACH_DZ))
-    arm.move_to(_above(p, GRASP_DZ))
-    arm.open_gripper()
-    arm.move_to(_above(p, APPROACH_DZ))
+    _validate(arm, _place_waypoints(p))
+    _do_place(arm, p)
 
 
 @_register("pick_place")
 def pick_place(arm: ArmDriver, task: Task, poses: Poses) -> None:
-    pick(arm, task, poses)
-    place(arm, task, poses)
+    pp, qq = pick_point(task, poses, arm.arm_id), place_point(task, poses, arm.arm_id)
+    _validate(arm, _pick_waypoints(pp) + _place_waypoints(qq))  # before a part is in the gripper
+    _do_pick(arm, pp)
+    _do_place(arm, qq)
 
 
 @_register("inspect")

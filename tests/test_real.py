@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+import time
+
 import numpy as np
 import pytest
 
@@ -35,21 +38,42 @@ class FakeRobot:
         self.fail = False
         self.grip_floor: float | None = None  # gripper stalls here when "holding" something
         self.on_send = None
+        self.sag_deg = 0.0  # observed shoulder/elbow sit this far below the commanded pose
+        self.delay_s = 0.0  # time each bus call takes
+        self.overlap = False  # True if two bus calls were ever in flight at once
+        self._in_flight = 0
         self.bus = FakeBus(self)
+
+    def _begin_call(self) -> None:
+        if self._in_flight:
+            self.overlap = True
+        self._in_flight += 1
+        if self.delay_s:
+            time.sleep(self.delay_s)
+
+    def _end_call(self) -> None:
+        self._in_flight -= 1
 
     def get_observation(self) -> dict:
         if self.fail:
             raise ConnectionError("no status packet")
-        return dict(self.state)
+        self._begin_call()
+        obs = dict(self.state)
+        obs["shoulder_lift.pos"] -= self.sag_deg
+        obs["elbow_flex.pos"] -= self.sag_deg
+        self._end_call()
+        return obs
 
     def send_action(self, action: dict) -> dict:
         if self.fail:
             raise ConnectionError("no status packet")
+        self._begin_call()
         self.calls.append("send_action")
         self.actions.append(dict(action))
         self.state.update(action)
         if self.grip_floor is not None:
             self.state["gripper.pos"] = max(self.state["gripper.pos"], self.grip_floor)
+        self._end_call()
         if self.on_send is not None:
             self.on_send(len(self.actions))
         return action
@@ -66,9 +90,8 @@ def robot() -> FakeRobot:
     return FakeRobot()
 
 
-@pytest.fixture
-def driver(robot: FakeRobot) -> LeRobotDriver:
-    return LeRobotDriver(
+def make_driver(robot: FakeRobot, **overrides: object) -> LeRobotDriver:
+    kwargs: dict = dict(
         arm_id="arm_a",
         robot=robot,
         frame=ArmFrame(),
@@ -80,6 +103,13 @@ def driver(robot: FakeRobot) -> LeRobotDriver:
         rate_hz=10_000.0,
         gripper_wait_s=0.0,
     )
+    kwargs.update(overrides)
+    return LeRobotDriver(**kwargs)
+
+
+@pytest.fixture
+def driver(robot: FakeRobot) -> LeRobotDriver:
+    return make_driver(robot)
 
 
 def _as_q(action: dict) -> np.ndarray:
@@ -173,3 +203,116 @@ def test_alive_follows_successful_bus_traffic(driver: LeRobotDriver, robot: Fake
     with pytest.raises(ArmDown):
         driver.read_joints()
     assert driver.alive() == t  # a dead bus does not look alive
+
+
+GOAL = np.array([0.3, -0.4, 0.8, 0.2, 0.1])
+
+
+def test_a_stop_during_ik_is_not_forgotten(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    real_solve = driver._kin.solve
+
+    def slow_solve(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        time.sleep(0.3)
+        return real_solve(*args, **kwargs)
+
+    driver._kin.solve = slow_solve
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            driver.move_to(np.array([0.2, 0.05, 0.05]))
+            box["r"] = "finished"
+        except MotionError as exc:
+            box["r"] = exc.reason
+
+    th = threading.Thread(target=run)
+    th.start()
+    time.sleep(0.1)
+    driver.stop()
+    th.join(5.0)
+    assert box["r"] == "stopped" and len(robot.actions) <= 1
+    driver.resume()
+    driver.move_to(np.array([0.2, 0.05, 0.05]))  # the latch clears on resume
+
+
+def test_commands_build_on_the_last_command_not_the_sagging_measurement(
+    robot: FakeRobot,
+) -> None:
+    robot.sag_deg = 3.0  # the arm hangs 3 deg below where it was told to be
+    d = make_driver(robot)
+    d.move_joints(GOAL)
+    d.open_gripper()
+    assert _as_q(robot.actions[-1])[:5] == pytest.approx(GOAL, abs=1e-6)
+
+
+def test_the_squeeze_survives_the_lift(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    robot.grip_floor = 30.0  # fingers stall on the part
+    assert driver.close_gripper().holding
+    squeeze = robot.actions[-1]["gripper.pos"]
+    n = len(robot.actions)
+    driver.move_to(np.array([0.2, 0.0, 0.12]))
+    assert len(robot.actions) > n
+    assert all(a["gripper.pos"] == pytest.approx(squeeze) for a in robot.actions[n:])
+
+
+def test_stop_while_holding_keeps_the_grip(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    robot.grip_floor = 30.0
+    driver.close_gripper()
+    squeeze = robot.actions[-1]["gripper.pos"]
+    driver.stop()
+    assert robot.actions[-1]["gripper.pos"] == pytest.approx(squeeze)
+
+
+def test_stop_before_any_command_sends_nothing(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    driver.stop()
+    assert robot.actions == []
+
+
+def test_bus_calls_never_overlap(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    robot.delay_s = 0.002
+    th = threading.Thread(target=lambda: driver.move_joints(GOAL))
+    th.start()
+    for _ in range(30):  # another thread (heartbeat, cancel) reading while the move streams
+        driver.read_joints()
+    th.join(5.0)
+    assert not robot.overlap
+
+
+def test_alive_polls_an_idle_bus(driver: LeRobotDriver) -> None:
+    driver.read_joints()
+    driver._last_ok -= 10.0  # the arm has been idle for 10 s
+    assert time.time() - driver.alive() < 1.0
+
+
+def test_a_dead_bus_is_not_made_to_look_alive(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    driver.read_joints()
+    stale = driver._last_ok - 10.0
+    driver._last_ok = stale
+    robot.fail = True
+    assert driver.alive() == stale
+
+
+def test_after_park_motion_is_refused_not_sent(driver: LeRobotDriver, robot: FakeRobot) -> None:
+    driver.park()
+    n = len(robot.actions)
+    with pytest.raises(MotionError, match="torque off"):
+        driver.move_joints(np.zeros(5))
+    with pytest.raises(MotionError, match="torque off"):
+        driver.open_gripper()
+    assert len(robot.actions) == n  # nothing is commanded to a limp arm
+
+
+def test_speed_scale_slows_every_step(robot: FakeRobot) -> None:
+    d = make_driver(robot, speed_scale=0.5)
+    start = d.read_joints()
+    d.move_joints(GOAL)
+    path = [start[:5]] + [_as_q(a)[:5] for a in robot.actions]
+    assert np.abs(np.diff(path, axis=0)).max() <= MAX_STEP * 0.5 + 1e-6
+
+
+def test_settle_tolerance_is_configurable(robot: FakeRobot) -> None:
+    robot.sag_deg = 3.0
+    tight = make_driver(robot, settle_tol_rad=0.01, settle_timeout_s=0.05)
+    with pytest.raises(MotionError, match="stall"):
+        tight.move_joints(GOAL)
+    make_driver(robot, settle_tol_rad=0.1).move_joints(GOAL)

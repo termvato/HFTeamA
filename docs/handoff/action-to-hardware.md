@@ -20,14 +20,17 @@ unchanged on the arm.
 | `open_gripper()` / `close_gripper()` | close returns `Grasp(holding=...)`: stalled above `grip_holding_min_pct` = holding |
 | `holding()` | closed on the last command and still above the threshold |
 | `set_joint_target(q)` | one rate-limited step, non-blocking (for a learned policy at 30 Hz) |
-| `stop()` | freeze where it is; a blocked move raises `MotionError("stopped")` |
-| `park()` | slow move (0.3 speed) to `park_q`, then torque off. Never a torque cut mid-air |
-| `alive()` | time of the last good bus read or write (the worker's heartbeat) |
+| `stop()` | holds the last commanded pose (grip included) and latches: a blocked move, and every later one, raises `MotionError("stopped")` until `resume()` (the worker calls it at the start of each step) |
+| `reachable(xyz)` | whether `move_to(xyz)` would be accepted; never moves. Skills check every waypoint of a step with it before the first motion |
+| `park()` | slow move (0.3 speed) to `park_q`, then torque off. Never a torque cut mid-air. **The arm is then limp and the driver refuses motion (`torque off`) until it is reconnected** |
+| `alive()` | time of the last good bus traffic; an idle arm is polled so the executor's 1.5 s heartbeat check does not declare it lost |
 
 Safety checks run in the driver, so no skill can skip them: joint limits (`kinematics.LIMITS_RAD`),
 target at least 1 cm above `table_z`, unreachable targets refused before anything is sent, a bus
-error becomes `ArmDown` (and every later call fails the same way), and `max_relative_target_deg`
-(default 10) is set on the LeRobot config as a second limit.
+error becomes `ArmDown` (the worker then latches the arm as DOWN), and `max_relative_target_deg`
+(default 10) is set on the LeRobot config as a second limit. Commands are built on the last
+*commanded* pose, not the measured one, so the arm does not sag lower or lose its grip when a gripper
+command or a stop is sent. All bus access is behind one lock.
 
 ## Install
 
@@ -52,6 +55,8 @@ Copy `configs/real_arms.example.json`. One entry per arm:
 | `table_z` | table height in the table frame (m) | 0.0 if z is measured from the table |
 | `park_q` | 5 joint angles (rad) of a safe, low, folded pose that stays out of every shared area | move the arm there by hand (torque off), read `read_joints()`; keep inside `kinematics.LIMITS_RAD` |
 | `grip_holding_min_pct` | gripper reading above which a closed gripper counts as holding | 10 empty closes and 10 closes on the block: read `gripper.pos` 0.3 s after closing; pick a value between the two groups, per arm |
+| `speed_scale` | global slow-down of every move (`0.3` = 30 %). **Keep 0.3 until stage 4 is clean**; skills otherwise run at about 1.5 rad/s | start at 0.3, raise it by hand later |
+| `settle_tol_deg` | how far from its goal a joint may sit when a move ends before it counts as `stall` (default 5.7) | STS3215s typically sit 2-4 deg off under load; if moves end in `stall`, check the arm, then raise this |
 | `offsets_deg` | per-joint zero offsets (LeRobot degrees vs model) | defaults assume the elbow offset measured on one arm (6.9 deg, `kinematics.py`); check each arm: command a known pose and compare |
 
 The sim's folded pose (`arms/sim.py::REST_Q`) is only a starting point for `park_q`; the real one
@@ -76,12 +81,19 @@ Connecting enables torque and the arm holds its current pose: **support it as yo
    d = from_config("arm_a")
    print(d.read_joints(), d.alive())
    ```
-   Move the arm by hand (torque off first), read again. Does each joint match what you expect in sign and
-   size? Does the gripper reading go up when open? If an offset is off, set `offsets_deg`; if a sign is flipped, tell us (`ArmFrame.signs` is not settable from the JSON yet).
-2. **One joint, small and slow.** `d.move_joints(q + [0.1, 0, 0, 0, 0], speed=0.3)` and back, for
-   each joint in turn.
-3. **A point in the air.** `d.move_to([x, y, 0.12], speed=0.3)` above the input bin with nothing in the
-   gripper. Then lower to table height at 0.3 speed with the gripper open; confirm it stops above the table.
+   To compare against the real arm, move it by hand: **support the arm with one hand, then** switch torque
+   off with `d._robot.bus.disable_torque()` (an arm that is raised drops when torque goes off), move it, and
+   read again. Does each joint match what you expect in sign and size? Does the gripper reading go up when
+   open? Reconnect (`from_config` again) before any commanded motion. If an offset is off, set
+   `offsets_deg`; if a sign is flipped, tell us (`ArmFrame.signs` is not settable from the JSON yet).
+2. **One joint, small and slow.** `q = d.read_joints()[:5]`, then `d.move_joints(q + [0.1, 0, 0, 0, 0],
+   speed=0.3)` and back, for each joint in turn. (`read_joints()` returns 6 values; `move_joints` takes the 5
+   body joints, or 6 with the gripper.)
+3. **A point in the air, then a staged descent.** `d.move_to([x, y, 0.12], speed=0.3)` above the input bin
+   with nothing in the gripper. Then lower one stage at a time: z = 0.10, 0.05, 0.03 m. **At each stage measure
+   the real height of the fingertips against the commanded z before going on** (the elbow offset was
+   measured on one arm only: 1 deg of error at 0.25 m reach is about 4 mm). `z = 0` is refused as below the
+   table. Stop at the first stage that is off by more than a few mm and fix `offsets_deg` or `table_z`.
 4. **One step.** One block at its marked spot:
    ```python
    from hfteama.arms import generic_skills
@@ -92,7 +104,9 @@ Connecting enables torque and the arm holds its current pose: **support it as yo
    print(w.execute(Task(id="t1", skill="pick", args={"object": "block_01", "from": "input_bin"})))
    print(w.execute(Task(id="t2", skill="place", args={"to": "own_output_bin"})))
    ```
-   Expect `outcome=ok`. A miss returns `failed` with reason `grasp` and the arm lifts clear.
+   Expect `outcome=ok`. A miss returns `failed` with reason `grasp` and the arm lifts clear; any other
+   motion failure also lifts back to approach height before returning. Keep `speed_scale` at 0.3 for this stage.
+   After a `park` step or `worker.park()` the arm is limp: reconnect it before the next step.
 5. **Durations.** `python scripts/measure_durations.py --backend real --arms arm_a --cycles 3`
    asks you to type `yes`, then to put the block at its spot before every cycle. Send us
    `runs/durations/sort_real.json`; Operations plans with the p80 numbers.
@@ -113,14 +127,19 @@ Connecting enables torque and the arm holds its current pose: **support it as yo
 - Sim grasping attaches the block when the gripper closes within 3 cm of it. A real grasp can miss
   or slip in ways the sim does not show; expect to tune approach heights (`APPROACH_DZ`, `LIFT_DZ`,
   `GRASP_DZ` in `arms/generic_skills.py`).
-- Two arms sharing the bin is Operations' job (resource lock), not the driver's.
+- Two arms sharing the bin is Operations' job (resource lock), not the driver's. What the worker
+  guarantees for that lock: `execute` does not return TIMEOUT or `cancelled` until the stop is latched in
+  the driver, and `worker.park()` only parks once the step's thread is confirmed dead (otherwise it leaves
+  the arm frozen and sets `park_error`).
+- `park_q`, `table_z` and the base pose are only as good as your measurements: the table check covers the
+  tool centre only, not the jaw tips or the links, and not the path between two joint targets.
 
 ## Draft comment for #19 and #20 (Vivek posts it)
 
 > **Primitives for the real arm (Action -> Hardware).** The skills only call these methods, so this
 > is the whole interface Hardware has to make safe: `read_joints`, `move_joints`, `move_to` (tool
-> down), `open_gripper`, `close_gripper -> Grasp(holding)`, `holding`, `set_joint_target`, `stop`,
-> `park`, `alive` (`src/hfteama/arms/primitives.py`). A real implementation is on branch
+> down), `reachable`, `open_gripper`, `close_gripper -> Grasp(holding)`, `holding`,
+> `set_joint_target`, `stop`, `resume`, `park`, `alive` (`src/hfteama/arms/primitives.py`). A real implementation is on branch
 > `action-arm-skills` (`arms/real.py`), unrun on hardware. Handoff and a staged checklist:
 > `docs/handoff/action-to-hardware.md`. What we need back: `configs/real_arms.json` (base poses in the
 > shared table frame, a safe park pose, gripper threshold per arm) and a first real step.

@@ -135,7 +135,12 @@ in the model's convention (real backends convert with `kinematics.ArmFrame`).
 - `move_to(xyz, yaw=None, speed=...)`: IK then `move_joints`; rejects targets below table height
   or out of reach.
 - `open_gripper()`, `close_gripper() -> Grasp` (`holding: bool`, gripper position, effort).
-- `stop()`: freeze in place. `park()`: slow stop to the parked pose, then torque off.
+- `stop()`: hold the last commanded pose and latch; every motion call raises `MotionError("stopped")` until
+  `resume()`, which only the worker calls (at the start of each step). Added after the whole-branch review:
+  a stop that landed during IK used to be forgotten by the next move.
+- `reachable(xyz) -> bool`: IK check without moving; skills validate every waypoint of a step with it before
+  the first motion, and lift back to approach height if a motion fails part-way.
+- `stop()`: (original text) freeze in place. `park()`: slow stop to the parked pose, then torque off.
 - `alive() -> float`: time of the last good read (feeds `heartbeat()`).
 - `set_joint_target(q)`: non-blocking, limit-checked, rate-limited target for streaming control
   (a learned policy at 30 Hz); `move_joints` is built on the same path.

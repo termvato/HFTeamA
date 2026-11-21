@@ -72,6 +72,7 @@ class SkillWorker:
         self._abort: str | None = None  # "timeout" | "cancelled" while a stop is in effect
         self._stopped = threading.Event()
         self._thread: threading.Thread | None = None
+        self.park_error: str | None = None  # why the last park() could not finish, if it could not
 
     # ---- contract
 
@@ -89,16 +90,31 @@ class SkillWorker:
             self._request_stop("cancelled")
 
     def park(self) -> None:
+        """Abort the running step, then slow-park and mark the arm DOWN. Never raises.
+
+        The arm is only parked once the step's thread is confirmed dead: a second trajectory
+        streamed next to a live one is worse than leaving the arm frozen where it is
+        (`park_error` says so).
+        """
         with self._lock:
+            if self._state == ArmState.PARKING:
+                return
             busy, th = self._state == ArmState.BUSY, self._thread
+            self._state, self.park_error = ArmState.PARKING, None
         if busy:
             self._request_stop("cancelled")
             if th is not None:
                 th.join(_JOIN_AFTER_STOP_S)
-        with self._lock:
-            self._state = ArmState.PARKING
+            if th is not None and th.is_alive():
+                self.park_error = "step did not stop; arm left frozen where it is"
+                with self._lock:
+                    self._state = ArmState.DOWN
+                return
         try:
+            self._driver.resume()
             self._driver.park()
+        except Exception as exc:  # noqa: BLE001  (a failed park is reported, not raised)
+            self.park_error = getattr(exc, "reason", None) or repr(exc)
         finally:
             with self._lock:
                 self._state = ArmState.DOWN
@@ -108,25 +124,29 @@ class SkillWorker:
             now = self._clock()
             if self._state == ArmState.DOWN:
                 return Result(task.id, self.arm_id, Outcome.ARM_DOWN, now, now, "arm down")
+            if self._state != ArmState.READY:
+                reason = f"arm {self._state.value}"
+                return Result(task.id, self.arm_id, Outcome.FAILED, now, now, reason)
             fn = REGISTRY.get(task.skill)
             if fn is None:
                 reason = f"unknown skill: {task.skill}"
                 return Result(task.id, self.arm_id, Outcome.FAILED, now, now, reason)
             self._state, self._current, self._abort = ArmState.BUSY, task.id, None
             self._stopped.clear()
-        box: dict[str, BaseException | bool] = {}
+            self._driver.resume()  # under the lock: a cancel for this task cannot slip in before it
+            box: dict[str, BaseException | bool] = {}
 
-        def run() -> None:
-            try:
-                fn(_Guard(self._driver, self._stopped), task, self._poses)
-                box["ok"] = True
-            except BaseException as exc:  # noqa: BLE001  (a worker never raises for a step)
-                box["exc"] = exc
+            def run() -> None:
+                try:
+                    fn(_Guard(self._driver, self._stopped), task, self._poses)
+                    box["ok"] = True
+                except BaseException as exc:  # noqa: BLE001  (a worker never raises for a step)
+                    box["exc"] = exc
 
-        started = self._clock()
-        th = threading.Thread(target=run, name=f"{self.arm_id}:{task.id}", daemon=True)
-        self._thread = th
-        th.start()
+            started = self._clock()
+            th = threading.Thread(target=run, name=f"{self.arm_id}:{task.id}", daemon=True)
+            self._thread = th
+            th.start()  # started under the lock, so park() can always join what it finds here
         th.join(self._skill_deadlines.get(task.skill, self._deadline_s))
         if th.is_alive():
             self._request_stop("timeout")
@@ -135,10 +155,9 @@ class SkillWorker:
         outcome, reason = self._classify(box, stuck=th.is_alive())
         with self._lock:
             self._current = None
-            if outcome == Outcome.ARM_DOWN or th.is_alive():
-                self._state = ArmState.DOWN
-            else:
-                self._state = ArmState.READY
+            if self._state == ArmState.BUSY:  # park() may have taken over: leave its state alone
+                lost = outcome == Outcome.ARM_DOWN or th.is_alive()
+                self._state = ArmState.DOWN if lost else ArmState.READY
         return Result(task.id, self.arm_id, outcome, started, finished, reason)
 
     # ---- internals
