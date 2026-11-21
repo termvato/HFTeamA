@@ -28,6 +28,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
+| RTX rehearsal: Isaac Sim scene of the table and arms, plays the plan before the real run, side by side with the real arms; second machine | Vato | #33 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -68,6 +69,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 | new | Object detection (camera -> table positions) | code done, tested on a scripted VLM: Qwen points at objects, pixel ray meets the table plane (`perception/pointing.py`); position only, no yaw. OnePose dropped (per-object iOS scans, CUDA 10.2, Linux only); pointing accuracy on the real model not measured yet |
 
 ## Notes
+
+- 16:14 (Vato): Demo adds an RTX rehearsal: the plan plays in Isaac Sim first, then on the real arms. Operations builds it; Isaac Sim runs on a second machine. Arm motions in the sim should come from Action's skills (MuJoCo track) so sim and real move the same way.
 
 - 16:09 (Vato): Real-arm adapter withdrawn: Action already plans it (Vivek's `SkillWorker` + `LeRobotDriver` on `action-arm-skills`). Operations posted LeRobot safety notes and offered to take his Task 8 (#20).
 
