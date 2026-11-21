@@ -179,3 +179,12 @@ def test_wait_stops_spinning_if_the_physics_thread_dies(table: SimTable) -> None
     table._quit.set()  # the physics thread exits
     th.join(3.0)
     assert not th.is_alive() and "not running" in box["r"]
+
+
+def test_move_to_with_yaw_turns_the_gripper(table: SimTable) -> None:
+    d = table.driver("arm_a")
+    d.move_to(np.array([0.2, 0.0, 0.05]), yaw=1.0)
+    kin = Kinematics(ArmBase((0.0, 0.0, 0.0), 0.0))
+    err = (kin.tool_heading(d.read_joints()[:5]) - 1.0 + np.pi / 2) % np.pi - np.pi / 2
+    assert abs(err) < 0.08
+    assert d.reachable(np.array([0.2, 0.0, 0.05]), yaw=1.0)

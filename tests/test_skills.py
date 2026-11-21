@@ -246,3 +246,36 @@ def test_pick_warns_when_coordinates_and_object_disagree(caplog: pytest.LogCaptu
             FakeDriver(), _task("pick", object="block_01", pick_xyz=[0.21, 0.01, 0.015]), POSES
         )
     assert caplog.text == ""
+
+
+def _yaws(d: FakeDriver) -> list:
+    return [a[1] if len(a) > 1 else None for n, a in d.calls if n == "move_to"]
+
+
+def test_pick_yaw_closes_the_jaws_across_the_objects_long_axis() -> None:
+    import math
+
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01", pick_yaw_deg=30.0), POSES)
+    want = math.radians(30.0) + math.pi / 2  # jaws close perpendicular to the long axis
+    assert _yaws(d) == [pytest.approx(want)] * 3  # approach, grasp, lift
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
+    assert _yaws(d) == [None, None, None]
+
+
+def test_the_carry_pose_does_not_inherit_the_pick_yaw() -> None:
+    poses = Poses(
+        objects={"block_01": [0.21, 0.01, 0.015]}, per_arm={"arm_a": {"carry": [0.05, 0.2, 0.12]}}
+    )
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01", pick_yaw_deg=10.0), poses)
+    assert _yaws(d)[-1] is None
+
+
+@pytest.mark.parametrize("bad", ["abc", None, float("nan"), [1, 2]])
+def test_bad_pick_yaw_fails_cleanly_before_any_motion(bad: object) -> None:
+    d = FakeDriver()
+    with pytest.raises(SkillFailed, match="bad coordinates"):
+        REGISTRY["pick"](d, _task("pick", object="block_01", pick_yaw_deg=bad), POSES)
+    assert d.calls == []

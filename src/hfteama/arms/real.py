@@ -43,6 +43,7 @@ OPEN_PCT = 70.0  # gripper opening for approach and release, LeRobot 0..100
 SETTLE_TOL_RAD = 0.1  # STS3215 under arm load sits a few degrees off its goal
 SETTLE_TIMEOUT_S = 1.5
 PARK_SPEED = 0.3
+YAW_TOL_RAD = 0.1  # a requested grasp heading this far off is refused, not approximated
 HEARTBEAT_POLL_S = 0.5  # an idle arm does no bus traffic, so alive() reads the bus after this long
 DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "configs" / "real_arms.json"
 
@@ -160,21 +161,24 @@ class LeRobotDriver:
             self._tick()
             waited += self._dt
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         xyz = np.asarray(xyz, float)
         try:
             check_point(xyz, self.table_z)
         except MotionError:
             return False
-        return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
+        r = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
+        return r.ok and (yaw is None or abs(r.heading_error_rad or 0.0) <= YAW_TOL_RAD)
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         self._begin()
         xyz = np.asarray(xyz, float)
         check_point(xyz, self.table_z)
-        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)
+        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
         if not result.ok:
             raise MotionError("unreachable")
+        if yaw is not None and abs(result.heading_error_rad or 0.0) > YAW_TOL_RAD:
+            raise MotionError("unreachable yaw")
         self.move_joints(result.q, speed)  # re-checks the stop latch: a stop during IK is kept
 
     def _set_gripper(self, pct: float) -> None:

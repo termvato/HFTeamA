@@ -9,6 +9,7 @@ the task's args: table coordinates (`pick_xyz`, `place_xyz`) first, else a name 
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Callable
 
@@ -89,11 +90,14 @@ def _above(p: np.ndarray, dz: float) -> np.ndarray:
     return p + np.array([0.0, 0.0, dz])
 
 
-def _validate(arm: ArmDriver, waypoints: list[np.ndarray]) -> None:
+Waypoint = tuple[np.ndarray, float | None]  # table-frame point, jaw-closing heading (rad) or None
+
+
+def _validate(arm: ArmDriver, waypoints: list[Waypoint]) -> None:
     """Refuse a step whose every waypoint cannot be reached, before anything moves."""
-    for w in waypoints:
+    for w, yaw in waypoints:
         check_point(w, arm.table_z)
-        if not arm.reachable(w):
+        if not arm.reachable(w, yaw):
             raise MotionError("unreachable")
 
 
@@ -102,16 +106,39 @@ def _carry_point(poses: Poses, arm_id: str) -> np.ndarray | None:
     return poses.point("carry", arm_id) if poses.has("carry", arm_id) else None
 
 
-def _pick_waypoints(p: np.ndarray, carry: np.ndarray | None = None) -> list[np.ndarray]:
-    points = [_above(p, APPROACH_DZ), _above(p, GRASP_DZ), _above(p, LIFT_DZ)]
-    return points + ([carry] if carry is not None else [])
+def pick_yaw(task: Task) -> float | None:
+    """Jaw-closing heading (rad) for `pick_yaw_deg`, the object's long axis: close across it."""
+    if "pick_yaw_deg" not in task.args:
+        return None
+    try:
+        deg = float(task.args["pick_yaw_deg"])
+    except (TypeError, ValueError):
+        raise SkillFailed(f"bad coordinates: pick_yaw_deg={task.args['pick_yaw_deg']!r}") from None
+    if not math.isfinite(deg):
+        raise SkillFailed(f"bad coordinates: pick_yaw_deg={deg!r}")
+    return math.radians(deg) + math.pi / 2
 
 
-def _place_waypoints(p: np.ndarray) -> list[np.ndarray]:
-    return [_above(p, APPROACH_DZ), _above(p, GRASP_DZ)]
+def _move(arm: ArmDriver, xyz: np.ndarray, yaw: float | None = None) -> None:
+    arm.move_to(xyz) if yaw is None else arm.move_to(xyz, yaw=yaw)
 
 
-def _retreat_on_failure(arm: ArmDriver, p: np.ndarray, run: Callable[[], None]) -> None:
+def _pick_waypoints(p: np.ndarray, yaw: float | None, carry: np.ndarray | None) -> list[Waypoint]:
+    points: list[Waypoint] = [
+        (_above(p, APPROACH_DZ), yaw),
+        (_above(p, GRASP_DZ), yaw),
+        (_above(p, LIFT_DZ), yaw),
+    ]
+    return points + ([(carry, None)] if carry is not None else [])
+
+
+def _place_waypoints(p: np.ndarray) -> list[Waypoint]:
+    return [(_above(p, APPROACH_DZ), None), (_above(p, GRASP_DZ), None)]
+
+
+def _retreat_on_failure(
+    arm: ArmDriver, p: np.ndarray, run: Callable[[], None], yaw: float | None = None
+) -> None:
     """Run a motion sequence; if it fails part-way, lift clear of the shared area first.
 
     A stopped or lost arm is left alone: the stop is what the caller asked for.
@@ -121,37 +148,39 @@ def _retreat_on_failure(arm: ArmDriver, p: np.ndarray, run: Callable[[], None]) 
     except MotionError as exc:
         if exc.reason != "stopped":
             try:
-                arm.move_to(_above(p, APPROACH_DZ))
+                _move(arm, _above(p, APPROACH_DZ), yaw)
             except (MotionError, ArmDown):
                 pass
         raise
 
 
-def _do_pick(arm: ArmDriver, p: np.ndarray, carry: np.ndarray | None = None) -> None:
+def _do_pick(
+    arm: ArmDriver, p: np.ndarray, carry: np.ndarray | None, yaw: float | None = None
+) -> None:
     def run() -> None:
         arm.open_gripper()
-        arm.move_to(_above(p, APPROACH_DZ))
-        arm.move_to(_above(p, GRASP_DZ))
+        _move(arm, _above(p, APPROACH_DZ), yaw)
+        _move(arm, _above(p, GRASP_DZ), yaw)
         if not arm.close_gripper().holding:
             arm.open_gripper()  # missed: leave the shared area before reporting
-            arm.move_to(_above(p, APPROACH_DZ))
+            _move(arm, _above(p, APPROACH_DZ), yaw)
             raise SkillFailed("grasp")
-        arm.move_to(_above(p, LIFT_DZ))
+        _move(arm, _above(p, LIFT_DZ), yaw)
         if not arm.holding():
             raise SkillFailed("dropped")
         if carry is not None:
             # The executor frees the shared area lock when this step returns: be out by then.
-            arm.move_to(carry)
+            _move(arm, carry)
 
-    _retreat_on_failure(arm, p, run)
+    _retreat_on_failure(arm, p, run, yaw)
 
 
 def _do_place(arm: ArmDriver, p: np.ndarray) -> None:
     def run() -> None:
-        arm.move_to(_above(p, APPROACH_DZ))
-        arm.move_to(_above(p, GRASP_DZ))
+        _move(arm, _above(p, APPROACH_DZ))
+        _move(arm, _above(p, GRASP_DZ))
         arm.open_gripper()
-        arm.move_to(_above(p, APPROACH_DZ))
+        _move(arm, _above(p, APPROACH_DZ))
 
     _retreat_on_failure(arm, p, run)
 
@@ -159,8 +188,9 @@ def _do_place(arm: ArmDriver, p: np.ndarray) -> None:
 @_register("pick")
 def pick(arm: ArmDriver, task: Task, poses: Poses) -> None:
     p, carry = pick_point(task, poses, arm.arm_id), _carry_point(poses, arm.arm_id)
-    _validate(arm, _pick_waypoints(p, carry))
-    _do_pick(arm, p, carry)
+    yaw = pick_yaw(task)
+    _validate(arm, _pick_waypoints(p, yaw, carry))
+    _do_pick(arm, p, carry, yaw)
 
 
 @_register("place")
@@ -173,9 +203,9 @@ def place(arm: ArmDriver, task: Task, poses: Poses) -> None:
 @_register("pick_place")
 def pick_place(arm: ArmDriver, task: Task, poses: Poses) -> None:
     pp, qq = pick_point(task, poses, arm.arm_id), place_point(task, poses, arm.arm_id)
-    carry = _carry_point(poses, arm.arm_id)
-    _validate(arm, _pick_waypoints(pp, carry) + _place_waypoints(qq))  # before a part is held
-    _do_pick(arm, pp, carry)
+    carry, yaw = _carry_point(poses, arm.arm_id), pick_yaw(task)
+    _validate(arm, _pick_waypoints(pp, yaw, carry) + _place_waypoints(qq))  # before a part is held
+    _do_pick(arm, pp, carry, yaw)
     _do_place(arm, qq)
 
 

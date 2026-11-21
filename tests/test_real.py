@@ -335,3 +335,11 @@ def test_a_joint_move_whose_path_dips_below_the_table_is_refused(
     with pytest.raises(MotionError, match="below table"):
         driver.move_joints(goal)
     assert robot.actions == []
+
+
+def test_move_to_with_yaw_turns_the_gripper(driver: LeRobotDriver) -> None:
+    driver.move_to(np.array([0.2, 0.05, 0.05]), yaw=1.0)
+    err = (
+        Kinematics().tool_heading(driver.read_joints()[:5]) - 1.0 + np.pi / 2
+    ) % np.pi - np.pi / 2
+    assert abs(err) < 0.08

@@ -61,10 +61,12 @@ class ArmDriver(Protocol):
         """Blocking, interpolated move. Raises MotionError on a limit, stall or stop."""
         ...
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         """Move the tool centre to a table-frame point, gripper pointing down.
 
-        Raises MotionError("below table") or MotionError("unreachable") before moving.
+        `yaw` (rad, table frame) is the heading the jaws close along; None leaves the wrist roll to
+        the solver. Raises MotionError("below table"), ("unreachable") or ("unreachable yaw")
+        before moving.
         """
         ...
 
@@ -88,7 +90,7 @@ class ArmDriver(Protocol):
         """Clear a latched `stop()`; the worker calls this at the start of each step."""
         ...
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         """Whether `move_to(xyz)` would be accepted (above the table, IK solves). Never moves."""
         ...
 

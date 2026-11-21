@@ -74,3 +74,22 @@ def test_down_pose_reaches_approach_and_lift_heights(kin: Kinematics, z: float) 
     _p, z_axis = kin.fk(r.q)
     assert r.ok
     assert z_axis @ np.array([0.0, 0.0, -1.0]) > 0.9
+
+
+@pytest.mark.parametrize("yaw", [0.0, 0.5, 1.2, 2.0, -1.0])
+@pytest.mark.parametrize("xy", [(0.2, 0.0), (0.15, 0.08), (0.25, -0.1)])
+def test_solve_aligns_the_jaw_closing_direction_with_the_requested_yaw(
+    kin: Kinematics, yaw: float, xy: tuple[float, float]
+) -> None:
+    target = np.array([xy[0], xy[1], 0.03])
+    r = kin.solve(target, down=True, yaw=yaw)
+    assert r.ok and r.error_m < 0.002
+    err = (kin.tool_heading(r.q) - yaw + np.pi / 2) % np.pi - np.pi / 2  # the jaws are symmetric
+    assert abs(err) < 0.05
+    assert kin.fk(r.q)[1] @ np.array([0.0, 0.0, -1.0]) > 0.9  # still pointing down
+
+
+def test_yaw_is_reported_when_it_cannot_be_met(kin: Kinematics) -> None:
+    r = kin.solve(np.array([0.2, 0.0, 0.03]), down=True, yaw=0.7)
+    assert r.heading_error_rad is not None and abs(r.heading_error_rad) < 0.05
+    assert kin.solve(np.array([0.2, 0.0, 0.03]), down=True).heading_error_rad is None

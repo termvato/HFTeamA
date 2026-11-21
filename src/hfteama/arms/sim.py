@@ -47,6 +47,7 @@ SETTLE_TIMEOUT_S = 3.0
 SETTLE_TOL_RAD = 0.02
 MAX_TARGET_STEP_RAD = 0.05  # per set_joint_target call
 OBJECT_HALF_M = 0.015
+YAW_TOL_RAD = 0.1  # a requested grasp heading this far off is refused, not approximated
 # Folded sideways rest/park pose (pan, lift, elbow, wrist flex, wrist roll). The zero pose stretches
 # every arm toward the bin, so arms that face each other interpenetrate; this one keeps all
 # arm geometry >= 0.2 m from the bin centre with no self or arm-arm contact (checked for the sort
@@ -318,13 +319,14 @@ class MujocoDriver:
     def resume(self) -> None:
         self._stop.clear()
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         xyz = np.asarray(xyz, float)
         try:
             check_point(xyz, self.table_z)
         except MotionError:
             return False
-        return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
+        r = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
+        return r.ok and (yaw is None or abs(r.heading_error_rad or 0.0) <= YAW_TOL_RAD)
 
     def _inject(self, kind: str) -> None:
         if kind == "grasp":
@@ -377,13 +379,15 @@ class MujocoDriver:
             self._table.wait(TICK_S, self._tick)
             waited += TICK_S
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         self._begin()
         xyz = np.asarray(xyz, float)
         check_point(xyz, self.table_z)
-        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)
+        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
         if not result.ok:
             raise MotionError("unreachable")
+        if yaw is not None and abs(result.heading_error_rad or 0.0) > YAW_TOL_RAD:
+            raise MotionError("unreachable yaw")
         self.move_joints(result.q, speed)
 
     def open_gripper(self) -> None:

@@ -56,6 +56,7 @@ class IKResult:
     q: np.ndarray  # 5 body joints, rad
     error_m: float
     ok: bool
+    heading_error_rad: float | None = None  # jaw-closing heading minus the requested yaw (mod pi)
 
 
 class Kinematics:
@@ -90,12 +91,25 @@ class Kinematics:
         pos, z_axis = self._tcp_base()
         return self.base.to_table(pos), self.base._rot() @ z_axis
 
+    def tool_heading(self, q5: np.ndarray) -> float:
+        """Table-frame heading (rad) of the jaw-closing direction: the tool x axis, seen from above.
+
+        With the tool pointing down, wrist roll turns this heading one-for-one. The jaws are
+        symmetric, so only the heading modulo pi matters.
+        """
+        self._set(np.asarray(q5, float))
+        x_axis = self._data.site_xmat[self._site].reshape(3, 3)[:, 0]
+        v = self.base._rot() @ x_axis
+        return float(np.arctan2(v[1], v[0]))
+
     def min_tcp_z(self, q_from: np.ndarray, q_to: np.ndarray, samples: int = 20) -> float:
         """Lowest tool-centre height (table frame) along the straight joint-space path."""
         a, b = np.asarray(q_from, float)[:5], np.asarray(q_to, float)[:5]
         return min(float(self.fk(a + (b - a) * k / samples)[0][2]) for k in range(samples + 1))
 
-    def _iterate(self, q0: np.ndarray, target: np.ndarray, down: bool) -> tuple[np.ndarray, float]:
+    def _iterate(
+        self, q0: np.ndarray, target: np.ndarray, down: bool, fix_roll: bool = False
+    ) -> tuple[np.ndarray, float]:
         q = np.clip(q0, self._lo, self._hi)
         jacp = np.zeros((3, self._model.nv))
         jacr = np.zeros((3, self._model.nv))
@@ -113,6 +127,9 @@ class Kinematics:
                 rhs = np.concatenate([err, rot_err])
             else:
                 jac, rhs = jp, err
+            if fix_roll:
+                jac = jac.copy()
+                jac[:, 4] = 0.0  # wrist roll stays where it was set
             step = jac.T @ np.linalg.solve(jac @ jac.T + _DAMPING**2 * np.eye(len(rhs)), rhs)
             if np.linalg.norm(step) < 1e-7:
                 break
@@ -127,6 +144,7 @@ class Kinematics:
         seed: np.ndarray | None = None,
         down: bool = True,
         tol: float = 0.002,
+        yaw: float | None = None,
     ) -> IKResult:
         """Joint angles that put the TCP at `xyz_table`; `ok` when within `tol` metres.
 
@@ -149,4 +167,34 @@ class Kinematics:
             if err <= tol and align > 0.95:
                 break
         assert best is not None
-        return IKResult(q=best[1], error_m=best[2], ok=best[2] <= tol)
+        q, err = best[1], best[2]
+        heading_err: float | None = None
+        if yaw is not None:
+            q, err, heading_err = self._turn_to_yaw(q, target, down, yaw)
+        return IKResult(q=q, error_m=err, ok=err <= tol, heading_error_rad=heading_err)
+
+    def _heading_error(self, q: np.ndarray, yaw: float) -> float:
+        return float((self.tool_heading(q) - yaw + np.pi / 2) % np.pi - np.pi / 2)
+
+    def _turn_to_yaw(
+        self, q: np.ndarray, target: np.ndarray, down: bool, yaw: float
+    ) -> tuple[np.ndarray, float, float]:
+        """Set wrist roll so the jaws close along `yaw`, re-solving position with roll fixed.
+
+        Roll sits 12 mm off the tool centre and pan also changes the heading, so this repeats a
+        few times. The jaws are symmetric: of the two roll angles that work, take the nearer one
+        inside the joint limits.
+        """
+        q = q.copy()
+        err = float("inf")
+        for _ in range(6):
+            delta = -self._heading_error(q, yaw)
+            if abs(delta) < 0.01 and err < float("inf"):
+                break
+            options = [q[4] + delta + k * np.pi for k in (-1, 0, 1)]
+            options = [o for o in options if self._lo[4] <= o <= self._hi[4]]
+            if not options:
+                break
+            q[4] = min(options, key=lambda o: abs(o - q[4]))
+            q, err = self._iterate(q, target, down, fix_roll=True)
+        return q, err, self._heading_error(q, yaw)
