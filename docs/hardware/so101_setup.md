@@ -26,7 +26,7 @@ Tested with LeRobot 0.7.0. The serial ports need the `dialout` group:
 | Pair | Follower | Leader | Cameras | Status |
 |---|---|---|---|---|
 | `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` | Calibrated, teleop verified 21 Nov |
-| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | none | Calibrated, teleop verified 21 Nov |
+| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | `wrist` | Calibrated, teleop verified 21 Nov |
 
 ```bash
 hfteama pairs            # which arms are connected, and on which port

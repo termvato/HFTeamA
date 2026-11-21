@@ -95,9 +95,17 @@ prints the exact LeRobot command; it must contain `--robot.calibration_dir=.../c
 | Pair | Follower (USB serial) | Leader (USB serial) | Cameras |
 |---|---|---|---|
 | `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` |
-| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | none |
+| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | `wrist` |
 
-Other commands: `hfteama --pair rakesh teleop --cameras` (show cameras), `hfteama --pair rakesh
+**Both pairs at once, with cameras:** one terminal per pair (each arm is its own USB bus).
+Both stream to the same Rerun window; pick each pair's recording in Rerun's left panel.
+
+```bash
+hfteama --pair rakesh teleop --cameras     # terminal 1
+hfteama --pair hacklab teleop --cameras    # terminal 2
+```
+
+Other commands: `hfteama --pair rakesh
 camera`, `hfteama --pair rakesh record --episodes 5 --task "..."`.
 Calibrating a new arm, cameras, recording and troubleshooting:
 [`docs/hardware/so101_setup.md`](docs/hardware/so101_setup.md).

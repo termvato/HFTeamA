@@ -40,7 +40,17 @@
         "serial": "5A7A015820",
         "port": "/dev/ttyACM1"
       },
-      "cameras": {}
+      "cameras": {
+        "wrist": {
+          "type": "opencv",
+          "index_or_path": "/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._Autodarts_DIY_Cam_SN0001-video-index0",
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "fourcc": "MJPG",
+          "warmup_s": 3
+        }
+      }
     }
   },
   "record": {
