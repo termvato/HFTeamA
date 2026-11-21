@@ -173,7 +173,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--poses", default="tasks/sort/poses.json")
     ap.add_argument("--plugged", default="", help="arm ids to plug in at start (comma separated)")
     ap.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None)
-    ap.add_argument("--method", default="heft", choices=["greedy", "heft", "cpsat"])
+    ap.add_argument("--method", default="auto", choices=["auto", "greedy", "heft", "cpsat"])
     ap.add_argument("--scale", type=float, default=1.0, help="clock speed-up (fake arms only)")
     ap.add_argument("--log", default=None)
     ap.add_argument("--host", default="127.0.0.1")

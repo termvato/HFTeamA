@@ -14,6 +14,7 @@ from hfteama.executor import Executor
 from hfteama.taskgraph import Task, TaskGraph, load
 
 SORT12 = load(Path(__file__).parent.parent / "tasks" / "sort" / "sort12.json")
+PLACE = frozenset({"place"})
 SCALE = 100.0  # functional tests; timing is checked at a slower speed-up
 
 
@@ -278,3 +279,49 @@ def test_camera_checks_only_place_steps_in_demo_setting(tmp_path: Path) -> None:
     ex.start()
     assert ex.wait(10)
     assert checked and set(checked) == {"place"} and len(checked) == 12
+
+
+def test_lost_part_waits_for_a_rescan_before_the_pick_is_retried(tmp_path: Path) -> None:
+    from dataclasses import replace as dc_replace
+
+    g = TaskGraph(
+        "one",
+        {
+            "pick_a": Task("pick_a", "pick", args={"pick_xyz": [0.1, 0.1, 0.02]}, duration=4.0),
+            "place_a": Task(
+                "place_a", "place", deps=("pick_a",), same_arm_as="pick_a", duration=4.0
+            ),
+        },
+    )
+    seen: list[str] = []
+    calls: list[float] = []
+
+    def verifier(task, result) -> tuple[bool, str]:
+        seen.append(task.id)
+        return (seen.count("place_a") > 1, "not in the bin")  # first place is rejected
+
+    def rescan() -> TaskGraph:
+        calls.append(time.monotonic())
+        time.sleep(0.05)  # the camera and the VLM take a moment
+        moved = dc_replace(g.tasks["pick_a"], args={"pick_xyz": [0.3, 0.2, 0.02]})
+        return TaskGraph("one", {**g.tasks, "pick_a": moved})
+
+    ex, log, clock = make(tmp_path, graph=g, verifier=verifier, verify_skills=PLACE, rescan=rescan)
+    ex.add_arm(arm("a", clock))
+    ex.start()
+    assert ex.wait(10)
+    assert len(calls) == 1
+    assert ex.graph.tasks["pick_a"].args["pick_xyz"] == [0.3, 0.2, 0.02]
+    order = [
+        (e.kind, e.task or e.data.get("reason"))
+        for e in log.read()
+        if e.kind == "task_start" or e.data.get("reason") in ("rescan_requested", "graph_updated")
+    ]
+    assert order == [
+        ("task_start", "pick_a"),
+        ("task_start", "place_a"),
+        ("replan", "rescan_requested"),
+        ("replan", "graph_updated"),
+        ("task_start", "pick_a"),
+        ("task_start", "place_a"),
+    ]
