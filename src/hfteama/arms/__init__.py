@@ -6,8 +6,8 @@ Tasks can bring their own skills (see tasks/README.md); nothing here knows about
 Owners:
 - Hardware (#19): the physical arms, pairs config and calibrations, detecting arms plugged in
   or out.
-- Operations: real-arm adapter `real.py` (safety checks, slow moves and park, heartbeat).
-- Action (#20): the skills, on real and simulated arms. Scripted, learned or both is their call.
+- Action (#20): the skills, the skill worker and the arm drivers (sim and real), on real and
+  simulated arms. Scripted, learned or both is their call.
 - Operations (#21): the contract in base.py and a fake arm for testing (backlog #4, #14).
 
 Every backend implements arms.base.ArmWorker: state(), execute(task) -> Result, heartbeat(),

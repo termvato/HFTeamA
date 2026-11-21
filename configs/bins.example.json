@@ -1,0 +1,8 @@
+{
+  "note": "Copy to configs/bins.json and measure. xyz: drop point in the table frame (m), same frame as arms.json. radius_m: an object this close (x, y) counts as inside. shared: one arm at a time.",
+  "bins": [
+    {"id": "bin_1", "label": "the left bin", "xyz": [0.10, 0.25, 0.05], "radius_m": 0.08, "shared": true},
+    {"id": "bin_2", "label": "the middle bin", "xyz": [0.45, 0.25, 0.05], "radius_m": 0.08, "shared": true},
+    {"id": "bin_3", "label": "the right bin", "xyz": [0.80, 0.25, 0.05], "radius_m": 0.08, "shared": true}
+  ]
+}

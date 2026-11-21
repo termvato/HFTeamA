@@ -8,25 +8,27 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 15:06)
+## Now (Sat 21 Nov, 16:30)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
    live screen. Run: `python -m hfteama.view --fake-arms 1`, open http://127.0.0.1:8050.
-3. **VLM on top of the loop:** decomposer (camera + Go -> categories -> steps), check after each step,
-   re-scan when the scene changes.
+3. **VLM on top of the loop: first version done** (Aravind): decomposer (camera + Go -> categories
+   -> steps), step check plugged into `Executor(verifier=...)`, re-scan. Reachability fills
+   `allowed_arms` (SO-101 reach). Objects found by Qwen pointing + camera calibration (no extra
+   model). Open: feeding re-scan results into a running executor (Vato, see Notes).
 
 ## Who does what (proposed, to confirm)
 
 | Area | Owner | Backlog |
 |---|---|---|
-| VLM: decomposer, step check, re-scan | Aravind | new (to add) |
+| VLM: object detection (pointing), decomposer, step check, re-scan | Aravind | new (to add) |
 | Reachability graph and arm registry | Aravind | #3 |
 | Planner: greedy fallback, full schedule (HEFT, then CP-SAT), plan checker | Vato | #6, #7, #8, #16 |
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
-| Real-arm adapter: real follower as an arm worker (from Hardware's pairs config), safety checks, slow moves and park, heartbeat, runs Action's skills | Vato | #4, #19, #20 |
+| RTX rehearsal: Isaac Sim scene of the table and arms, plays the plan before the real run, side by side with the real arms; second machine | Vato | #33 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -47,7 +49,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | # | Item | State |
 |---|---|---|
 | #2 | Task model and task graph | first version on `main` (no JSON schema file yet) |
-| #3 | Arm registry | not started |
+| #3 | Arm registry | done: `registry/` catalog (`configs/arms.json`), SO-101 reach (0.44 m fully extended, hip +-110 deg, mounting yaw), `resolve()` fills `allowed_arms`; live arm state stays in the executor |
 | #4 | Worker interface | locked; in `arms/base.py` |
 | #5 | Event log | first version on `main` |
 | #6 | Greedy allocator | done: greedy fallback + HEFT full schedule (`scheduler/greedy.py`, `heft.py`) |
@@ -63,8 +65,55 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #16 | Plan validator | done (`scheduler/check.py`), run after every re-plan |
 | #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
 | #18 | Re-split policy questions | open |
+| new | VLM decomposer, step check, re-scan | done; step check wired as `Executor(verifier=...)`. Real run on the RTX 4060 (Qwen3-VL-4B, 4-bit, synthetic table image, `scripts/vlm_smoke.py`): sorting by colour right on the first try, 12 s (once at Go); step check correct, 2.8 s per call; peak VRAM 3.1 GB. Not yet on a real camera photo |
+| new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 16:16 (Vato), answers to Aravind's three asks, on `orchestrator`:
+  (1) `Executor.update_graph(graph)`: pass `rescan(...).graph` after `registry.resolve`; done and
+  running steps are kept even if left out, new steps join, dropped pending steps go, changed args
+  apply, then a forced re-plan (also works after the batch finished).
+  (2) `Executor(catalog=[...all arm ids...])`: the what-if row adds the catalog's unplugged arms
+  (with their reach) before any virtual arm.
+  (3) Fake-arm tests now run at 10x, so Windows' ~15.6 ms timer tick no longer breaks them.
+
+- 16:14 (Vato): Demo adds an RTX rehearsal: the plan plays in Isaac Sim first, then on the real arms. Operations builds it; Isaac Sim runs on a second machine. Arm motions in the sim should come from Action's skills (MuJoCo track) so sim and real move the same way.
+
+- 16:09 (Vato): Real-arm adapter withdrawn: Action already plans it (Vivek's `SkillWorker` + `LeRobotDriver` on `action-arm-skills`). Operations posted LeRobot safety notes and offered to take his Task 8 (#20).
+
+- 21 Nov (Aravind): First real Qwen run on the RTX 4060 passed (numbers in the backlog). Watch
+  the step check: one GPU, one call at a time, 2.8 s each. With 3 arms finishing a step every
+  ~5 s, checking every pick and place asks ~1.7 s of GPU per second and the checks queue up.
+  Checking only places (or only when the camera sees a change) halves that.
+
+- 21 Nov (Aravind): Built and on `orchestrator`: `src/hfteama/registry/` (#3) and
+  `src/hfteama/perception/` (VLM). Objects: Qwen points at each one (0..1000 coords), the camera
+  ray through that pixel meets the table plane at the objects' top height. Needs from Hardware's
+  calibration: camera pose in an arm's base frame plus intrinsics K at the image size
+  (`configs/camera.example.json`). Position only; grasps are from the top (no yaw).
+- 21 Nov (Aravind): Pose estimator decision: OnePose (and SAM-6D) dropped. OnePose needs an iOS
+  scan per object, CUDA 10.2 (does not run on the RTX 4060) and Linux; the VLM already sees the
+  objects.
+- 21 Nov (Aravind), for Vato, wiring:
+  - `scene = build_scene(VLMPointDetector(vlm, cal).detect(image), cal)`, then
+    `Decomposer(vlm, load_bins(...)).decompose(image, scene)` -> task graph (pick + place per
+    object, `same_arm_as`, `args.pick_xyz` / `place_xyz`, place holds the bin as a resource).
+  - `registry.resolve(graph, load_catalog("configs/arms.json").values()).graph` -> `Executor(graph)`.
+    Pass the whole catalog: `allowed_arms` lists every arm that could reach a step, and your
+    `blocked_tasks` / `unblocked_by` do the rest. Worker `arm_id`s must match catalog ids.
+  - `Executor(verifier=StepChecker(vlm, bins).as_verifier(camera_grab))`: one camera check per
+    step; camera or VLM errors count as not confirmed.
+  - Needs you: (1) the executor cannot take new or changed tasks mid-run, so `rescan()` output
+    (new objects, moved, vanished) has nowhere to go yet: an `Executor.update_graph(graph)` that
+    keeps done/running steps would do it. (2) `whatif` adds `virtual-k` arms that only get steps
+    open to every arm; with reach-filled `allowed_arms` the rows above the connected count drop
+    out. Using the catalog's unplugged arms as the extra arms would fix it.
+    (3) `tests/test_fake_arm.py` fails 2 tests on Windows (1000x clock: 4 ms steps vs ~15.6 ms
+    timer tick); fine on Linux CI.
+- 21 Nov (Aravind): VLM = Qwen3-VL-4B-Instruct from Hugging Face on the RTX 4060 Laptop (8 GB):
+  auto 4-bit, VRAM preflight and 85% cap, no CPU offload, image/token/time caps, OOM retry,
+  one call at a time, thermal guard (85 C). Smoke test: `python scripts/vlm_smoke.py`.
 
 - 15:31 (Vato): Operations builds the real-arm adapter (`arms/real.py`), on top of Hardware's `configs/teleop_pairs.json` and calibrations. Hardware and Action notified on #19 and #20.
 
@@ -82,6 +131,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 21 Nov (Aravind): registry + reachability (#3), VLM decomposer / step check / re-scan, Qwen GPU safeguards, executor verifier hook.
 - 14:31 Product section in `docs/plan.md`.
 - 14:20 Team branches; `orchestrator` = `termvato` + Aravind's design doc.
 - 13:56 Names in the code aligned with the backlog (#2, #4, #5, #12).
