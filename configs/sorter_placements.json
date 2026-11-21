@@ -1,0 +1,13 @@
+{
+  "rakesh": {
+    "base": [
+      0.138,
+      0.35
+    ],
+    "yaw_deg": -90.0,
+    "z_offset": -0.015,
+    "fit_rms_mm": 0.0,
+    "points": 1,
+    "note": "base y set by hand: 2 cm in front of the first estimate (0.37), towards the camera"
+  }
+}
