@@ -127,6 +127,24 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
     side_of = {}
     if plan:
         side_of = {id(pk.piece): pk.side for pk in plan.picks}
+
+    def label(xyz, text, colour=(255, 255, 255)):
+        u, v = np.round(project([xyz], pose, intr)[0]).astype(int)
+        for c, t in (((0, 0, 0), 4), (colour, 2)):
+            cv2.putText(
+                img, text, (u + 8, v - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55 * k, c, int(t * k)
+            )
+
+    for side, arm in arms.items():
+        p = arm.placement
+        u, v = np.round(project([[p.x, p.y, 0]], pose, intr)[0]).astype(int)
+        cv2.drawMarker(img, (u, v), COLOURS.get(side), cv2.MARKER_CROSS, int(30 * k), int(3 * k))
+        label([p.x, p.y, 0], f"{side} ({p.x:.3f}, {p.y:.3f})", COLOURS.get(side))
+    if scene.box is not None:
+        b = scene.box
+        label([b.x, b.y, cfg["box"]["height"]], f"box ({b.x:.3f}, {b.y:.3f})", (255, 0, 255))
+    for i, pc in enumerate(scene.pieces, 1):
+        label([pc.x, pc.y, 0], f"{i}: ({pc.x:.3f}, {pc.y:.3f}) {piece_angle(pc):.0f}deg")
     for pc in scene.pieces:
         colour = COLOURS.get(side_of.get(id(pc)), (0, 0, 255))
         poly(np.c_[pc.outline, np.zeros(len(pc.outline))], colour)
@@ -156,21 +174,39 @@ def save_image(img, name: str) -> Path:
     return path
 
 
+def piece_angle(p) -> float:
+    """Orientation of a piece's long side, deg in [0, 180), from table +x towards +y."""
+    return float(np.degrees(p.yaw + np.pi / 2) % 180.0)
+
+
 def report(scene, plan: Plan, arms) -> None:
-    b = scene.box
-    print("box:", "not found" if b is None else f"centre ({b.x:.3f}, {b.y:.3f}) m")
-    for side in arms:
+    """Arm centres, box and every piece (pose in the table frame, metres / degrees)."""
+    print("Table frame: origin tag 0, x -> tag 3, y -> tag 2 (away from the camera), metres.")
+    print("\nArm centres (base_link origin):")
+    for side, arm in arms.items():
+        p = arm.placement
         drop = plan.drops.get(side)
-        reach = f"drop tilt {np.degrees(drop.tilt):.0f} deg" if drop else "CAN'T reach the box"
-        print(f"{side}: {len(plan.for_arm(side))} pieces, {reach}")
-        for pk in plan.for_arm(side):
-            p = pk.piece
-            print(
-                f"   ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f} cm,"
-                f" {np.hypot(*pk.target_arm[:2]) * 100:.0f} cm from the base"
-            )
-    for p in plan.unreachable:
-        print(f"unreachable: ({p.x:.3f}, {p.y:.3f})")
+        reach = (
+            f"reaches box, drop tilt {np.degrees(drop.tilt):.0f} deg"
+            if drop
+            else ("CAN'T reach the box")
+        )
+        print(
+            f"  {side:5}  x {p.x:.3f}  y {p.y:.3f}  heading {np.degrees(p.yaw):.1f} deg  ({reach})"
+        )
+    b = scene.box
+    print("\nBox:", "not found" if b is None else f"centre x {b.x:.3f}  y {b.y:.3f}")
+    side_of = {id(pk.piece): pk for pk in plan.picks}
+    print(f"\nPieces: {len(scene.pieces)}")
+    print("   #      x      y   angle   length x width   area  arm    dist")
+    for i, p in enumerate(scene.pieces, 1):
+        pk = side_of.get(id(p))
+        who = pk.side if pk else "-"
+        dist = f"{np.hypot(*pk.target_arm[:2]) * 100:.0f} cm" if pk else "unreachable"
+        print(
+            f"  {i:2}  {p.x:.3f}  {p.y:.3f}  {piece_angle(p):5.0f}   "
+            f"{p.length * 100:5.1f} x {p.width * 100:4.1f} cm  {p.area_cm2:5.1f}  {who:5}  {dist}"
+        )
     for n in plan.notes:
         print("note:", n)
 
