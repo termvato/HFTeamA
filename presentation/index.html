@@ -373,28 +373,28 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <section class="slide" aria-label="Plug and Produce">
   <div class="frame">
     <div class="p pad-lg between" style="grid-column:1/span 8;grid-row:1/span 6">
-      <div class="lab">HFTeamA / Hacklab 2026</div>
+      <div class="lab">HFTeamA / HackLab Berlin 2026 &middot; Desk Hero</div>
       <div class="corner"><i></i><i></i><i></i><i></i></div>
       <h1 class="display" style="font-size:196px;line-height:.86;letter-spacing:-.045em">Plug<br>and<br>Produce</h1>
     </div>
     <div class="p lemon between" style="grid-column:9/span 4;grid-row:1/span 3">
       <div class="lab">Arms plugged in</div>
-      <div class="stat">1&nbsp;&rarr;&nbsp;3</div>
+      <div class="stat">1&nbsp;&rarr;&nbsp;2</div>
     </div>
     <div class="p ink between" style="grid-column:9/span 4;grid-row:4/span 3">
       <div class="lab">Predicted finish</div>
       <div class="stat-sm" style="font-size:112px;color:var(--lemon)">&darr;&nbsp;Drops</div>
     </div>
     <div class="p ink" style="grid-column:1/span 8;grid-row:7/span 2;justify-content:center">
-      <p class="body-lg">Plug in another robot arm. The work re-splits live.</p>
+      <p class="body-lg">A messy desk, tidied by robot arms. In a hurry? Plug in another one.</p>
     </div>
     <div class="p between" style="grid-column:9/span 4;grid-row:7/span 2">
-      <div class="lab">SO-101 arms &middot; real + sim</div>
+      <div class="lab">SO-101 arms &middot; one camera</div>
       <div class="lab">Team of 6 &middot; 48 hours</div>
     </div>
   </div>
   <div class="pagenum lemon">01 / 09</div>
-  <aside class="notes">We're HFTeamA. One idea: finish a batch of work sooner just by plugging in more robot arms, and see the new finish time live. (~15 s)</aside>
+  <aside class="notes">We're HFTeamA. Your desk is a mess. Point a camera at it and the arms tidy it. In a hurry? Plug in another arm and watch the finish time drop. (~15 s)</aside>
 </section>
 
 <!-- =========================================================
@@ -403,21 +403,21 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <section class="slide" aria-label="The problem">
   <div class="frame">
     <div class="p pad-lg between" style="grid-column:1/span 7;grid-row:1/span 4">
-      <div class="lab">The problem / today</div>
+      <div class="lab">The problem / your desk</div>
       <div class="corner"><i></i><i></i><i></i><i></i></div>
-      <h2 class="title">A new arm means<br><mark>re-programming</mark></h2>
+      <h2 class="title">A desk robot does<br><mark>one trained thing</mark></h2>
     </div>
     <div class="p lemon between" style="grid-column:8/span 5;grid-row:1/span 4">
-      <div class="lab">Shipping products we found that re-split work across arms automatically</div>
+      <div class="lab">Training runs we need for a new object on the desk</div>
       <div class="stat-lg">0</div>
     </div>
     <div class="p ink between" style="grid-column:1/span 4;grid-row:5/span 4">
       <div class="stat-sm" style="color:var(--lemon)">01</div>
-      <div><div class="ch" style="margin-bottom:14px">Arm added</div><p class="body">Someone re-programs the cell by hand.</p></div>
+      <div><div class="ch" style="margin-bottom:14px">New object</div><p class="body">A trained policy only knows the things it was shown.</p></div>
     </div>
     <div class="p between" style="grid-column:5/span 4;grid-row:5/span 4">
       <div class="stat-sm">02</div>
-      <div><div class="ch" style="margin-bottom:14px">Arm fails</div><p class="body">Its work waits for a human to move it.</p></div>
+      <div><div class="ch" style="margin-bottom:14px">In a hurry</div><p class="body">A second arm means new data, or re-programming by hand.</p></div>
     </div>
     <div class="p ink between" style="grid-column:9/span 4;grid-row:5/span 4">
       <div class="stat-sm" style="color:var(--lemon)">03</div>
@@ -425,7 +425,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     </div>
   </div>
   <div class="pagenum">02 / 09</div>
-  <aside class="notes">Robot cells are programmed per arm. Add one: re-program. Lose one: the line waits. And more arms rarely means N times faster. Integrators quote integration at 1.5 to 3 times the arm price. (~30 s)</aside>
+  <aside class="notes">Desk robots today are trained for one chore with the objects they saw. Put something new on the desk and they are lost. Want it done faster with a second arm? That means new data or re-programming. And more arms rarely means N times faster, with nothing telling you why. Ours needs no training per object: a camera model names what is on the desk. (~30 s)</aside>
 </section>
 
 <!-- =========================================================
@@ -441,7 +441,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="stat-sm">01</div>
       <div>
         <div class="ch" style="margin-bottom:14px">See</div>
-        <p class="bsm">A camera VLM reads the table, picks the categories and writes the task graph.</p>
+        <p class="bsm">A camera model reads the desk, names each thing, decides where it goes and writes the steps.</p>
       </div>
     </div>
     <div class="p between" style="grid-column:4/span 3;grid-row:4/span 5">
@@ -471,7 +471,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     </div>
   </div>
   <div class="pagenum invert">03 / 09</div>
-  <aside class="notes">Three moves. See: a camera VLM reads the table and writes the steps. Split: the planner assigns steps and predicts the finish. Re-split: when an arm joins, leaves or fails, we re-plan the rest live. The clock on the right is our planner's real output for the 12-object sort: watch it drop as arms join, then stop when a shared bin binds. (~35 s)</aside>
+  <aside class="notes">Three moves. See: a camera model reads the desk and writes the steps. Split: the planner assigns steps and predicts the finish. Re-split: when an arm joins, leaves or fails, we re-plan the rest live. The clock on the right is our planner's real output for the 12-object sort: watch it drop as arms join, then stop when a shared bin binds. (~35 s)</aside>
 </section>
 
 <!-- =========================================================
@@ -531,24 +531,23 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <section class="slide" aria-label="Live demo">
   <div class="frame">
     <div class="p lemon between pad-lg" style="grid-column:1/span 6;grid-row:1/span 8">
-      <div class="lab">Live on the table</div>
+      <div class="lab">Filmed on our table</div>
       <div class="corner"><i></i><i></i><i></i><i></i></div>
-      <div class="secnum">Live</div>
+      <div class="secnum">Demo</div>
       <div class="ch">Plug and<br>watch</div>
     </div>
     <div class="p ink pad-lg" style="grid-column:7/span 6;grid-row:1/span 8;justify-content:center">
       <ol class="beats">
-        <li><span class="n">01</span><span class="t"><b>One arm.</b> The VLM groups the objects; the estimate shows 1&ndash;4 arms.</span></li>
-        <li><span class="n">02</span><span class="t"><b>Go.</b> The plan plays first in Isaac Sim, then on the real arms.</span></li>
-        <li><span class="n">03</span><span class="t"><b>Arm 2.</b> Plugged in, detected, work re-splits, the countdown drops.</span></li>
-        <li><span class="n">04</span><span class="t"><b>Arm 3.</b> A smaller drop, and the screen names the limit.</span></li>
-        <li><span class="n">05</span><span class="t"><b>Break it.</b> Unplug an arm or drop a part: its work flows to the others.</span></li>
-        <li><span class="n">06</span><span class="t"><b>New object.</b> The re-scan finds it and it gets sorted too.</span></li>
+        <li><span class="n">01</span><span class="t"><b>See.</b> The camera model names what is on the desk; the screen shows which arm takes what, and the time.</span></li>
+        <li><span class="n">02</span><span class="t"><b>Go.</b> One real arm tidies; the countdown runs.</span></li>
+        <li><span class="n">03</span><span class="t"><b>Plug in.</b> Someone plugs in the second arm. It is detected by its USB.</span></li>
+        <li><span class="n">04</span><span class="t"><b>Re-plan.</b> The screen compares plans for reach and free arms, and picks the fastest.</span></li>
+        <li><span class="n">05</span><span class="t"><b>Together.</b> The predicted time drops and both arms finish the desk.</span></li>
       </ol>
     </div>
   </div>
   <div class="pagenum invert">05 / 09</div>
-  <aside class="notes">Switch to the live screen. Narrate each beat; let the countdown do the talking. The Isaac Sim rehearsal runs on the second machine. If the rig misbehaves, cut to the backup video. (~2 min)</aside>
+  <aside class="notes">Play the film, shot on our own table. Narrate each beat; let the countdown do the talking. At beat 4: once the plan settles, taking reach and free arms into account, the arms begin to move. If the rig is on stage and behaving, offer a judge to put their own object on the desk. (~2 min)</aside>
 </section>
 
 <!-- =========================================================
@@ -576,7 +575,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="xaxis lab-sm" id="scaleAxis"><div>1 arm<br>limit: arms</div><div>2 arms<br>limit: arms</div><div>3 arms<br>limit: input bin</div><div>4 arms<br>limit: input bin</div></div>
     </div>
     <div class="p lemon between" style="grid-column:9/span 4;grid-row:4/span 3">
-      <div class="lab">Our planned speed-up, sort 12 objects, <span data-fact="scaling.best_arms">3</span> arms</div>
+      <div class="lab">Planned speed-up (planner output), sort 12 objects, <span data-fact="scaling.best_arms">3</span> arms</div>
       <div class="stat" data-fact="scaling.best_speedup">2.2&times;</div>
     </div>
     <div class="p ink between" style="grid-column:9/span 4;grid-row:7/span 2">
@@ -585,7 +584,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     </div>
   </div>
   <div class="pagenum invert">06 / 09</div>
-  <aside class="notes">Speed-up is never N times. The finish time can't beat the work split across arms, the longest chain of ordered steps, or the busiest shared area. We compute that bound on every re-plan and say which one binds. This chart is our planner on today's code for the 12-object sort: the second arm nearly halves it, the third helps less, and the fourth adds nothing because everyone queues at the shared input bin. (~35 s)</aside>
+  <aside class="notes">Speed-up is never N times. The finish time can't beat the work split across arms, the longest chain of ordered steps, or the busiest shared area. We compute that bound on every re-plan and say which one binds. This chart is planned, not measured on real arms: our planner on today's code for a 12-object sort: the second arm nearly halves it, the third helps less, and the fourth adds nothing because everyone queues at the shared input bin. (~35 s)</aside>
 </section>
 
 <!-- =========================================================
@@ -675,7 +674,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="lab">Operations</div>
       <div>
         <div class="sub" style="margin-bottom:16px">Vato &amp; Aravind</div>
-        <p class="bsm">Planners, live re-split, live screen. Qwen3-VL reads the table; Isaac Sim rehearsal.</p>
+        <p class="bsm">Planners, live re-split, live screen, plug-in detection. Qwen3-VL reads the desk.</p>
       </div>
     </div>
   </div>
@@ -700,16 +699,16 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       </div>
     </div>
     <div class="p between" style="grid-column:1/span 6;grid-row:7/span 2">
-      <div class="lab">Code</div>
-      <p class="body mono">github.com/termvato/HFTeamA</p>
+      <div class="lab">Beyond the desk</div>
+      <p class="body">The same system runs a packing or kitting bench: add an arm, and it tells you when the batch is done.</p>
     </div>
     <div class="p between" style="grid-column:7/span 6;grid-row:7/span 2">
-      <div class="lab">HFTeamA</div>
+      <div class="lab">HFTeamA &middot; github.com/termvato/HFTeamA</div>
       <p class="body">Diego &middot; Om &middot; Vivek &middot; Sahil &middot; Vato &middot; Aravind</p>
     </div>
   </div>
   <div class="pagenum invert">09 / 09</div>
-  <aside class="notes">Plug in an arm, watch the clock drop. Thanks. Happy to take questions. (~10 s)</aside>
+  <aside class="notes">Today it tidies a desk. The same system runs a packing bench in industry: add an arm, and it tells you when the batch is done. Plug in an arm, watch the clock drop. Thanks. (~15 s)</aside>
 </section>
 
 </main>
@@ -725,11 +724,11 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <!-- FACTS:START -->
 <script type="application/json" id="deck-facts">
 {
- "generated": "Sat 21 Nov 17:50",
- "main_sha": "ec9f69e",
+ "generated": "Sat 21 Nov 21:30",
+ "main_sha": "2828b1a",
  "show": {
-  "tests": 199,
-  "commits": 91,
+  "tests": 260,
+  "commits": 116,
   "ops_backlog": "16/22",
   "action_work": "12/13",
   "followers": 2,
@@ -762,14 +761,14 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
    {
     "n": 3,
     "planned": 54.0,
-    "bound": 48.0,
+    "bound": 54.0,
     "ideal": 40.0,
     "limit": "input bin"
    },
    {
     "n": 4,
     "planned": 54.0,
-    "bound": 48.0,
+    "bound": 54.0,
     "ideal": 30.0,
     "limit": "input bin"
    }
