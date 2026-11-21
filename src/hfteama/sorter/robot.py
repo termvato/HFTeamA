@@ -13,12 +13,17 @@ Safety:
 from __future__ import annotations
 
 import json
+import threading
 import time
 
 import numpy as np
 
 from hfteama.arms.kinematics import BODY, ArmFrame
 from hfteama.arms.so101_ik import calibrated_limits, fk, roll_window, solve_ik
+
+
+class Stopped(RuntimeError):
+    """A stop was requested (ArmDriver.stop_event) while the arm was moving."""
 
 
 class ArmDriver:
@@ -42,6 +47,9 @@ class ArmDriver:
         )
         self.robot = None
         self.home: dict | None = None
+        # set from another thread to freeze the arm: every motion loop checks it each tick and
+        # raises Stopped, leaving the arm holding its last commanded pose
+        self.stop_event = threading.Event()
         self.gripper_target = motion.get("gripper_open", 60.0)
 
     # --- connection -------------------------------------------------------------------------
@@ -104,6 +112,10 @@ class ArmDriver:
             self.robot.disconnect()  # releases torque: only after the arm is back at rest
             self.robot = None
 
+    def _check_stop(self) -> None:
+        if self.stop_event.is_set():
+            raise Stopped("stopped")
+
     def torque_off(self) -> None:
         self.robot.bus.disable_torque()
 
@@ -134,6 +146,7 @@ class ArmDriver:
         n = max(1, int(np.ceil(np.abs(d).max() / (speed / rate))))
         t0 = time.perf_counter()
         for i in range(1, n + 1):
+            self._check_stop()
             s = i / n
             s = s * s * (3 - 2 * s)  # smoothstep: no jerk at the ends
             act = {k: start[k] + d[m] * s for m, k in enumerate(keys)}
@@ -201,6 +214,7 @@ class ArmDriver:
         n = max(1, int(np.ceil(1.5 * total / (speed / rate))))
         t0 = time.perf_counter()
         for i in range(1, n + 1):
+            self._check_stop()
             u = i / n
             d = total * u * u * (3 - 2 * u)
             pos = np.array([np.interp(d, cum, pts[:, m]) for m in range(len(keys))])
@@ -233,6 +247,7 @@ class ArmDriver:
         best, since = g, time.perf_counter()  # stall detection: no progress for 0.3 s
         deadline = time.perf_counter() + timeout
         while time.perf_counter() < deadline and abs(value - g) > 1.0:
+            self._check_stop()
             self.robot.send_action(
                 {**hold, "gripper.pos": g + float(np.clip(value - g, -cap, cap))}
             )

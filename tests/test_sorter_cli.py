@@ -116,7 +116,10 @@ def test_gripper_ramps_under_the_relative_cap_and_holds_where_it_stopped() -> No
             # a slow motor: covers half of each step
             self.g = max(20.0, self.g + 0.5 * (act["gripper.pos"] - self.g))
 
+    import threading
+
     drv = robot.ArmDriver.__new__(robot.ArmDriver)
+    drv.stop_event = threading.Event()
     drv.motion = {"max_relative_target": 10.0, "rate_hz": 1000}
     drv.robot = FakeRobot()
     end = drv.gripper(2.0, wait=3.0)
@@ -351,7 +354,10 @@ def test_move_line_is_one_smooth_motion() -> None:
             self.sent.append({k: v for k, v in act.items() if k != "gripper.pos"})
             self.pos = {k: v for k, v in act.items() if k != "gripper.pos"}
 
+    import threading
+
     drv = robot.ArmDriver.__new__(robot.ArmDriver)
+    drv.stop_event = threading.Event()
     drv.side, drv.frame, drv.limits = "test", frame, (LOWER, UPPER)
     drv.motion = {"max_joint_speed_deg_s": 45.0, "rate_hz": 1000}
     drv.gripper_target = 50.0
