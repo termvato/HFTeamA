@@ -69,7 +69,7 @@ cable; with real arms the same happens when a follower's USB is plugged in or ou
 
 Other tools: `python scripts/scaling_benchmark.py` (finish time against number of arms),
 `python scripts/bench_planners.py` (planner speed), `python scripts/real_table_plan.py` (top camera
-to plan, dry run), `scripts/isaac/` (Isaac Sim scene of the arms).
+to plan, dry run).
 
 ### Command-line tool
 

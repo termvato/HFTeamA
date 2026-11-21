@@ -83,15 +83,14 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | Failures | Says what happened ("grasp failed, retrying", "arm lost, moving its work", "too slow") and recovers; a camera check confirms every place step (decided 21 Nov: one GPU, ~2.8 s per check; a failed pick shows up as a grasp failure). |
 | Scene changes | New or moved objects mid-run: the camera notices, the VLM re-reads the table, the plan and countdown update. |
 | Simulated arms | Only in the what-if estimate; they do not execute in the live run. |
-| RTX rehearsal (sim first, then real) | On Go, the batch first plays in a photoreal Isaac Sim scene of the same table (same plan, same arms), then the identical plan runs on the real arms; sim and real side by side. Built by Operations; runs on a second machine (GPU: Isaac Sim and the VLM do not share one 8 GB laptop). |
 
-## Demo
+## Demo (filmed on the real setup)
 
-1. Objects on the table, one arm plugged in: the screen shows the VLM's grouping and the estimate (with what-if for more arms).
-2. Press Go. Plug in a second arm mid-run: it is detected, the work re-splits, the countdown drops.
-3. Plug in the third: a smaller drop, and the screen names the limit.
-4. Drop a part or unplug an arm: the screen says what happened and the work flows to the others.
-5. Drop a new object on the table: it is picked up by the re-scan and sorted too.
+1. One real arm is sorting; the screen shows the predicted finish time.
+2. Someone plugs in the second arm.
+3. The system notices it and re-plans (a visible "re-planning" moment on the screen).
+4. The predicted finish time comes down.
+5. Both arms work together until the batch is done.
 
 ## Later extensions (not in the core build)
 
@@ -135,7 +134,6 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | Scaling benchmark | done: about 2.2x with 3 arms, then a shared area or step order limits it |
 | Real-arm skills and driver | written and tested in MuJoCo (branch `action-arm-skills`); not yet run on a real arm |
 | Real run (camera + VLM + executor + real arms) | waiting for the first real arm motion |
-| RTX rehearsal in Isaac Sim (#33) | feasibility done; bridge from the plan still to build |
 
 ## Run
 

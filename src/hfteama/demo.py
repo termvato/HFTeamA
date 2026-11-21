@@ -12,8 +12,6 @@ Then open http://127.0.0.1:8050 and press Go.
 - What an arm is (`--backend`): `fake` sleeps for each step's duration; `sim` and `real` are
   Action's `SkillWorker` on its MuJoCo or LeRobot driver (imported only when asked for, so this
   file runs without them). `real` moves real arms: a person must be at the rig.
-- `--isaac HOST:PORT` (sim backend): stream the simulated arms' joint angles to the Isaac Sim
-  scene (`scripts/isaac/so101_scene.py --listen PORT`), the RTX rehearsal view (#33).
 - What the batch is: a task file (`--task`), or a planner hook `module:function` returning a
   `TaskGraph` (the camera + VLM pipeline plugs in here), optionally with `--verifier
   module:function` returning the executor's step-check function.
@@ -56,9 +54,7 @@ def fake_factory(clock: Clock, noise: float = 0.1) -> Callable[[str], Any]:
     return make
 
 
-def action_factory(
-    backend: str, poses_path: str, arms_config: str, streamer: Any = None
-) -> Callable[[str], Any]:
+def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[[str], Any]:
     """Action's worker on its sim or real driver. Imported here, so `fake` needs none of it."""
     try:
         from hfteama.arms import generic_skills  # noqa: F401  (registers the skills)
@@ -83,10 +79,7 @@ def action_factory(
     table.__enter__()  # lives for the whole run
 
     def make_sim(arm_id: str) -> Any:
-        driver = table.driver(arm_id)
-        if streamer is not None:
-            streamer.add(arm_id, driver.read_joints)
-        return SkillWorker(arm_id, driver, poses, backend="sim", clock=table.sim_time)
+        return SkillWorker(arm_id, table.driver(arm_id), poses, backend="sim", clock=table.sim_time)
 
     return make_sim
 
@@ -182,9 +175,6 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None)
     ap.add_argument("--method", default="auto", choices=["auto", "greedy", "heft", "cpsat"])
     ap.add_argument("--scale", type=float, default=1.0, help="clock speed-up (fake arms only)")
-    ap.add_argument(
-        "--isaac", help="HOST:PORT of scripts/isaac/so101_scene.py --listen (sim backend)"
-    )
     ap.add_argument("--log", default=None)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8050)
@@ -196,17 +186,10 @@ def main(argv: list[str] | None = None) -> None:
     known = followers_from_pairs(args.pairs)
     graph = hook(args.planner)() if args.planner else load(args.task)
     verifier = hook(args.verifier)() if args.verifier else None
-    streamer = None
-    if args.isaac and args.backend == "sim":
-        from hfteama.view.joint_stream import JointStreamer
-
-        host, _, port = args.isaac.rpartition(":")
-        streamer = JointStreamer({}, host=host or "127.0.0.1", port=int(port))
-        streamer.start()
     if args.backend == "fake":
         factory = fake_factory(clock)
     else:
-        factory = action_factory(args.backend, args.poses, args.arms_config, streamer)
+        factory = action_factory(args.backend, args.poses, args.arms_config)
     watch = args.watch if args.watch is not None else args.backend == "real"
     path = Path(args.log or f"runs/{time.strftime('%Y%m%d-%H%M%S')}/events.jsonl")
     log = EventLog(path)

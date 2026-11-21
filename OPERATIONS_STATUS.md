@@ -44,7 +44,6 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
-| RTX rehearsal: Isaac Sim scene of the table and arms, plays the plan before the real run, side by side with the real arms; second machine | Vato | #33 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -88,6 +87,11 @@ Update it when you start, finish or decide something. Notes for each other go un
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 18:48 (Vato): **Isaac Sim is dropped** (#33 closed; scripts and the joint streamer removed).
+  **The demo is filmed on the real setup:** one arm sorting, the second arm is plugged in, the
+  screen shows the re-planning moment, the predicted finish time comes down, both arms work
+  together.
 
 - 18:27 (Vato): **RTX rehearsal bridge works (#33):** `view/joint_stream.py` streams each simulated
   arm's joints over UDP; `python -m hfteama.demo --backend sim --isaac HOST:PORT` turns it on.
