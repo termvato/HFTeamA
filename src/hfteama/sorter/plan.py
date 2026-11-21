@@ -46,6 +46,7 @@ class ArmModel:
     jaw_ref_width: float = 0.025
     jaw_width_gain: float = 0.0
     object_width: float | None = None  # known piece width (m); None = the camera's estimate
+    square: bool = False  # the pieces are square: grasp from the side nearest the wrist's middle
     # extra height (m) by distance from the base: [(r_m, dz_m), ...] sorted by r, linearly
     # interpolated, held at the ends (e.g. lower close to the base)
     z_by_distance: tuple = ()
@@ -98,12 +99,31 @@ class ArmModel:
         """(x, y, yaw_arm, heading, dz): where to put the tool to grasp `piece` at height z,
         the wrist yaw for the IK, the jaws' table heading the IK picks (yaw or yaw + pi), and
         the height correction for this piece (add it to every z over it)."""
-        from hfteama.arms.so101_ik import fk, jaw_yaw
+        from hfteama.arms.so101_ik import LOWER, UPPER, fk, jaw_yaw
+
+        square = self.square or abs(piece.length - piece.width) < 0.1 * piece.length
+        lo, hi = self.limits if self.limits is not None else (LOWER, UPPER)
+        mid = (lo[4] + hi[4]) / 2
+        width = self.object_width or piece.width
+
+        def choose(x, y, yaw):
+            """IK at (x, y, z) for jaw yaw `yaw`; for a square piece also yaw + 90 deg, keeping
+            the one with the wrist nearest the middle of its range (at most 45 deg off)."""
+            target = self.placement.to_arm([x, y, z])
+            sol = solve_ik(target, yaw=yaw, limits=self.limits)
+            if square:
+                other = solve_ik(target, yaw=yaw + np.pi / 2, limits=self.limits)
+                if other.ok and (not sol.ok or abs(other.q[4] - mid) < abs(sol.q[4] - mid)):
+                    sol, yaw = other, yaw + np.pi / 2
+            return sol, yaw
 
         yaw = self.placement.yaw_to_arm(piece.yaw)
-        sol = solve_ik(self.placement.to_arm([piece.x, piece.y, z]), yaw=yaw, limits=self.limits)
-        heading = jaw_yaw(fk(sol.q)) + self.placement.yaw
-        ax, ay = self.aim(piece.x, piece.y, heading, self.object_width or piece.width)
+        ax, ay = piece.x, piece.y
+        for _ in range(2):  # the choice at the piece, then again at the aim point it gives
+            sol, yaw_used = choose(ax, ay, yaw)
+            heading = jaw_yaw(fk(sol.q)) + self.placement.yaw
+            ax, ay = self.aim(piece.x, piece.y, heading, width)
+        yaw = yaw_used
         return ax, ay, yaw, heading, self.correction(piece.x, piece.y)[2]
 
 

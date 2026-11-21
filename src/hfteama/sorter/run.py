@@ -168,6 +168,10 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             jaw_ref_width=a.get("jaw_ref_width", 0.025),
             jaw_width_gain=a.get("jaw_width_gain", 0.0),
             object_width=cfg["pieces"].get("object_width"),
+            square=abs(
+                cfg["pieces"].get("object_length", 0.0) - cfg["pieces"].get("object_width", 1.0)
+            )
+            < 1e-6,
             x_range=tuple(a.get("x_range", (-np.inf, np.inf))),
         )
     return out

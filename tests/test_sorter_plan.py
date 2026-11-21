@@ -179,3 +179,20 @@ def test_arm_only_takes_pieces_on_its_half_of_the_table() -> None:
     arm = ArmModel("rakesh", p, x_range=(0.367, 1.0))
     assert arm.takes(0.45, 0.2)
     assert not arm.takes(0.30, 0.2)  # reachable, but hacklab's half
+
+
+def test_square_piece_keeps_the_wrist_near_its_middle() -> None:
+    from hfteama.arms.kinematics import ArmFrame
+    from hfteama.arms.so101_ik import LOWER, UPPER, roll_window, solve_ik
+
+    frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, "wrist_roll": 90.0})
+    limits = roll_window((LOWER, UPPER), frame, 0.0, 90.0)
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, limits, square=True)
+    mid = (limits[0][4] + limits[1][4]) / 2
+    x, y = p.to_table([0.2, -0.05])[:2]
+    for yawdeg in range(0, 180, 15):
+        sq = Piece(x, y, 0.058, 0.058, np.radians(yawdeg), 33.6)
+        ax, ay, yaw, _, _ = arm.grasp_aim(sq, 0.08)
+        q = solve_ik(p.to_arm([ax, ay, 0.08]), yaw=yaw, limits=limits).q
+        assert abs(np.degrees(q[4] - mid)) <= 47, yawdeg
