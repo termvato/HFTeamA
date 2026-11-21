@@ -108,12 +108,20 @@ def calibrate_from_markers(
     focal_px: float | None = None,
     dictionary: str = "DICT_4X4_50",
     iterations: int = 100,
+    only_ids: Any = None,
 ) -> MarkerCalibration:
-    """Camera pose (and focal length) from the markers in one image of the table."""
+    """Camera pose (and focal length) from the markers in one image of the table.
+
+    `only_ids`: the table markers' ids; other markers of the dictionary (e.g. tags on boxes,
+    which sit above the table and move) are left out of the fit. None = every marker found.
+    """
     cv2 = _cv2()
     img = np.asarray(image)
     h, w = img.shape[:2]
     found = detect_markers(img, dictionary)
+    if only_ids is not None:
+        keep = {int(i) for i in only_ids}
+        found = {i: c for i, c in found.items() if i in keep}
     if not found:
         raise ValueError("no ArUco markers found")
     ref = min(found) if reference_id is None else reference_id

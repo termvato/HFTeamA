@@ -27,6 +27,7 @@ class Detection:
     score: float = 1.0
     pixel: tuple[float, float] | None = None  # centre in the image, for labelling it to the VLM
     label: str = ""  # free description from the detector, e.g. "red cube" (shown to the VLM)
+    key: str = ""  # identity the detector knows (e.g. "tag_05"); used as the object id as is
 
 
 class ObjectDetector(Protocol):
@@ -78,15 +79,21 @@ def build_scene(
 
     prev = dict(previous.objects) if previous else {}
     index = previous.next_index if previous else 1
+    ids: dict[int, str] = {}
+    used: set[str] = set()
+    # detections that know who they are (tags) keep that id; the rest match by distance
+    for i, (d, _, _) in enumerate(found):
+        if d.key and d.key not in used:
+            ids[i] = d.key
+            used.add(d.key)
     # greedy nearest match, closest pairs first
     pairs = sorted(
         (_dist(xyz, o.xyz), i, oid)
         for i, (d, xyz, _) in enumerate(found)
+        if i not in ids
         for oid, o in prev.items()
-        if o.model == d.model and _dist(xyz, o.xyz) <= match_radius
+        if oid not in used and o.model == d.model and _dist(xyz, o.xyz) <= match_radius
     )
-    ids: dict[int, str] = {}
-    used: set[str] = set()
     for _, i, oid in pairs:
         if i not in ids and oid not in used:
             ids[i] = oid
