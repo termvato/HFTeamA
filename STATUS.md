@@ -11,6 +11,10 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 
 ## Messages to teams (read me)
 
+- **Everyone: the demo is filmed on our real setup** (plan on #1 and in `docs/plan.md`, Demo): the
+  VLM splits the task on screen, one arm sorts, the second arm is plugged in, the screen shows the
+  re-planning, the predicted time comes down, both arms work. No Isaac Sim. Layout rule: every
+  object within the first arm's reach (0.14-0.42 m from its shoulder).
 - **Everyone:** plug-in detection is on `main` (`src/hfteama/discovery.py`): a follower is noticed
   by its USB serial; plugged in = joins and the work re-splits, unplugged = dropped at once. Arm ids
   everywhere must be the follower ids from `configs/teleop_pairs.json` (`rakesh_follower`,
@@ -49,12 +53,12 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 18:10
-- Done: planner, executor with live re-split, live screen, scaling benchmark (#15), Isaac Sim
-  feasibility (#33), plug-in detection, planner catalog from `configs/real_arms.json`.
-- Doing: demo runner (executor + plug-in detection + screen; workers fake, sim or real).
-- Next: RTX rehearsal (#33) driven from the sim arms.
-- Blocked on: nothing.
+- Updated: Sat 21 Nov 19:10
+- Done: planner, executor with live re-split, live screen (countdown, re-planning moment, top-view
+  map), plug-in detection, demo runner, scaling benchmark (#15), chain validated in MuJoCo.
+- Doing: getting the screen ready for filming on the real setup.
+- Next: first run with a real arm once Hardware has run Action's checklist.
+- Blocked on: a real arm doing a step through the worker.
 
 ### Aravind
 - Updated: Sat 21 Nov 16:15 (from the repo)
