@@ -107,7 +107,8 @@ confirming in that moment. Prefer fake or MuJoCo arms for any development and te
 
 ## Action branch (`action/arm-skills`, issue #20)
 
-- Read `STATUS.md` first; update it when a task changes state, and add a dated line to its log.
+- Read `ACTION_STATUS.md` first; update it when a task changes state, and add a dated line to its
+  log. Team-wide `STATUS.md` (on `main`) holds one block per person; update Vivek's block there.
 - Design: `docs/superpowers/specs/2026-11-21-action-arm-skills-design.md`. Follow it; if the code
   needs to differ, update the design doc in the same commit and say why.
 - Our scope: skills, primitives, IK, sim arms, `SkillWorker`, durations, real backend + handoff.

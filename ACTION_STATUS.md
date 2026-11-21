@@ -1,4 +1,4 @@
-# Action team status (#20)
+# Action status: scripted skills on MuJoCo (#20)
 
 Branch `action/arm-skills`. Team: Vivek (`VivekSai07`), Sahil (`sahilrajpurkar03`).
 Design: `docs/superpowers/specs/2026-11-21-action-arm-skills-design.md`.
