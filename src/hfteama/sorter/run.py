@@ -106,10 +106,11 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             side,
             Placement.from_config(a),
             limits,
-            tuple(a.get("aim_offset", (0.0, 0.0))),
-            tuple(a.get("jaw_offset", (0.0, 0.0))),
-            tuple(tuple(r) for r in sorted(a.get("aim_table", []))),
-            tuple(a.get("bearing_range_deg", (-180.0, 180.0))),
+            aim_offset=tuple(a.get("aim_offset", (0.0, 0.0))),
+            jaw_offset=tuple(a.get("jaw_offset", (0.0, 0.0))),
+            aim_table=tuple(tuple(r) for r in sorted(a.get("aim_table", []))),
+            aim_gain=tuple(map(tuple, a.get("aim_gain", ((0.0, 0.0), (0.0, 0.0))))),
+            bearing_range=tuple(a.get("bearing_range_deg", (-180.0, 180.0))),
         )
     return out
 
@@ -871,7 +872,13 @@ def cmd_fit_grasps(args) -> int:
             x, y, yaw, z = e["placement"]
             then = Placement(x, y, np.radians(yaw), z)
             e["aim"] = list(pl.to_table(then.to_arm(e["aim"]))[:2])
-    aim, jaw, rms = fit_aim(entries, pl.yaw)
+    gain = None
+    if len(entries) >= 8:
+        from hfteama.sorter.geometry import fit_aim_affine
+
+        aim, jaw, gain, rms = fit_aim_affine(entries, pl)
+    else:
+        aim, jaw, rms = fit_aim(entries, pl.yaw)
     print(
         f"{len(entries)} grasps, jaw headings: "
         + ", ".join(f"{e['heading_deg']:.0f}" for e in entries)
@@ -881,13 +888,17 @@ def cmd_fit_grasps(args) -> int:
         f" jaw_offset (along, across the jaws) = ({jaw[0] * 100:+.1f}, {jaw[1] * 100:+.1f}) cm;"
         f" rms {rms * 100:.1f} cm"
     )
-    if not jaw.any():
+    if gain is not None:
+        print(f"aim_gain (proportional to the piece's position) = {np.round(gain, 3).tolist()}")
+    elif not jaw.any():
         print("(jaw headings too similar to separate the turning part: grasp rotated pieces)")
     if args.save or input("Save? [y/N] ").strip().lower() == "y":
         data = json.loads(PLACEMENTS_FILE.read_text()) if PLACEMENTS_FILE.exists() else {}
         d = data.setdefault(side, {})
         d["aim_offset"] = [round(float(aim[0]), 4), round(float(aim[1]), 4)]
         d["jaw_offset"] = [round(float(jaw[0]), 4), round(float(jaw[1]), 4)]
+        if gain is not None:
+            d["aim_gain"] = np.round(gain, 4).tolist()
         PLACEMENTS_FILE.write_text(json.dumps(data, indent=2) + "\n")
         print("saved", PLACEMENTS_FILE)
     return 0

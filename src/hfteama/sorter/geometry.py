@@ -19,7 +19,7 @@ DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "sorter.json"
 PLACEMENTS_FILE = PROJECT_ROOT / "configs" / "sorter_placements.json"
 # Every grasp that held something in `hfteama sort jog`: data for `hfteama sort fit-grasps`.
 GRASPS_FILE = PROJECT_ROOT / "configs" / "sorter_grasps.json"
-_FITTED_KEYS = ("base", "yaw_deg", "z_offset", "aim_offset", "jaw_offset")
+_FITTED_KEYS = ("base", "yaw_deg", "z_offset", "aim_offset", "jaw_offset", "aim_gain")
 
 
 def load_config(path: str | Path | None = None, placements: str | Path | None = None) -> dict:
@@ -105,7 +105,11 @@ def save_placement(side: str, p: Placement, rms: float, n: int, path: str | Path
     path = Path(path or PLACEMENTS_FILE)
     data = json.loads(path.read_text()) if path.exists() else {}
     data[side] = {
-        **{k: v for k, v in data.get(side, {}).items() if k in ("aim_offset", "jaw_offset")},
+        **{
+            k: v
+            for k, v in data.get(side, {}).items()
+            if k in ("aim_offset", "jaw_offset", "aim_gain")
+        },
         "base": [round(p.x, 4), round(p.y, 4)],
         "yaw_deg": round(float(np.degrees(p.yaw)), 2),
         "z_offset": round(p.z, 4),
@@ -145,3 +149,26 @@ def fit_aim(entries: list[dict], arm_yaw: float, min_spread_deg: float = 25.0):
     aim, jaw = x[:2], (x[2:] if turning else np.zeros(2))
     rms = float(np.sqrt(np.mean((A @ x - b) ** 2) * 2)) if len(entries) else 0.0
     return aim, jaw, rms
+
+
+def fit_aim_affine(entries: list[dict], placement: Placement):
+    """Like fit_aim, plus a part proportional to where the piece is (arm frame):
+    aim - camera (arm frame) = aim_offset + R(heading) jaw_offset + G @ piece_position.
+
+    G absorbs a small turn or scale of the arm about its base (e.g. a shoulder_pan zero
+    offset). 8 parameters: needs at least 8 grasps, better 12+. Returns
+    (aim_offset, jaw_offset, G (2x2), rms_m)."""
+    P0 = Placement(placement.x, placement.y, placement.yaw, 0.0)
+    rows, rhs = [], []
+    for e in entries:
+        p = P0.to_arm(e["camera"])
+        d = P0.to_arm(e["aim"]) - p
+        h = np.radians(e["heading_deg"]) - placement.yaw  # jaw heading in the arm frame
+        R = np.array([[np.cos(h), -np.sin(h)], [np.sin(h), np.cos(h)]])
+        G = np.array([[p[0], p[1], 0, 0], [0, 0, p[0], p[1]]])
+        rows.append(np.hstack([np.eye(2), R, G]))
+        rhs.append(d)
+    A, b = np.vstack(rows), np.concatenate(rhs)
+    x = np.linalg.lstsq(A, b, rcond=None)[0]
+    rms = float(np.sqrt(np.mean((A @ x - b) ** 2) * 2))
+    return x[:2], x[2:4], x[4:].reshape(2, 2), rms

@@ -53,7 +53,7 @@
   "pieces": {
     "min_area_cm2": 2.0,
     "max_area_cm2": 80.0,
-    "max_length": 0.15,
+    "max_length": 0.17,
     "colour_threshold": 25.0,
     "box_margin": 0.02,
     "arm_mask_radius": 0.04,
@@ -66,14 +66,14 @@
         75
       ],
       "green_s_min": 50,
-      "min_area_cm2": 15.0,
+      "min_area_cm2": 40.0,
       "grow": 0.02
     },
     "grasp_z": 0.0,
     "approach_z": 0.05
   },
   "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.3 cm in from the back tag on its side (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
-  "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m). aim_table = [[bearing_deg, forward, left, dz], ...]: the same shift as a function of where the piece is seen from the arm (0 = ahead, + = its left), interpolated; overrides aim_offset. bearing_range_deg = [min, max] bearing (deg, + = the arm's left) of the pieces this arm takes.",
+  "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m). aim_table = [[bearing_deg, forward, left, dz], ...]: the same shift as a function of where the piece is seen from the arm (0 = ahead, + = its left), interpolated; overrides aim_offset. bearing_range_deg = [min, max] bearing (deg, + = the arm's left) of the pieces this arm takes. aim_gain = 2x2 G: extra shift G @ (forward, left) of the piece from the base, proportional to where it is (about a 10 deg turn for rakesh).",
   "arms": {
     "rakesh": {
       "pair": "rakesh",
@@ -88,17 +88,27 @@
         "wrist_roll": 90.0
       },
       "aim_offset": [
-        0.007,
-        0.041
+        0.006,
+        0.002
       ],
       "mask_radius": 0.12,
       "jaw_offset": [
         0.019,
-        -0.017
+        -0.003
       ],
       "bearing_range_deg": [
         -90.0,
         40.0
+      ],
+      "aim_gain": [
+        [
+          0.006,
+          -0.161
+        ],
+        [
+          0.193,
+          0.005
+        ]
       ]
     },
     "hacklab": {

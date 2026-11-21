@@ -37,6 +37,9 @@ class ArmModel:
     # the arm's left), linearly interpolated, held at the ends. Overrides aim_offset; dz (m)
     # is added to every height over that piece.
     aim_table: tuple = ()
+    # part proportional to where the piece is: G @ (forward, left) of the piece from the base
+    # (arm frame, m); [[0, -a], [a, 0]] is a small turn by a rad about the base
+    aim_gain: tuple = ((0.0, 0.0), (0.0, 0.0))
     # pieces this arm takes: bearing from the arm (deg, 0 = ahead, + = its left), min/max
     bearing_range: tuple[float, float] = (-180.0, 180.0)
 
@@ -63,7 +66,8 @@ class ArmModel:
         c, s = np.cos(heading), np.sin(heading)
         j = np.asarray(self.jaw_offset)
         fwd, left, _ = self.correction(x, y)
-        a = self.placement.to_arm([x, y]) + np.array([fwd, left])
+        p = self.placement.to_arm([x, y])
+        a = p + np.array([fwd, left]) + np.asarray(self.aim_gain, float) @ p
         t = self.placement.to_table(a) + [c * j[0] - s * j[1], s * j[0] + c * j[1]]
         return float(t[0]), float(t[1])
 
