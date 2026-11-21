@@ -13,7 +13,7 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 
 | Target | Team | State |
 |---|---|---|
-| Live screen running on fake arms | Operations | not started |
+| Live screen running on fake arms | Operations | done (on `orchestrator`) |
 | One real arm does a step (pick and place) | Action + Hardware | not reported yet |
 | All 3 arms calibrated | Hardware | in progress: 1 leader-follower pair working; Vato's arm being set up (reported in person, ~14:35) |
 
@@ -36,12 +36,13 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 14:35
-- Done: research; repo structure; task format, arm contract, event log; lower bound with named limit;
-  product spec (visual sorting, Go button, VLM brain); team branches and issues.
-- Doing: team setup and product spec (this file, issues, branches).
-- Next: core loop on fake arms (full-schedule planner, executor, countdown screen with what-if),
-  then the VLM decomposer on top.
+- Updated: Sat 21 Nov 15:08
+- Done: research; repo, plan, teams, issues; architecture locked with Aravind; **core loop on fake
+  arms**: planner (greedy, HEFT, CP-SAT), executor with live re-split, durations, live screen
+  (`python -m hfteama.view --fake-arms 1`) on `orchestrator`.
+- Doing: wiring for real arms and the VLM (`add_arm` for Hardware's discovery, `verifier` for the
+  VLM step check).
+- Next: first run with a real arm once Hardware and Action have one step working.
 - Blocked on: nothing.
 
 ### Aravind
