@@ -1,0 +1,10 @@
+{
+  "note": "Copy to configs/camera.json. Camera-to-base extrinsic from calibration (Hardware): the camera pose in arm base_arm's base frame, 4x4, metres. Alternatively give T_table_cam directly.",
+  "base_arm": "arm_a",
+  "T_base_cam": [
+    [1.0, 0.0, 0.0, 0.40],
+    [0.0, -1.0, 0.0, 0.20],
+    [0.0, 0.0, -1.0, 0.80],
+    [0.0, 0.0, 0.0, 1.0]
+  ]
+}

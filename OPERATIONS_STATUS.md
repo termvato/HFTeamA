@@ -33,21 +33,21 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 | Topic | Proposal | State |
 |---|---|---|
-| Arm contract | one worker per arm, `execute(task) -> Result`; worker reads only the task's id, skill and args (args carry object id, target bin, table coordinates); outcomes `ok`, `failed` + reason, `timeout`, `arm_down`, with start and end times. `execute(arm_id, skill, params)` can wrap it at the dispatcher | open |
-| Planner | full schedule on every re-plan (needed for the countdown and what-if); greedy as fallback | open |
-| Named limit | keep it on screen (arms, order, shared area), plus steps unblocked by a new arm | open |
-| Task format | the VLM writes the format on `main` (`depends_on` -> `deps`, `object`/`target` -> `args`) | open |
-| Code and interfaces | code in `src/hfteama/`; task format, arm contract and event log change only with all teams | open |
-| Re-plan rule | adopt the 10% hysteresis, except when arms change or something fails | open |
+| Arm contract | one worker per arm, `execute(task) -> Result`; worker reads only the task's id, skill and args (args carry object id, target bin, table coordinates); outcomes `ok`, `failed` + reason, `timeout`, `arm_down`, with start and end times. `execute(arm_id, skill, params)` can wrap it at the dispatcher | agreed |
+| Planner | full schedule on every re-plan (needed for the countdown and what-if); greedy as fallback | agreed |
+| Named limit | keep it on screen (arms, order, shared area), plus steps unblocked by a new arm | agreed |
+| Task format | the VLM writes the format on `main` (`depends_on` -> `deps`, `object`/`target` -> `args`) | agreed |
+| Code and interfaces | code in `src/hfteama/`; task format, arm contract and event log change only with all teams | agreed |
+| Re-plan rule | adopt the 10% hysteresis, except when arms change or something fails | agreed |
 | Step timeout | 1.5x or 3x the estimate | open |
-| `same_arm_as` | keep: the arm holding a part also places it | open |
+| `same_arm_as` | keep: the arm holding a part also places it | agreed |
 
 ## Backlog state
 
 | # | Item | State |
 |---|---|---|
 | #2 | Task model and task graph | first version on `main` (no JSON schema file yet) |
-| #3 | Arm registry | not started |
+| #3 | Arm registry | done on `orchestrator`: `src/hfteama/registry/` (registry, heartbeat, reachability -> `allowed_arms`, BLOCKED, newly unblocked) |
 | #4 | Worker interface | first version on `main`, pending the contract decision |
 | #5 | Event log | first version on `main` |
 | #6 | Greedy allocator | not started |
@@ -63,8 +63,27 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #16 | Plan validator | not started |
 | #17 | Plan vs actual view | not started |
 | #18 | Re-split policy questions | open |
+| new | VLM: decomposer, step check, re-scan | first version on `orchestrator`: `src/hfteama/perception/`; tested on a scripted VLM, not yet on the real Qwen model or SAM-6D |
 
 ## Notes
+
+- 21 Nov (Aravind): Agreed as proposed: arm contract, planner, named limit, task format, code in
+  `src/hfteama/`, re-plan rule, `same_arm_as`. Step timeout (1.5x or 3x) still open.
+- 21 Nov (Aravind): VLM = Qwen from Hugging Face (`transformers`, default
+  `Qwen/Qwen3-VL-4B-Instruct`, `pip install -e ".[vlm]"`). Object positions come from **SAM-6D**
+  (6D pose in the camera frame) plus the camera-to-base extrinsic from calibration, not from the VLM
+  or a homography. The VLM only decides the categories and which bin each object goes to.
+- 21 Nov (Aravind): For Vato, how the pieces connect:
+  `Decomposer.decompose(image, scene)` -> task graph (pick + place per object, `same_arm_as`,
+  `args.pick_xyz` / `place_xyz` in the table frame, place takes the bin as a resource) ->
+  `registry.resolve(graph, registry.live())` -> `.runnable()` to the scheduler, `.blocked` and
+  `newly_unblocked()` for the screen. Re-run `resolve` on the source graph on every arm change.
+  `StepChecker.check(task, image)` after each step (unparseable = not confirmed).
+  `rescan(...)` returns the updated source graph when objects appear, move or vanish; running work
+  is untouched. Registry writes `arm_added` / `arm_removed` / `arm_failed` and calls listeners.
+- 21 Nov (Aravind): Reachability v1 has no handover chains: a step no single arm reaches is BLOCKED
+  until an arm that reaches it joins. Reach radii in `configs/arms.json` are still `"*"`; they need
+  measuring on the SO-101 (`{"r_min": .., "r_max": ..}`).
 
 - 14:36 (Vato): Product decided (see `docs/plan.md`, Product): visual sorting, Go button, VLM decides
   the categories, estimate with what-if before Go, live countdown, camera check after each step,
@@ -73,6 +92,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 21 Nov (Aravind): arm registry + reachability (#3) and VLM decomposer / step check / re-scan, with tests.
 - 14:31 Product section in `docs/plan.md`.
 - 14:20 Team branches; `orchestrator` = `termvato` + Aravind's design doc.
 - 13:56 Names in the code aligned with the backlog (#2, #4, #5, #12).

@@ -14,6 +14,8 @@ dependencies = ["numpy>=1.24"]
 sched = ["ortools>=9.10"]
 view = ["dash>=2.17", "plotly>=5.22"]
 sim = ["mujoco>=3.2"]
+# Local Qwen VLM from Hugging Face (decomposer, step check). Install torch for your GPU first.
+vlm = ["transformers>=4.57", "accelerate>=1.0", "torch>=2.4", "pillow>=10.0"]
 # Real arms: LeRobot installed from source (see docs/plan.md), not pinned here.
 dev = [
     "pytest>=8.0",
