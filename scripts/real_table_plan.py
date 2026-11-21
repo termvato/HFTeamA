@@ -1,4 +1,5 @@
-"""Real table, dry run: top camera -> marker calibration -> Qwen object positions -> reachability
+"""Real table, dry run: top camera -> marker calibration -> object positions (tags on the boxes,
+or Qwen pointing) -> reachability
 -> executor split across the arms. The executor runs fake workers (no motion) standing in for the
 real arms, so this checks perception and planning end to end before any arm moves.
 
@@ -36,12 +37,16 @@ from hfteama.perception import (
     DecompositionError,
     DetectionError,
     QwenVLM,
+    TagConfig,
+    TagDetector,
     VLMError,
     VLMPointDetector,
     build_scene,
     load_bins,
+    tag_sorting,
 )
 from hfteama.perception.markers import calibrate_from_markers
+from hfteama.perception.tags import tag_yaw_deg
 from hfteama.registry import load_catalog, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -88,6 +93,12 @@ def main() -> int:
     ap.add_argument("--image-side", type=int, default=1920, help="pixels sent to Qwen")
     ap.add_argument("--out", default="real_table_plan.png")
     ap.add_argument("--no-run", action="store_true", help="skip the executor runs")
+    ap.add_argument(
+        "--detector",
+        choices=("auto", "tags", "vlm"),
+        default="auto",
+        help='objects from tags on the boxes or from Qwen; auto = tags if the table has "tags"',
+    )
     a = ap.parse_args()
 
     import json
@@ -102,7 +113,11 @@ def main() -> int:
 
     mk = cfg["markers"]
     m = calibrate_from_markers(
-        np.asarray(img), mk["size_m"], mk.get("reference_id"), dictionary=mk["dictionary"]
+        np.asarray(img),
+        mk["size_m"],
+        mk.get("reference_id"),
+        dictionary=mk["dictionary"],
+        only_ids=mk.get("table_ids"),
     )
     cal = m.calib
     print("calibration:", m.summary(), sep="\n")
@@ -111,28 +126,51 @@ def main() -> int:
     for arm in arms:
         print(f"arm {arm.arm_id}: base {arm.base_xy}, yaw {arm.base_yaw_deg}")
 
-    vlm = QwenVLM(max_image_side=a.image_side)
+    use_tags = a.detector == "tags" or (a.detector == "auto" and "tags" in cfg)
+    if a.detector == "tags" and "tags" not in cfg:
+        ap.error(f'--detector tags needs a "tags" section in {a.table}')
+    tag_cfg = TagConfig.from_dict(cfg["tags"]) if use_tags else None
+    # every box listed with a bin, and only listed boxes counted: the plan needs no VLM
+    no_vlm = (
+        tag_cfg is not None
+        and tag_cfg.only_listed
+        and bool(tag_cfg.boxes)
+        and all(b.bin for b in tag_cfg.boxes.values())
+    )
+
+    vlm = None if no_vlm else QwenVLM(max_image_side=a.image_side)
     try:
-        det = VLMPointDetector(vlm, cal, object_height_m=0.02)
+        if tag_cfg is not None:
+            same = tag_cfg.dictionary == mk["dictionary"]
+            det = TagDetector(cal, tag_cfg, ignore_ids=m.markers if same else ())
+            name = f"tags ({tag_cfg.dictionary})"
+        else:
+            det = VLMPointDetector(vlm, cal, object_height_m=0.02)
+            name = "Qwen"
         t0 = time.monotonic()
         scene = build_scene(det.detect(img), cal)
-        print(f"\nQwen: {len(scene.objects)} objects in {time.monotonic() - t0:.1f} s")
+        print(f"\n{name}: {len(scene.objects)} objects in {time.monotonic() - t0:.2f} s")
         for o in scene.objects.values():
             dist = "".join(
                 f"  {r.arm_id}: {math.dist(o.xyz[:2], r.pan_axis_xy):.2f} m"
                 f"{'' if r.reaches(o.xyz) else ' (out of reach)'}"
                 for r in arms
             )
-            print(f"  {o.id} {o.label!r:16} ({o.xyz[0]:+.3f}, {o.xyz[1]:+.3f}) m{dist}")
+            yaw = f" yaw {tag_yaw_deg(o.quat_wxyz):+.0f} deg" if tag_cfg is not None else ""
+            print(f"  {o.id} {o.label!r:16} ({o.xyz[0]:+.3f}, {o.xyz[1]:+.3f}) m{yaw}{dist}")
         if det.dropped:
             print("  dropped:", det.dropped)
-        dec = Decomposer(vlm, bins).decompose(img, scene)
+        if no_vlm:
+            dec = tag_sorting(scene, bins, tag_cfg)
+        else:
+            dec = Decomposer(vlm, bins).decompose(img, scene)
         print("grouping:", json.dumps(dec.grouping()))
     except (VLMError, DetectionError, DecompositionError) as e:
         print("VLM refused:", e)
         return 2
     finally:
-        vlm.unload()
+        if vlm is not None:
+            vlm.unload()
 
     rr = resolve(dec.graph, arms, travel_s_per_m=a.travel, clearance_m=a.clearance)
     print("\nsteps (allowed arms: planned seconds):")
