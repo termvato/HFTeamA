@@ -8,7 +8,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 17:55)
+## Now (Sat 21 Nov, 18:05)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
@@ -88,6 +88,16 @@ Update it when you start, finish or decide something. Notes for each other go un
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 18:05 (Vato): **Demo runner built** (`python -m hfteama.demo`, `src/hfteama/demo.py`): executor +
+  plug-in detection + live screen; `--backend fake|sim|real` (sim and real load Action's
+  `SkillWorker` when that code is in the checkout); manual plug / remove / pull-cable controls on
+  the screen as the stage fallback. Checked first: nothing like it existed (Vivek's
+  `scripts/sim_demo.py` is a harness with its own mini-scheduler, no executor or screen).
+  **Hooks for Aravind:** `--planner module:function` must return a resolved `TaskGraph`
+  (camera -> calibration -> Qwen -> decompose -> `registry.resolve`); `--verifier module:function`
+  must return `StepChecker(...).as_verifier(grab)`. Re-scan can call `executor.update_graph`.
+  Docs updated: README (Run the demo), `docs/plan.md` (layout, state), `docs/README.md`.
 
 - 17:59 (Vato): **Plug-in detection built** (`src/hfteama/discovery.py`, extra `arms` = pyserial):
   `ArmWatcher(executor, followers_from_pairs("configs/teleop_pairs.json"), factory)` polls USB
