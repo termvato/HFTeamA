@@ -62,7 +62,7 @@
     "rakesh": {
       "pair": "rakesh",
       "colour": "black",
-      "base": [0.163, 0.39],
+      "base": [0.163, 0.35],
       "yaw_deg": -90.0,
       "z_offset": -0.015,
       "offsets_deg": {"wrist_roll": 90.0},
@@ -72,7 +72,7 @@
     "hacklab": {
       "pair": "hacklab",
       "colour": "green",
-      "base": [0.567, 0.39],
+      "base": [0.567, 0.35],
       "yaw_deg": -90.0,
       "mask_radius": 0.12
     }
