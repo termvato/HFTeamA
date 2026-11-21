@@ -195,3 +195,41 @@ def test_fit_box_finds_the_base_centre_from_the_silhouette() -> None:
     x, y, yaw = fit_box(outline, dims, cam, outline.mean(0), np.radians(5))
     assert (x, y) == pytest.approx(truth[:2], abs=0.003)
     assert np.hypot(*outline.mean(0) - truth[:2]) > 0.005  # the plain blob centre is off
+
+
+def _tag_corners(pose, x, y, z, side, yaw):
+    u = np.array([np.cos(yaw), np.sin(yaw)])
+    v = np.array([-u[1], u[0]])
+    pts = [
+        np.array([x, y]) + a * side / 2 * u + b * side / 2 * v
+        for a, b in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+    ]
+    return project([[*p, z] for p in pts], pose, INTR)
+
+
+def test_box_tag_gives_the_box_centre_and_a_loose_tag_is_ignored() -> None:
+    from hfteama.vision.detect import pieces_from_tags
+
+    pose = oblique_pose()
+    pc = {
+        "tags": {"size": 0.029, "size_tol": 0.04},
+        "object_height": 0.039,
+        "object_width": 0.058,
+        "object_length": 0.058,
+    }
+    on_box = _tag_corners(pose, 0.25, 0.12, 0.039, 0.029, np.radians(20))
+    loose = _tag_corners(pose, 0.45, 0.20, 0.0, 0.029, 0.0)  # lying on the table
+    found = pieces_from_tags([(5, on_box), (5, loose)], pose, INTR, pc, (-0.1, 0.9, -0.1, 0.5))
+    assert len(found) == 1
+    assert (found[0].x, found[0].y) == pytest.approx((0.25, 0.12), abs=1e-4)
+    assert np.degrees(found[0].yaw) == pytest.approx(20, abs=0.5)
+
+
+def test_small_tag_with_a_reference_id_is_not_the_reference() -> None:
+    from hfteama.vision.table import split_reference
+
+    big = np.array([[0, 0], [100, 0], [100, 100], [0, 100]], float)
+    small = big * 0.35 + 300
+    refs, others = split_reference([(0, small), (0, big), (3, big + 500)], {0, 1, 2, 3})
+    assert refs[0] is big and set(refs) == {0, 3}
+    assert len(others) == 1 and others[0][1] is small

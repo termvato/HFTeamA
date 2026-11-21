@@ -362,11 +362,53 @@ def _from_px(uv, extent):
     )
 
 
-def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chains=()) -> Scene:
+def pieces_from_tags(dets, pose: CameraPose, intr: Intrinsics, pc: dict, extent) -> list[Piece]:
+    """One piece per small tag lying on a box top: the tag centre cast onto the plane of the
+    top (object_height) is the box centre; the tag's edge gives its turn. A tag whose side
+    on that plane is not about tag_size (tolerance tag_size_tol) is not on a box top."""
+    t = pc["tags"]
+    size, tol = t.get("size", 0.03), t.get("size_tol", 0.2)
+    H = pc["object_height"]
+    L, W = pc.get("object_length", pc["object_width"]), pc["object_width"]
+    x0, x1, y0, y1 = extent
+    out = []
+    for _, c in dets:
+        P = pixel_to_table(np.vstack([c, [c.mean(0)]]), pose, intr, H)[:, :2]
+        corners, centre = P[:4], P[4]
+        side = float(np.mean(np.linalg.norm(corners - np.roll(corners, 1, axis=0), axis=1)))
+        if abs(side - size) > tol * size or not (x0 <= centre[0] <= x1 and y0 <= centre[1] <= y1):
+            continue
+        e = corners[1] - corners[0]
+        yaw = float(np.arctan2(e[1], e[0]))
+        u = np.array([np.cos(yaw), np.sin(yaw)])
+        v = np.array([-u[1], u[0]])
+        base = [
+            centre + su * W / 2 * u + sv * L / 2 * v
+            for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+        ]
+        out.append(
+            Piece(
+                x=float(centre[0]),
+                y=float(centre[1]),
+                length=max(L, W),
+                width=min(L, W),
+                yaw=yaw,
+                area_cm2=L * W * 1e4,
+                outline=np.array(base),
+            )
+        )
+    return out
+
+
+def detect_scene(
+    image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chains=(), piece_tags=None
+) -> Scene:
     """Box and pieces, with the masks from the sorter config (configs/sorter.json).
 
     arm_chains: the arms' current polylines in the table frame (from FK), masked out with
-    their shadows; without them only a disc around each base is masked."""
+    their shadows; without them only a disc around each base is masked.
+    piece_tags: [(id, corners)] of the small tags seen (not the reference ones); with
+    pieces.tags.enabled the pieces come from them (pieces_from_tags) instead of colour."""
     tags = {int(k): tuple(v) for k, v in cfg["table"]["tags"].items()}
     bc, pc = cfg["box"], cfg["pieces"]
     # the area searched for pieces: the tag rectangle grown by region_margin on every side
@@ -402,4 +444,6 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
             else None
         ),
     )
+    if pc.get("tags", {}).get("enabled") and piece_tags is not None:
+        pieces = pieces_from_tags(piece_tags, pose, intr, pc, extent)
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)

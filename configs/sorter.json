@@ -71,13 +71,19 @@
     },
     "grasp_z": 0.015,
     "approach_z": 0.08,
-    "object_note": "Current pieces: boxes 5.8 x 5.8 x 3.9 cm (object_length x object_width x object_height). fit_box: each blob is fitted with the silhouette such a box casts seen from the camera, giving its base centre. centre_z is only used without fit_box.",
+    "object_note": "Current pieces: boxes 5.8 x 5.8 x 3.9 cm with a 3 cm tag on top and bottom.",
     "object_width": 0.058,
     "object_height": 0.039,
     "centre_z": 0.02,
     "region_margin": 0.035,
     "object_length": 0.058,
-    "fit_box": true
+    "fit_box": true,
+    "tags": {
+      "enabled": true,
+      "note": "Each box has a DICT_4X4_50 tag (any id) of `size` m on its top (and bottom). A 4x4 tag much smaller than the reference tags is a box tag; its centre at object_height is the box centre. size = the black square as the camera measures it flat (2.9 cm); size_tol 4 %: a loose tag lying on the table measures ~5 % smaller at the box-top height, so it is not taken for a box.",
+      "size": 0.029,
+      "size_tol": 0.04
+    }
   },
   "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.3 cm in from the back tag on its side (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
   "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m). aim_table = [[bearing_deg, forward, left, dz], ...]: the same shift as a function of where the piece is seen from the arm (0 = ahead, + = its left), interpolated; overrides aim_offset. bearing_range_deg = [min, max] bearing (deg, + = the arm's left) of the pieces this arm takes. aim_gain = 2x2 G: extra shift G @ (forward, left) of the piece from the base, proportional to where it is (about a 10 deg turn for rakesh). z_by_distance = [[r_m, dz_m], ...]: extra height by distance from the base (rakesh: 0.5 cm lower at 18 cm, nothing from 28 cm). x_range = [min, max] table x of the pieces this arm takes: its half of the table (split halfway between the bases). home = rest pose (LeRobot deg) the arm returns to; without it, the pose it had when the sorter connected.",

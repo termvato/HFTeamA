@@ -61,12 +61,18 @@ class Eye:
         import cv2
 
         from hfteama.vision.detect import detect_scene
-        from hfteama.vision.table import centre_pixel, detect_tags, fit_pose
+        from hfteama.vision.table import (
+            centre_pixel,
+            detect_all_tags,
+            fit_pose,
+            split_reference,
+        )
 
         frame = cv2.imread(self.image) if self.image else self.cam.frame()
         if frame is None:
             raise SystemExit(f"Cannot read {self.image}")
-        found = detect_tags(frame, self.cfg["table"].get("dictionary", "DICT_4X4_50"))
+        all_tags = detect_all_tags(frame, self.cfg["table"].get("dictionary", "DICT_4X4_50"))
+        found, small = split_reference(all_tags, set(self.tags))
         seen = sorted(i for i in found if i in self.tags)
         pose = fit_pose({i: centre_pixel(c) for i, c in found.items()}, self.tags, self.intr)
         limit = self.cfg["table"].get("max_pose_rms_px", 3.0)
@@ -86,8 +92,9 @@ class Eye:
             self.pose = pose
         else:
             raise SystemExit(f"Need 3+ reference tags (seen {seen}) to place the camera.")
-        self.found = found
-        scene = detect_scene(frame, self.pose, self.intr, self.cfg, arm_chains)
+        # small tags: on box tops; also kept for `touch` (a tag laid on the table)
+        self.found = {**{i: c for i, c in small}, **found}
+        scene = detect_scene(frame, self.pose, self.intr, self.cfg, arm_chains, small)
         return frame, self.pose, scene
 
 

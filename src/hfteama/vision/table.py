@@ -130,24 +130,47 @@ def fit_pose(
     return pose
 
 
-def detect_tags(image, dictionary: str = "DICT_4X4_50") -> dict[int, np.ndarray]:
-    """{id: 4x2 corners} of every tag found; for a repeated id the largest wins."""
+def detect_all_tags(image, dictionary: str = "DICT_4X4_50") -> list[tuple[int, np.ndarray]]:
+    """Every tag found, as (id, 4x2 corners); the same id may appear several times."""
     import cv2
 
     params = cv2.aruco.DetectorParameters()
     params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+    params.minMarkerPerimeterRate = 0.01  # small tags (3 cm boxes) too
     det = cv2.aruco.ArucoDetector(
         cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary)), params
     )
     corners, ids, _ = det.detectMarkers(image)
-    out: dict[int, np.ndarray] = {}
     if ids is None:
-        return out
-    for c, i in zip(corners, ids.ravel(), strict=True):
-        c = c.reshape(4, 2)
-        if int(i) not in out or _side(c) > _side(out[int(i)]):
-            out[int(i)] = c
+        return []
+    return [(int(i), c.reshape(4, 2)) for c, i in zip(corners, ids.ravel(), strict=True)]
+
+
+def detect_tags(image, dictionary: str = "DICT_4X4_50") -> dict[int, np.ndarray]:
+    """{id: 4x2 corners} of every tag found; for a repeated id the largest wins."""
+    out: dict[int, np.ndarray] = {}
+    for i, c in detect_all_tags(image, dictionary):
+        if i not in out or _side(c) > _side(out[i]):
+            out[i] = c
     return out
+
+
+def split_reference(dets, reference_ids, max_ratio: float = 0.6):
+    """({id: corners} of the reference tags, [(id, corners)] of the rest). A reference id's
+    largest detection is the reference; any detection less than max_ratio the size of the
+    smallest reference (a small tag on a piece, whatever its id) goes to the rest."""
+    refs: dict[int, np.ndarray] = {}
+    for i, c in dets:
+        if i in reference_ids and (i not in refs or _side(c) > _side(refs[i])):
+            refs[i] = c
+    if refs:  # a "reference" much smaller than the biggest is a piece tag sharing its id
+        big = max(_side(c) for c in refs.values())
+        refs = {i: c for i, c in refs.items() if _side(c) >= max_ratio * big}
+    others = [(i, c) for i, c in dets if not (i in refs and c is refs[i])]
+    if refs:
+        small = min(_side(c) for c in refs.values())
+        others = [(i, c) for i, c in others if _side(c) < max_ratio * small]
+    return refs, others
 
 
 def _side(c) -> float:
