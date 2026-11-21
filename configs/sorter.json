@@ -53,7 +53,7 @@
       "min_area_cm2": 15.0,
       "grow": 0.02
     },
-    "grasp_z": 0.015,
+    "grasp_z": 0.005,
     "approach_z": 0.06
   },
   "arms_note": "Arms are named after their pair. Seen from BEHIND the arms (facing the camera): rakesh (black) is on the right, hacklab (green) on the left. Seen from the camera it is the other way round. base = base_link origin in the table frame.",
@@ -63,6 +63,7 @@
       "colour": "black",
       "base": [0.163, 0.37],
       "yaw_deg": -90.0,
+      "z_offset": -0.015,
       "mask_radius": 0.12
     },
     "hacklab": {

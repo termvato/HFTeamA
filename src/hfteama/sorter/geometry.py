@@ -26,7 +26,9 @@ def load_config(path: str | Path | None = None, placements: str | Path | None = 
     if pfile.exists():
         for side, fitted in json.loads(pfile.read_text()).items():
             if side in cfg["arms"]:
-                cfg["arms"][side].update({k: fitted[k] for k in ("base", "yaw_deg") if k in fitted})
+                cfg["arms"][side].update(
+                    {k: fitted[k] for k in ("base", "yaw_deg", "z_offset") if k in fitted}
+                )
     return cfg
 
 
@@ -41,10 +43,18 @@ class Placement:
     x: float
     y: float
     yaw: float  # rad
+    # table height of the arm frame's origin (m). Negative when the real tool tip ends up
+    # lower than the model says (joint zero errors, sag): measured with `sort jog`, `z` command
+    z: float = 0.0
 
     @classmethod
     def from_config(cls, arm: dict) -> Placement:
-        return cls(x=arm["base"][0], y=arm["base"][1], yaw=np.radians(arm["yaw_deg"]))
+        return cls(
+            x=arm["base"][0],
+            y=arm["base"][1],
+            yaw=np.radians(arm["yaw_deg"]),
+            z=arm.get("z_offset", 0.0),
+        )
 
     def _R(self) -> np.ndarray:
         c, s = np.cos(self.yaw), np.sin(self.yaw)
@@ -54,12 +64,12 @@ class Placement:
         """Table point (x, y[, z]) -> arm frame (same length)."""
         p = np.asarray(p, float)
         xy = self._R().T @ (p[:2] - [self.x, self.y])
-        return np.concatenate([xy, p[2:]])
+        return np.concatenate([xy, p[2:] - self.z])
 
     def to_table(self, p) -> np.ndarray:
         p = np.asarray(p, float)
         xy = self._R() @ p[:2] + [self.x, self.y]
-        return np.concatenate([xy, p[2:]])
+        return np.concatenate([xy, p[2:] + self.z])
 
     def yaw_to_arm(self, yaw_table: float) -> float:
         return yaw_table - self.yaw
@@ -96,6 +106,7 @@ def save_placement(side: str, p: Placement, rms: float, n: int, path: str | Path
     data[side] = {
         "base": [round(p.x, 4), round(p.y, 4)],
         "yaw_deg": round(float(np.degrees(p.yaw)), 2),
+        "z_offset": round(p.z, 4),
         "fit_rms_mm": round(rms * 1000, 1),
         "points": n,
     }

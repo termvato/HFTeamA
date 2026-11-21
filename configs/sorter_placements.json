@@ -1,0 +1,12 @@
+{
+  "rakesh": {
+    "base": [
+      0.138,
+      0.37
+    ],
+    "yaw_deg": -90.0,
+    "z_offset": -0.015,
+    "fit_rms_mm": 0.0,
+    "points": 1
+  }
+}

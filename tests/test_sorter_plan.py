@@ -88,3 +88,11 @@ def test_box_out_of_reach_is_reported() -> None:
     plan = make_plan(Scene(box=Box(0.365, -0.2, 0.09), pieces=[]), arms, CFG)
     assert not plan.drops
     assert any("box" in n for n in plan.notes)
+
+
+def test_z_offset_shifts_heights_only() -> None:
+    # the real tip is 1.5 cm lower than the model: aim the model 1.5 cm higher
+    p = Placement(0.138, 0.37, np.radians(-90), z=-0.015)
+    assert p.to_arm([0.114, 0.163, 0.045]) == pytest.approx([0.207, -0.024, 0.06])
+    assert p.to_table(p.to_arm([0.2, 0.1, 0.03])) == pytest.approx([0.2, 0.1, 0.03])
+    assert p.to_arm([0.2, 0.1]) == pytest.approx(Placement(0.138, 0.37, p.yaw).to_arm([0.2, 0.1]))

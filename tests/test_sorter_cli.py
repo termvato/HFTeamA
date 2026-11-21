@@ -90,4 +90,4 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
     out = capsys.readouterr().out
     # rakesh faces the camera: forward = table -y, its left = table +x
     assert "recorded: real = camera + (+1.0, -2.0) cm" in out
-    assert "fit from 1 points" in out
+    assert "placement from 1 points" in out

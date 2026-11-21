@@ -420,7 +420,8 @@ JOG_HELP = """Commands (directions as seen from BEHIND the arm, looking where it
   f / b   forward (away from the arm) / back      l / r   left / right
   u / d   up / down                                add a number for several steps: f3
   s N     step size in mm (now {step:.0f})          y N     turn the jaws by N deg
-  o / c   open / close the gripper                 g       grasp here: down, close, up
+  o / c   open / close the gripper                 g       grasp here: down to grasp_z, close, up
+  g N     grasp going down exactly N cm             z N     the tip is really N cm above the table
   box     over the box and open (drop)             scan    home, look again, renumber
   ok      the tip is right over the piece's centre: record camera-vs-arm offset
   h       help                                     q       finish (fit, save) and go home"""
@@ -441,6 +442,7 @@ class Jog:
         self.yaw = 0.0
         self.q = drv.q()
         self.pairs_arm, self.pairs_table = [], []
+        self.z_changed = False
 
     # --- vision -------------------------------------------------------------------------------
 
@@ -568,13 +570,18 @@ class Jog:
             msg += f", {dx:+.1f} / {dy:+.1f} cm from the camera's point (x / y)"
         print(msg)
 
-    def grasp(self) -> None:
+    def grasp(self, depth: float | None = None) -> None:
+        """Open, straight down (to grasp_z, or `depth` m below the aim), close, back up."""
         if self.target is None:
             print("  pick a piece first")
             return
+        z = self.pc.get("grasp_z", 0.005) if depth is None else self.target[2] - depth
+        if z < -0.002:
+            print(f"  that would go {-z * 100:.1f} cm into the table")
+            return
         self.drv.gripper(self.mc.get("gripper_open", 60.0), wait=0.3)
         up = self.arm.placement.to_arm(self.target)
-        low = self.arm.placement.to_arm([*self.target[:2], self.pc.get("grasp_z", 0.015)])
+        low = self.arm.placement.to_arm([*self.target[:2], z])
         try:
             self.q = self.drv.move_line(self.q, low, self.yaw)
             closed = self.drv.gripper(self.mc.get("gripper_closed", 2.0))
@@ -608,6 +615,18 @@ class Jog:
         self.target = self.arm.placement.to_table(fk(sol.q)[:3, 3])
         self.piece = None
         print("  dropped; `scan` to look again")
+
+    def set_height(self, real: float) -> None:
+        """The operator measured the tip at `real` m above the table: shift the arm's z."""
+        if self.target is None:
+            print("  pick a piece first")
+            return
+        pl = self.arm.placement
+        pl.z += real - self.target[2]
+        self.target = self.target.copy()
+        self.target[2] = real
+        self.z_changed = True
+        print(f"  z_offset now {pl.z * 100:+.1f} cm (saved with q); aim height {real * 100:.1f} cm")
 
     def record(self) -> None:
         if self.piece is None:
@@ -651,11 +670,23 @@ class Jog:
             print(f"  gripper at {self.drv.gripper(self.mc.get('gripper_closed', 2.0)):.1f}")
         elif cmd == "g":
             self.grasp()
+        elif key == "g" and _is_number(arg):
+            self.grasp(float(arg) / 100)
+        elif key == "z" and _is_number(arg):
+            self.set_height(float(arg) / 100)
         elif key in ("f", "b", "l", "r", "u", "d") and (not arg or arg.isdigit()):
             self.nudge(key, int(arg) if arg else 1)
         else:
             print(JOG_HELP.format(step=self.step * 1000))
         return True
+
+
+def _is_number(s: str) -> bool:
+    try:
+        float(s)
+    except ValueError:
+        return False
+    return True
 
 
 def cmd_jog(args) -> int:
@@ -694,13 +725,18 @@ def cmd_jog(args) -> int:
             if viewer:
                 viewer.join(timeout=2)
             drv.disconnect()
-    if jog.pairs_arm:
-        fit, rms = fit_placement(jog.pairs_arm, jog.pairs_table, yaw_guess=arm.placement.yaw)
-        old = arm.placement
+    old = Placement.from_config(cfg["arms"][side])
+    if jog.pairs_arm or jog.z_changed:
+        if jog.pairs_arm:
+            fit, rms = fit_placement(jog.pairs_arm, jog.pairs_table, yaw_guess=arm.placement.yaw)
+        else:
+            fit, rms = Placement(arm.placement.x, arm.placement.y, arm.placement.yaw), 0.0
+        fit.z = arm.placement.z
         print(
-            f"fit from {len(jog.pairs_arm)} points: base ({fit.x:.4f}, {fit.y:.4f}), heading"
-            f" {np.degrees(fit.yaw):.1f} deg, rms {rms * 1000:.1f} mm"
-            f" (was ({old.x:.3f}, {old.y:.3f}), {np.degrees(old.yaw):.1f} deg)"
+            f"placement from {len(jog.pairs_arm)} points: base ({fit.x:.4f}, {fit.y:.4f}), heading"
+            f" {np.degrees(fit.yaw):.1f} deg, z_offset {fit.z * 100:+.1f} cm,"
+            f" rms {rms * 1000:.1f} mm (was ({old.x:.3f}, {old.y:.3f}),"
+            f" {np.degrees(old.yaw):.1f} deg, {old.z * 100:+.1f} cm)"
         )
         if input("Save it as this arm's placement? [y/N] ").strip().lower() == "y":
             print("saved", save_placement(side, fit, rms, len(jog.pairs_arm)))
