@@ -4,7 +4,9 @@ Task-agnostic: a worker runs whatever skill a task names, looked up in arms.skil
 Tasks can bring their own skills (see tasks/README.md); nothing here knows about a task.
 
 Owners:
-- Hardware (#19): real arms, safe operation, detecting arms plugged in or out.
+- Hardware (#19): the physical arms, pairs config and calibrations, detecting arms plugged in
+  or out.
+- Operations: real-arm adapter `real.py` (safety checks, slow moves and park, heartbeat).
 - Action (#20): the skills, on real and simulated arms. Scripted, learned or both is their call.
 - Operations (#21): the contract in base.py and a fake arm for testing (backlog #4, #14).
 
