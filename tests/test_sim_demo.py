@@ -56,3 +56,12 @@ def test_measure_durations_writes_percentiles_per_skill_and_arm(tmp_path: Path) 
         assert set(data["skills"][skill]) == {"arm_a", "arm_b", "arm_c"}
         for stats in data["skills"][skill].values():
             assert stats["n"] == 1 and 0 < stats["p50"] <= stats["p80"]
+
+
+def test_measure_durations_real_backend_needs_arms() -> None:
+    script = SCRIPT.with_name("measure_durations.py")
+    spec = importlib.util.spec_from_file_location("measure_durations", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    with pytest.raises(SystemExit):
+        mod.main(["--backend", "real"])

@@ -1,0 +1,15 @@
+{
+  "note": "Copy to configs/real_arms.json and fill in. Hardware measures base poses in the shared table frame (metres), a safe park pose, and the gripper threshold. The arm's port, id and calibration come from the named pair in configs/teleop_pairs.json.",
+  "arms": {
+    "arm_a": {
+      "pair": "rakesh",
+      "base": [0.0, 0.0, 0.0],
+      "yaw": 0.0,
+      "table_z": 0.0,
+      "park_q": [1.85, -1.6, 1.6, 1.0, 0.0],
+      "grip_holding_min_pct": 15.0,
+      "max_relative_target_deg": 10.0,
+      "offsets_deg": {}
+    }
+  }
+}
