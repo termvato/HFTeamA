@@ -8,7 +8,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 17:20)
+## Now (Sat 21 Nov, 17:40)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
@@ -20,16 +20,16 @@ Update it when you start, finish or decide something. Notes for each other go un
 4. **Real top camera, end to end (dry run): done** (Aravind). C920 -> ArUco calibration -> Qwen
    object positions in metres -> reach -> executor split over the two arms (fake workers, no
    motion): `scripts/real_table_plan.py --device "HD Pro Webcam C920"`. 1 arm 53 s, 2 arms 37 s.
-5. **Blockers for the real arms** (see below). Next for Aravind: VLM pipeline into the live screen.
+5. **Real arms:** see Blockers. Aravind's part for Vato to verify: last section of this file.
 
 ## Blockers: real arms
 
-| # | Blocker | Who | State |
+| # | Item | Who | State |
 |---|---|---|---|
-| 1 | No code moves a real arm: `SkillWorker`, IK, primitives, skills and the real driver are all "todo" on `action-arm-skills` (last commit 14:59). Without it the executor can only run fake workers | Action (Vivek) | open: need an ETA, or Operations takes part |
-| 2 | Arm base poses in the table frame (marker 0): estimated from the image +-3-5 cm; spacing checked (0.40 m centre to centre, 30 cm gap). Grasping needs a tape measure from marker 2 to each base centre | Hardware / Aravind | open |
-| 3 | Which machine runs what: camera + VLM on Aravind's laptop (RTX 4060), arms on Hardware's Linux machines, Isaac Sim on a second machine; the executor must reach the arm workers | team | open |
-| 4 | Grasp angle: pointing gives position only; long objects (scissors, tubes) need their axis (VLM or wrist camera) | Aravind / Action | open |
+| 1 | Real-arm worker (skills, IK, driver behind `execute(task)`) | Action | being built separately; integrated later through `Executor.add_arm(worker)`. Not an Operations blocker |
+| 2 | Arm base poses in the table frame (marker 0). Nobody knows where the markers sit relative to the arms, so the arms measure it themselves: jog the gripper tip onto two marker centres, read the joints, FK (`arms/kinematics.py`) gives base x, y, yaw. ~2 min per arm. Until then: estimated from the image (+-3-5 cm; spacing checked against the measured 30 cm gap) | Aravind (tool), Hardware (jogging) | open |
+| 3 | Machines: camera on Hardware's machines, Qwen on Aravind's laptop (RTX 4060). Frames must reach Qwen and answers come back: Qwen as an HTTP service on the laptop, the orchestrator sends frames (JPEG ~200 KB; Go ~20 s, place check ~3 s). Both machines on one network | Aravind | open: service to build |
+| 4 | Grasp angle: pointing gives position only. IK cannot know the angle (it needs one as input). Cheap fix: Qwen gives two points along each object's long axis -> yaw in task args (`pick_yaw_deg`). A VLA can learn it from the wrist camera if its data has varied orientations (Sahil) | Aravind (yaw), Action (uses it) | open |
 | 5 | Arg names: `object`, `target`, `pick_xyz`, `place_xyz` (metres, table frame) | Action, Operations | agreed in both designs; to confirm on #20 |
 
 ## Who does what (proposed, to confirm)
@@ -173,3 +173,52 @@ Update it when you start, finish or decide something. Notes for each other go un
 - 14:31 Product section in `docs/plan.md`.
 - 14:20 Team branches; `orchestrator` = `termvato` + Aravind's design doc.
 - 13:56 Names in the code aligned with the backlog (#2, #4, #5, #12).
+
+## Aravind's side: for Vato to verify (21 Nov, 17:40)
+
+All on `orchestrator`. Verified on Aravind's laptop: `ruff check .` clean, `pytest` 125 passed
+(2 skipped: no ortools / dash locally). Please run the checks below and tick them.
+
+### What is built
+
+| Piece | Where | What it does |
+|---|---|---|
+| Arm registry, reach (#3) | `registry/` | catalog from config; SO-101 reach 0.44 m from the hip axis, hip +-110 deg, mounting yaw; `resolve(graph, arms, travel_s_per_m)` fills `allowed_arms` and per-arm durations by distance (nearer arm is faster) |
+| Camera calibration | `perception/markers.py` | camera pose + focal length from the ArUco tags on the table (4x4, 7 cm), every run; table frame = marker 0 |
+| Object detection | `perception/pointing.py` | Qwen points at every object; pixel ray meets the table plane -> metres |
+| Decomposer | `perception/decomposer.py` | Qwen picks categories and bins; pick + place per object (`same_arm_as`, `pick_xyz`, `place_xyz`, bin as resource); validator + 3 retries |
+| Step check | `perception/check.py` | `StepChecker(...).as_verifier(grab)` for `Executor(verifier=..., verify_skills=PLACE_SKILLS)`; errors = not confirmed |
+| Re-scan | `perception/rescan.py` | new / moved / vanished / dropped objects -> graph for `Executor.update_graph` |
+| Qwen client | `perception/vlm.py` | Qwen3-VL-4B, local, 4-bit on 8 GB; VRAM check and 85% cap, no CPU offload, time and size caps, OOM retry, one call at a time, 85 C guard |
+| Table config | `configs/hacklab_table.json` | both arms (bases estimated), bowl, marker settings |
+| Dry run | `scripts/real_table_plan.py` | top camera -> calibration -> Qwen -> reach -> your executor on fake workers, 1..N arms, plus a picture |
+
+### Results on the real table (C920, 1920x1080, RTX 4060)
+
+| Check | Result |
+|---|---|
+| Calibration | fit error 0.7 px; focal 1412-1431 px; camera 0.74 m above the table; same within 1 cm on two frames |
+| Arm spacing from the camera vs measured | 0.411 m vs 0.40 +-0.02 m (30 cm gap + ~10 cm base) |
+| Objects found (Qwen at 1920 px) | 5/5 on frame 1 (4/5 at 1024 px), 4/4 on frame 2; points on the objects; labels loose |
+| Sorting / step check | one try; check correct ("not in the bowl yet") |
+| Time per Qwen call | find objects 11 s, sort 6-12 s, step check 2.7 s; first call +12 s to load |
+| Split (placeholder step times) | 1 arm 52.9 s; 2 arms 36.5 s, each object to the nearer arm |
+
+### Checks for Vato
+
+- [ ] `pytest` and `ruff check .` pass in CI (CI has ortools and dash; my laptop does not).
+- [ ] `pytest tests/test_perception.py -k executor`: VLM plan -> reach -> your executor -> camera
+      check, one check per step.
+- [ ] `pytest tests/test_registry.py -k travel`: HEFT gives each object to the nearer arm.
+- [ ] Interfaces read right: `resolve(..., catalog arms)` for `allowed_arms`; `as_verifier` matches
+      `Verifier`; `rescan(...).graph` for `update_graph`; worker `arm_id`s = catalog ids
+      (`rakesh_follower` black/left, `vato_follower` green/right).
+- [ ] Optional, needs the camera and a GPU (`pip install -e ".[vlm,camera]"`):
+      `python scripts/real_table_plan.py --device "HD Pro Webcam C920"`.
+
+### Open on Aravind's side
+
+1. Arm base poses by touching two markers with each gripper (Blockers #2).
+2. Qwen as an HTTP service on the laptop for the camera on Hardware's machine (Blockers #3).
+3. Grasp yaw from two points along each object (Blockers #4).
+4. VLM pipeline into the live screen (Go -> camera -> Qwen -> executor; periodic re-scan).
