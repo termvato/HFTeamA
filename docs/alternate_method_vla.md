@@ -55,6 +55,46 @@ the same weights, with **no new training**.
   model, should close most of that gap. It is still one model for every arm.
 - **Recordings with both arms moving**, so a moving neighbour in view is normal for the policy.
 
+## Collisions with 2+ arms
+
+**What we already have.** The executor locks shared areas. A step that uses the box takes its
+lock right before the motion and releases it when the step ends, so two arms are never in the box
+at once (`src/hfteama/executor/executor.py`, and "Two arms never in the same shared area at once"
+in the plan's real-arm safety rules). With scripted IK that is enough: every motion is planned,
+so its path is known before it runs.
+
+**What a learned policy changes:**
+1. **Its path is not known in advance.** The policy decides each move as it goes, so the route
+   cannot be checked before the step starts, and the arm can drift outside the region we expect.
+2. **One long step holds the box lock for the whole step.** A pick-and-place episode lasts
+   25-60 s, and the lock covers all of it, even while the arm is still picking far from the box.
+   With 2 or more arms they mostly wait for each other, and the speed-up disappears.
+
+**Four layers, cheapest first:**
+
+| Layer | What | Prevents | Training? |
+|---|---|---|---|
+| 1. Table layout | Place the bases so their reach overlaps only at the box; each arm has its own pick area. With N arms in a row, only neighbours can meet. | most arm-to-arm contact | no |
+| 2. Split the step | Record "pick the red cube" and "place it in the box" as separate episodes and instructions. The executor then locks the box only during the place step, with no change to the arm contract. | long box locks, lost parallelism | yes: record pick and place separately |
+| 3. Safety supervisor | In each policy worker, between the policy's output and the motors, every tick (30 Hz). Compute the gripper's position from the joint angles. If it leaves the arm's area, hold. If it nears the box without the lock, hold until granted. If it comes within a safety margin of another arm, freeze the arm that started later. | anything the policy gets wrong | no |
+| 4. Hardware limits | Already on: a 10-degree cap per step on follower motion, and LeRobot's gripper torque limits. | violent motion if the other layers fail | no |
+
+Layer 3 is the key one for policies: whatever the model outputs, the motors only get commands
+that stay inside safe limits. It uses what Hardware already provides: every arm's position in one
+shared table frame, and the joint-angle conversion in `src/hfteama/arms/kinematics.py`.
+
+**With 3 or more arms:**
+- In a row layout an arm can only meet its neighbours, so more arms do not mean more ways to
+  collide.
+- The box becomes the bottleneck. The team's benchmark already shows about 2.2x with 3 arms,
+  limited by a shared area. One box per arm, or per pair, removes most of that waiting.
+- The executor's lock makes arms queue for the box, so they cannot deadlock over it.
+- The supervisor can only stop an arm, not steer it around another. If two arms freeze facing
+  each other, the later one goes back to rest and retries.
+
+**Not guaranteed:** the policy will not learn to avoid the other arm by itself; demonstrations do
+not teach that reliably. Safety comes from layers 1, 3 and 4, not from the model.
+
 ## Where it stands (Sat 21 Nov)
 
 - **Recording studio:** live top and wrist cameras, start / stop / upload, using Hardware's
