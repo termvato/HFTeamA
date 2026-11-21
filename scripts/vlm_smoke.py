@@ -11,10 +11,12 @@ the grouping follows colour. With --image, runs the same pipeline on a real phot
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import math
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +34,7 @@ from hfteama.perception import (
     build_scene,
     load_bins,
 )
+from hfteama.perception.annotate import label_objects
 from hfteama.registry import load_catalog
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -69,32 +72,84 @@ def render(cal: Calibration, bins) -> Image.Image:
     return img
 
 
+def load_image(src: str) -> Image.Image:
+    """A photo file, a JPEG URL, or the first frame of an MJPEG stream (multipart JPEGs)."""
+    if not src.startswith(("http://", "https://")):
+        return Image.open(src).convert("RGB")
+    buf = b""
+    with urllib.request.urlopen(src, timeout=10) as r:
+        while len(buf) < 5_000_000:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            start = buf.find(b"\xff\xd8")
+            end = buf.find(b"\xff\xd9", start + 2) if start >= 0 else -1
+            if end >= 0:
+                return Image.open(io.BytesIO(buf[start : end + 2])).convert("RGB")
+    raise SystemExit(f"no JPEG frame from {src}")
+
+
+def pixel_calibration() -> Calibration:
+    """No calibration yet: camera at the origin looking along +z, K = identity, objects on the
+    plane z = 1, so the 'table' x, y of a point are just its pixel coordinates."""
+    return Calibration(np.eye(4), K=np.eye(3))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3-VL-4B-Instruct")
     ap.add_argument("--quantize", default="auto", choices=["auto", "4bit", "none"])
-    ap.add_argument("--image", default=None)
-    ap.add_argument("--camera", default=str(ROOT / "configs/camera.example.json"))
+    ap.add_argument(
+        "--image",
+        default=None,
+        help="photo file, or a camera URL: a JPEG, or an MJPEG stream such as Sahil's studio "
+        "http://<host>:8765/stream/top",
+    )
+    ap.add_argument(
+        "--camera",
+        default=None,
+        help="camera calibration json (default: the example for the synthetic image; with "
+        "--image and no --camera, positions stay in pixels)",
+    )
     ap.add_argument("--arms", default=str(ROOT / "configs/arms.example.json"))
     ap.add_argument("--bins", default=str(ROOT / "configs/bins.example.json"))
+    ap.add_argument("--out", default=None, help="save the image with Qwen's points drawn on it")
     a = ap.parse_args()
 
-    cal = Calibration.load(a.camera, load_catalog(a.arms))
     bins = load_bins(a.bins)
-    image = Image.open(a.image).convert("RGB") if a.image else render(cal, bins)
+    if a.image:
+        image = load_image(a.image)
+        cal = Calibration.load(a.camera, load_catalog(a.arms)) if a.camera else pixel_calibration()
+    else:
+        cal = Calibration.load(
+            a.camera or ROOT / "configs/camera.example.json", load_catalog(a.arms)
+        )
+        image = render(cal, bins)
+    pixels_only = bool(a.image and not a.camera)
+    if pixels_only:
+        print("no --camera: positions below are pixels, not metres")
 
     vlm = QwenVLM(a.model, quantize=a.quantize)
     ok = True
     try:
         t0 = time.monotonic()
-        detector = VLMPointDetector(vlm, cal, object_height_m=BLOCK)
-        scene = build_scene(detector.detect(image), cal)
+        detector = VLMPointDetector(
+            vlm, cal, object_height_m=1.0 if pixels_only else BLOCK, merge_radius_m=0.02
+        )
+        if pixels_only:
+            detector.merge_radius_m = 10.0  # pixels
+        scene = build_scene(detector.detect(image), cal, match_radius=0.05)
         print(f"loaded as {vlm.loaded_as}; detect {time.monotonic() - t0:.1f} s incl. load")
         print("  stats:", {k: round(v, 2) for k, v in vlm.last_stats.items()})
         for o in scene.objects.values():
-            print(f"  {o.id}: {o.label!r} at ({o.xyz[0]:.3f}, {o.xyz[1]:.3f}) px {o.pixel}")
+            px = f"({o.pixel[0]:.0f}, {o.pixel[1]:.0f})" if o.pixel else "-"
+            print(f"  {o.id}: {o.label!r} at ({o.xyz[0]:.3f}, {o.xyz[1]:.3f}) px {px}")
         if detector.dropped:
             print("  dropped:", detector.dropped)
+        if a.out:
+            label_objects(image, scene).save(a.out)
+            print("  labelled image:", a.out)
 
         truth: dict[str, str] = {}
         if not a.image:
