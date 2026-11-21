@@ -19,6 +19,12 @@ Options:
   --gui            open the Isaac Sim window instead of headless (live view for a demo screen)
   --frames N       number of simulated frames (default 300)
   --save-every K   save a PNG every K frames (default 60; 0 = never)
+  --look basic     flat colours and a grid floor (default: photoreal: studio HDR lighting, wood
+                   table, concrete floor, plastic and servo materials, depth of field). The
+                   lighting and texture files (CC0, from polyhaven.com) are looked up in
+                   <cache>/assets: studio.hdr, wood_table_001_{diff,nor_gl,rough}.jpg,
+                   concrete_floor_worn_001_{diff,nor_gl,rough}.jpg. Without them the look degrades.
+  --pathtrace N    path tracing with N samples per pixel (stills and video; slower)
   --listen PORT    also read joint positions from UDP 127.0.0.1:PORT (see joint_stream_sender.py);
                    arms with no recent packet keep running the scripted sweep
   --cache DIR      where the converted USD goes (default ~/.cache/hfteama_isaac)
@@ -54,6 +60,12 @@ parser.add_argument("--save-every", type=int, default=60)
 parser.add_argument("--width", type=int, default=1280)
 parser.add_argument("--height", type=int, default=720)
 parser.add_argument("--listen", type=int, default=0)
+parser.add_argument(
+    "--table", default="", help="table layout JSON (configs/hacklab_table.json): real arm poses"
+)
+parser.add_argument("--look", choices=["photoreal", "basic"], default="photoreal")
+parser.add_argument("--assets", default="", help="folder with studio.hdr and textures")
+parser.add_argument("--pathtrace", type=int, default=0, help="samples per pixel; 0 = real-time")
 args, _unknown = parser.parse_known_args()
 if not args.mjcf or not os.path.isfile(args.mjcf):
     sys.exit("give --mjcf <menagerie>/robotstudio_so101/so101.xml (or set SO101_MJCF)")
@@ -87,6 +99,7 @@ simulation_app = SimulationApp(
 )
 T_APP = time.time()
 
+import carb  # noqa: E402
 import numpy as np  # noqa: E402
 import omni.kit.commands  # noqa: E402
 import omni.replicator.core as rep  # noqa: E402
@@ -96,7 +109,54 @@ from isaacsim.core.api.objects import VisualCuboid  # noqa: E402
 from isaacsim.core.prims import Articulation  # noqa: E402
 from isaacsim.core.utils.stage import add_reference_to_stage, create_new_stage  # noqa: E402
 from PIL import Image  # noqa: E402
-from pxr import Gf, UsdGeom, UsdLux  # noqa: E402
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade  # noqa: E402
+
+ASSETS = args.assets or os.path.join(args.cache, "assets")
+PHOTOREAL = args.look == "photoreal"
+
+
+def asset(name):
+    """Path of a lighting or texture file, or "" when it is not there (the look degrades)."""
+    path = os.path.join(ASSETS, name)
+    return path if os.path.isfile(path) else ""
+
+
+def pbr(
+    name, color=(0.8, 0.8, 0.8), rough=0.5, metallic=0.0, tex="", tile=1.0, desat=0.0, tint=None
+):
+    """An OmniPBR material. `tex` is a texture set prefix (<tex>_diff.jpg, _nor_gl.jpg,
+    _rough.jpg), projected in world space so shapes without UVs can use it."""
+    path = f"/World/Looks/{name}"
+    omni.kit.commands.execute(
+        "CreateMdlMaterialPrim", mtl_url="OmniPBR.mdl", mtl_name="OmniPBR", mtl_path=path
+    )
+    stage_ = omni.usd.get_context().get_stage()
+    shader = UsdShade.Shader(stage_.GetPrimAtPath(f"{path}/Shader"))
+
+    def put(key, value, kind):
+        shader.CreateInput(key, kind).Set(value)
+
+    put("diffuse_color_constant", Gf.Vec3f(*color), Sdf.ValueTypeNames.Color3f)
+    put("reflection_roughness_constant", float(rough), Sdf.ValueTypeNames.Float)
+    put("metallic_constant", float(metallic), Sdf.ValueTypeNames.Float)
+    if tex and asset(f"{tex}_diff.jpg"):
+        put("diffuse_texture", Sdf.AssetPath(asset(f"{tex}_diff.jpg")), Sdf.ValueTypeNames.Asset)
+        if asset(f"{tex}_nor_gl.jpg"):
+            nor = Sdf.AssetPath(asset(f"{tex}_nor_gl.jpg"))
+            put("normalmap_texture", nor, Sdf.ValueTypeNames.Asset)
+        put("albedo_desaturation", float(desat), Sdf.ValueTypeNames.Float)
+        if tint is not None:
+            put("diffuse_tint", Gf.Vec3f(*tint), Sdf.ValueTypeNames.Color3f)
+        put("project_uvw", True, Sdf.ValueTypeNames.Bool)
+        put("world_or_object", True, Sdf.ValueTypeNames.Bool)
+        put("texture_scale", Gf.Vec2f(tile, tile), Sdf.ValueTypeNames.Float2)
+    return UsdShade.Material(stage_.GetPrimAtPath(path))
+
+
+def bind(prim_path, material):
+    prim = omni.usd.get_context().get_stage().GetPrimAtPath(prim_path)
+    UsdShade.MaterialBindingAPI.Apply(prim).Bind(material, UsdShade.Tokens.strongerThanDescendants)
+
 
 # ---------------------------------------------------------------- 1. MJCF -> USD (cached)
 os.makedirs(args.cache, exist_ok=True)
@@ -127,14 +187,69 @@ world.get_physics_context().set_gravity(0.0)  # kinematic playback: joints are s
 stage = omni.usd.get_context().get_stage()
 UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
 
-world.scene.add_default_ground_plane()
 dome = UsdLux.DomeLight.Define(stage, "/World/DomeLight")
-dome.CreateIntensityAttr(400)
-sun = UsdLux.DistantLight.Define(stage, "/World/Sun")
-sun.CreateIntensityAttr(1200)
-UsdGeom.Xformable(sun.GetPrim()).AddRotateXYZOp().Set(Gf.Vec3f(-40, 20, 0))
+if PHOTOREAL:
+    # Studio lighting: an HDR photo of a studio lights the scene and shows in reflections; one
+    # large soft lamp above the front of the table gives the shadows a direction.
+    dome.CreateIntensityAttr(1400 if asset("studio.hdr") else 700)
+    if asset("studio.hdr"):
+        dome.CreateTextureFileAttr(asset("studio.hdr"))
+        dome.CreateTextureFormatAttr(UsdLux.Tokens.latlong)
+    UsdGeom.Xformable(dome.GetPrim()).AddRotateXYZOp().Set(Gf.Vec3f(90, 0, 120))
+    key = UsdLux.RectLight.Define(stage, "/World/KeyLight")
+    key.CreateIntensityAttr(60000)  # a ceiling panel: a rect light shines along its own -z
+    key.CreateWidthAttr(1.2)
+    key.CreateHeightAttr(0.6)
+    key.CreateColorAttr(Gf.Vec3f(1.0, 0.95, 0.88))
+    kx = UsdGeom.Xformable(key.GetPrim())
+    kx.AddTranslateOp().Set(Gf.Vec3d(-0.3, -0.35, 2.6))
+    kx.AddRotateXYZOp().Set(Gf.Vec3f(12, -8, 0))
+    VisualCuboid(
+        "/World/floor", position=np.array([0.0, 0.0, -0.01]), scale=np.array([12.0, 12.0, 0.02])
+    )
+    bind(
+        "/World/floor",
+        pbr("floor", (0.45, 0.45, 0.45), 0.8, tex="concrete_floor_worn_001", tile=2.0),
+    )
+    st = carb.settings.get_settings()
+    for key_, value in {
+        "/rtx/ambientOcclusion/enabled": True,
+        "/rtx/reflections/enabled": True,
+        "/rtx/indirectDiffuse/enabled": True,
+        "/rtx/directLighting/sampledLighting/enabled": True,
+        "/rtx/shadows/enabled": True,
+        "/rtx/post/dlss/execMode": 2,
+        "/rtx/post/aa/op": 3,
+        "/rtx/post/tonemap/filmIso": 100.0,
+    }.items():
+        st.set(key_, value)
+    if args.pathtrace > 0:
+        st.set("/rtx/rendermode", "PathTracing")
+        st.set("/rtx/pathtracing/spp", args.pathtrace)
+        st.set("/rtx/pathtracing/totalSpp", args.pathtrace)
+        st.set("/rtx/pathtracing/optixDenoiser/enabled", True)
+else:
+    world.scene.add_default_ground_plane()
+    dome.CreateIntensityAttr(400)
+    sun = UsdLux.DistantLight.Define(stage, "/World/Sun")
+    sun.CreateIntensityAttr(1200)
+    UsdGeom.Xformable(sun.GetPrim()).AddRotateXYZOp().Set(Gf.Vec3f(-40, 20, 0))
 
 TABLE_Z = 0.75  # table top height (m)
+# light oak strips like the real table, if that texture is there
+WOOD = next((t for t in ("laminate_floor_02", "oak_veneer_01") if asset(f"{t}_diff.jpg")), "")
+WOOD = WOOD or "wood_table_001"
+
+# Real layout (--table): positions in the table frame (origin = ArUco marker 0, x right, y towards
+# the arms, z up from the table top); the scene's table is centred on the middle of that area.
+LAYOUT = json.load(open(args.table)) if args.table else None
+OFFSET = (0.30, 0.20)
+
+
+def to_scene(x, y, z=0.0):
+    return (x - OFFSET[0], y - OFFSET[1], TABLE_Z + z)
+
+
 # Visual only (no collider): during kinematic playback the arms must not be pushed by contacts.
 VisualCuboid(
     "/World/table",
@@ -143,9 +258,27 @@ VisualCuboid(
     scale=np.array([1.4, 0.8, 0.04]),
     color=np.array([0.55, 0.42, 0.30]),
 )
+if PHOTOREAL:
+    bind(
+        "/World/table",
+        pbr("wood", (0.78, 0.56, 0.26), 0.5, tex=WOOD, tile=2.0, tint=(1.0, 0.82, 0.52)),
+    )
+    steel = pbr("steel", (0.08, 0.08, 0.09), 0.35, metallic=1.0)
+    for n, (lx, ly) in enumerate([(-0.64, -0.34), (0.64, -0.34), (-0.64, 0.34), (0.64, 0.34)]):
+        VisualCuboid(
+            f"/World/leg_{n}",
+            position=np.array([lx, ly, (TABLE_Z - 0.04) / 2]),
+            scale=np.array([0.04, 0.04, TABLE_Z - 0.04]),
+        )
+        bind(f"/World/leg_{n}", steel)
 
 # Arm bases: (x, y, yaw in degrees). Arms sit along the back edge and face the front of the table.
 ARM_POSES = [(-0.45, 0.25, -90.0), (0.0, 0.28, -90.0), (0.45, 0.25, -90.0)]
+if LAYOUT:  # the real followers, in config order: rakesh (black, left), vato (green, right)
+    ARM_POSES = [
+        (*to_scene(*a["base_pose_m"][:2])[:2], float(a.get("base_yaw_deg", 0.0)))
+        for a in LAYOUT["arms"]
+    ]
 for i, (x, y, yaw) in enumerate(ARM_POSES):
     prim = add_reference_to_stage(usd_path=usd_path, prim_path=f"/World/arm_{i}")
     xf = UsdGeom.Xformable(prim)
@@ -161,49 +294,175 @@ for i, (x, y, yaw) in enumerate(ARM_POSES):
         Gf.Quatf(math.cos(half), 0.0, 0.0, math.sin(half))
     )
 
-# Cubes in front of the arms, bins between them.
-CUBE_COLORS = [
-    (0.85, 0.15, 0.15),
-    (0.15, 0.6, 0.2),
-    (0.15, 0.3, 0.85),
-    (0.9, 0.75, 0.1),
-    (0.6, 0.2, 0.7),
-]
-for k, c in enumerate(CUBE_COLORS):
-    VisualCuboid(
-        f"/World/cube_{k}",
-        position=np.array([-0.5 + 0.25 * k, 0.0, TABLE_Z + 0.0125]),
-        scale=np.array([0.025, 0.025, 0.025]),
-        color=np.array(c),
+if PHOTOREAL:
+    # Printed parts in one colour per arm (the real followers are black and green), servos black.
+    servo = pbr("servo", (0.02, 0.02, 0.022), 0.3)
+    shells = [
+        pbr("print_black", (0.035, 0.035, 0.04), 0.45),
+        pbr("print_green", (0.06, 0.62, 0.2), 0.4),
+        pbr("print_orange", (0.9, 0.38, 0.05), 0.42),
+    ]
+
+    def _is_servo(prim):
+        """Servo bodies: named after the motor in the mesh path or in what the mesh references."""
+        text = str(prim.GetPath()).lower()
+        for spec in prim.GetPrimStack():
+            text += " " + str(spec.layer.identifier).lower() + " " + str(spec.path).lower()
+        return "sts3215" in text or "motor" in text and "holder" not in text
+
+    n_bound = 0
+    for i in range(len(ARM_POSES)):
+        shell = shells[i % len(shells)]
+        root = stage.GetPrimAtPath(f"/World/arm_{i}")
+        # the importer instances the visual meshes; instanced shapes cannot take a material, so
+        # turn instancing off for this arm first
+        for prim in list(Usd.PrimRange(root)):
+            if prim.IsInstance():
+                prim.SetInstanceable(False)
+        for prim in Usd.PrimRange(root):
+            if prim.IsA(UsdGeom.Gprim):
+                is_servo = _is_servo(prim)
+                UsdShade.MaterialBindingAPI.Apply(prim).Bind(
+                    servo if is_servo else shell, UsdShade.Tokens.strongerThanDescendants
+                )
+                n_bound += 1
+    print(f"[so101_scene] arm materials bound on {n_bound} shapes", flush=True)
+
+
+def cylinder(path, pos, radius, height, material=None, axis="Z", rot=None):
+    cyl = UsdGeom.Cylinder.Define(stage, path)
+    cyl.CreateRadiusAttr(radius)
+    cyl.CreateHeightAttr(height)
+    cyl.CreateAxisAttr(axis)
+    xf_ = UsdGeom.Xformable(cyl.GetPrim())
+    xf_.AddTranslateOp().Set(Gf.Vec3d(*pos))
+    if rot is not None:
+        xf_.AddRotateXYZOp().Set(Gf.Vec3f(*rot))
+    if material is not None:
+        bind(path, material)
+
+
+if LAYOUT:
+    paper = pbr("kraft_paper", (0.36, 0.22, 0.10), 0.92)
+    for b in LAYOUT.get("bins", []):  # a round paper bowl: a floor disc and a ring of thin walls
+        bx, by, _ = to_scene(*b["xyz"][:2])
+        r, h, n = float(b.get("radius_m", 0.1)), 0.055, 40
+        cylinder(f"/World/{b['id']}/floor", (bx, by, TABLE_Z + 0.002), r, 0.004, paper)
+        for k in range(n):
+            ang = 2 * math.pi * k / n
+            path = f"/World/{b['id']}/wall_{k}"
+            VisualCuboid(
+                path,
+                position=np.array(
+                    [bx + r * math.cos(ang), by + r * math.sin(ang), TABLE_Z + h / 2]
+                ),
+                orientation=np.array([math.cos(ang / 2), 0.0, 0.0, math.sin(ang / 2)]),
+                scale=np.array([0.003, 2 * math.pi * r / n * 1.1, h]),
+            )
+        bind(f"/World/{b['id']}", paper)
+    white, ink = (
+        pbr("marker_paper", (0.92, 0.92, 0.9), 0.8),
+        pbr("marker_ink", (0.03, 0.03, 0.03), 0.7),
     )
-
-
-def make_bin(name, cx, cy, w=0.14, d=0.10, h=0.05, t=0.004, color=(0.25, 0.25, 0.28)):
-    col = np.array(color)
-    parts = {
-        "floor": ((cx, cy, TABLE_Z + t / 2), (w, d, t)),
-        "wall_n": ((cx, cy + d / 2, TABLE_Z + h / 2), (w, t, h)),
-        "wall_s": ((cx, cy - d / 2, TABLE_Z + h / 2), (w, t, h)),
-        "wall_e": ((cx + w / 2, cy, TABLE_Z + h / 2), (t, d, h)),
-        "wall_w": ((cx - w / 2, cy, TABLE_Z + h / 2), (t, d, h)),
-    }
-    for part, (pos, size) in parts.items():
+    for k, (mx, my) in enumerate([(0.0, 0.0), (0.62, 0.0), (0.0, 0.34), (0.62, 0.34)]):
+        px, py, _ = to_scene(mx, my)  # printed marker sheets at the corners (pattern not drawn)
         VisualCuboid(
-            f"/World/{name}/{part}", position=np.array(pos), scale=np.array(size), color=col
+            f"/World/marker_{k}/sheet",
+            position=np.array([px, py, TABLE_Z + 0.0004]),
+            scale=np.array([0.1, 0.1, 0.0008]),
         )
+        VisualCuboid(
+            f"/World/marker_{k}/ink",
+            position=np.array([px, py, TABLE_Z + 0.0009]),
+            scale=np.array([0.07, 0.07, 0.0004]),
+        )
+        bind(f"/World/marker_{k}/sheet", white)
+        bind(f"/World/marker_{k}/ink", ink)
+    # small everyday objects like the ones on the real table
+    cylinder(
+        "/World/obj_balm",
+        to_scene(0.08, 0.12, 0.011),
+        0.011,
+        0.065,
+        pbr("balm", (0.05, 0.12, 0.6), 0.3),
+        axis="X",
+        rot=(0, 0, 70),
+    )
+    cylinder(
+        "/World/obj_tube",
+        to_scene(0.20, 0.03, 0.009),
+        0.009,
+        0.06,
+        pbr("tube", (0.9, 0.9, 0.92), 0.35),
+        axis="X",
+        rot=(0, 0, 95),
+    )
+    cylinder(
+        "/World/obj_tape",
+        to_scene(0.30, 0.31, 0.012),
+        0.024,
+        0.024,
+        pbr("tape", (0.85, 0.82, 0.75), 0.25),
+    )
+    VisualCuboid(
+        "/World/obj_bar",
+        position=np.array(to_scene(0.40, 0.30, 0.006)),
+        scale=np.array([0.022, 0.05, 0.012]),
+    )
+    bind("/World/obj_bar", pbr("foil", (0.75, 0.76, 0.78), 0.25, metallic=1.0))
+else:
+    # Cubes in front of the arms, bins between them.
+    CUBE_COLORS = [
+        (0.85, 0.15, 0.15),
+        (0.15, 0.6, 0.2),
+        (0.15, 0.3, 0.85),
+        (0.9, 0.75, 0.1),
+        (0.6, 0.2, 0.7),
+    ]
+    for k, c in enumerate(CUBE_COLORS):
+        VisualCuboid(
+            f"/World/cube_{k}",
+            position=np.array([-0.5 + 0.25 * k, 0.0, TABLE_Z + 0.0125]),
+            scale=np.array([0.025, 0.025, 0.025]),
+            color=np.array(c),
+        )
+        if PHOTOREAL:
+            bind(f"/World/cube_{k}", pbr(f"cube_{k}", c, 0.25))
 
+    def make_bin(name, cx, cy, w=0.14, d=0.10, h=0.05, t=0.004, color=(0.25, 0.25, 0.28)):
+        col = np.array(color)
+        parts = {
+            "floor": ((cx, cy, TABLE_Z + t / 2), (w, d, t)),
+            "wall_n": ((cx, cy + d / 2, TABLE_Z + h / 2), (w, t, h)),
+            "wall_s": ((cx, cy - d / 2, TABLE_Z + h / 2), (w, t, h)),
+            "wall_e": ((cx + w / 2, cy, TABLE_Z + h / 2), (t, d, h)),
+            "wall_w": ((cx - w / 2, cy, TABLE_Z + h / 2), (t, d, h)),
+        }
+        for part, (pos, size) in parts.items():
+            VisualCuboid(
+                f"/World/{name}/{part}", position=np.array(pos), scale=np.array(size), color=col
+            )
+        if PHOTOREAL:
+            bind(f"/World/{name}", pbr(f"{name}_plastic", color, 0.35))
 
-make_bin("bin_a", -0.22, 0.12)
-make_bin("bin_b", 0.22, 0.12)
-make_bin("bin_out", 0.0, -0.2, w=0.2, color=(0.1, 0.35, 0.45))
+    make_bin("bin_a", -0.22, 0.12)
+    make_bin("bin_b", 0.22, 0.12)
+    make_bin("bin_out", 0.0, -0.2, w=0.2, color=(0.1, 0.35, 0.45))
+
 
 # The importer's PhysX variant puts the articulation root on the base link.
 arms = Articulation(prim_paths_expr="/World/arm_.*/base/base", name="so101_arms")
 world.scene.add(arms)
 
 # Camera + render product at the requested resolution (this is what we capture and time).
-CAM_EYE, CAM_TARGET = (0.0, -1.25, TABLE_Z + 0.75), (0.0, 0.08, TABLE_Z + 0.05)
-cam = rep.create.camera(position=CAM_EYE, look_at=CAM_TARGET)
+if PHOTOREAL:  # three-quarter view from the front left; no depth of field (it blurs the arms)
+    CAM_EYE, CAM_TARGET = (-0.75, -1.45, TABLE_Z + 0.8), (0.0, 0.1, TABLE_Z + 0.06)
+    if LAYOUT:  # like standing at the front of the real table
+        CAM_EYE, CAM_TARGET = (-0.35, -0.95, TABLE_Z + 0.62), (0.0, 0.05, TABLE_Z + 0.05)
+    cam = rep.create.camera(position=CAM_EYE, look_at=CAM_TARGET, focal_length=28.0, f_stop=0.0)
+else:
+    CAM_EYE, CAM_TARGET = (0.0, -1.25, TABLE_Z + 0.75), (0.0, 0.08, TABLE_Z + 0.05)
+    cam = rep.create.camera(position=CAM_EYE, look_at=CAM_TARGET)
 rp = rep.create.render_product(cam, (args.width, args.height))
 rgb = rep.AnnotatorRegistry.get_annotator("rgb")
 rgb.attach([rp])
