@@ -165,8 +165,13 @@ def find_pieces(
     grasp_z: float = 0.015,
     ignore: dict | None = None,
     max_length: float = 0.15,
+    box_dims: tuple[float, float, float] | None = None,
 ):
     """Pieces inside `extent` (x0, x1, y0, y1). Returns (pieces, mask, top_down image).
+
+    box_dims: (length, width, height) m of the pieces when they are all the same box: each
+    blob is then fitted with the silhouette such a box casts on the table seen from the
+    camera (top and sides), which gives the centre of its base (fit_box).
 
     ignore: colours of things that are never pieces (the arms, their wrist cameras); see
     _ignored."""
@@ -212,18 +217,80 @@ def find_pieces(
         a = np.radians(ang)
         side_w = np.array([np.cos(a), -np.sin(a)])
         short = side_w if w <= h else np.array([-side_w[1], side_w[0]])
+        yaw = float(np.arctan2(short[1], short[0]))
+        length, width = max(w, h) * MM_PER_PX / 1000, min(w, h) * MM_PER_PX / 1000
+        outline = _from_px(c.reshape(-1, 2).astype(float), extent)
+        if box_dims is not None:
+            bx, by, byaw = fit_box(outline, box_dims, pose.position, xy, yaw)
+            xy, yaw = np.array([bx, by]), byaw
+            length, width = max(box_dims[:2]), min(box_dims[:2])
         pieces.append(
             Piece(
                 x=float(xy[0]),
                 y=float(xy[1]),
-                length=max(w, h) * MM_PER_PX / 1000,
-                width=min(w, h) * MM_PER_PX / 1000,
-                yaw=float(np.arctan2(short[1], short[0])),
+                length=length,
+                width=width,
+                yaw=yaw,
                 area_cm2=float(area),
-                outline=_from_px(c.reshape(-1, 2).astype(float), extent),
+                outline=outline,
             )
         )
     return pieces, mask, top
+
+
+def box_silhouette(x, y, yaw, dims, camera_position) -> np.ndarray:
+    """Table outline (z = 0) of what a box (length, width, height) standing at (x, y), turned
+    by yaw (its width axis heading, rad), hides from the camera: the hull of its base and of
+    its top corners cast along the camera rays onto the table."""
+    L, W, H = dims
+    u = np.array([np.cos(yaw), np.sin(yaw)])  # width axis
+    v = np.array([-u[1], u[0]])  # length axis
+    base = np.array([[x, y] + su * W / 2 * u + sv * L / 2 * v for su in (-1, 1) for sv in (-1, 1)])
+    o = np.asarray(camera_position, float)
+    top = o[:2] + (base - o[:2]) * o[2] / (o[2] - H)
+    return _hull(np.concatenate([base, top]))
+
+
+def fit_box(outline, dims, camera_position, xy0, yaw0, mm: float = 1.0):
+    """(x, y, yaw) of the box base whose silhouette best overlaps `outline` (table xy, the
+    blob's contour), searched around (xy0, yaw0). The silhouette is the box's base plus its
+    top seen from the camera, so the result is the base centre, not the blob centre."""
+    import cv2
+
+    outline = np.asarray(outline, float)
+    pad = 0.05
+    x0, y0 = outline.min(0) - pad
+    x1, y1 = outline.max(0) + pad
+    shape = (int((y1 - y0) * 1000 / mm) + 1, int((x1 - x0) * 1000 / mm) + 1)
+
+    def raster(poly):
+        img = np.zeros(shape, np.uint8)
+        px = np.round((np.asarray(poly) - [x0, y0]) * 1000 / mm).astype(np.int32)
+        cv2.fillPoly(img, [px], 1)
+        return img
+
+    blob = raster(outline).astype(bool)
+
+    def iou(x, y, yaw):
+        sil = raster(box_silhouette(x, y, yaw, dims, camera_position)).astype(bool)
+        return (blob & sil).sum() / max((blob | sil).sum(), 1)
+
+    # start from the blob centre pulled back by the top's shift, then refine on a grid
+    o = np.asarray(camera_position, float)
+    k = o[2] / (o[2] - dims[2] / 2)
+    best = (iou(*xy0, yaw0), *xy0, yaw0)
+    start = o[:2] + (np.asarray(xy0) - o[:2]) / k
+    best = max(best, (iou(*start, yaw0), *start, yaw0))
+    for step, span in ((0.004, 0.03), (0.001, 0.005)):
+        _, bx, by, byaw = best
+        for dyaw in np.radians([-8, -4, 0, 4, 8]) if step > 0.002 else [0.0]:
+            for dx in np.arange(-span, span + 1e-9, step):
+                for dy in np.arange(-span, span + 1e-9, step):
+                    cand = (iou(bx + dx, by + dy, byaw + dyaw), bx + dx, by + dy, byaw + dyaw)
+                    if cand[0] > best[0]:
+                        best = cand
+    _, bx, by, byaw = best
+    return float(bx), float(by), float(byaw)
 
 
 def _ignored(top, lab, ig: dict):
@@ -329,5 +396,10 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
         grasp_z=pc.get("centre_z", pc.get("grasp_z", 0.015)),
         ignore=pc.get("ignore"),
         max_length=pc.get("max_length", 0.15),
+        box_dims=(
+            (pc["object_length"], pc["object_width"], pc["object_height"])
+            if pc.get("fit_box") and "object_height" in pc
+            else None
+        ),
     )
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)

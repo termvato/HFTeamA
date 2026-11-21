@@ -181,3 +181,17 @@ def test_dark_and_green_regions_are_ignored_but_small_spots_kept() -> None:
     assert not m[60, 200] and not m[60, 100]
     assert not m[65, 220]  # dark but blue: a piece, not an arm
     assert not m[60, 340]  # black, big, but in the middle of the table: a piece's print
+
+
+def test_fit_box_finds_the_base_centre_from_the_silhouette() -> None:
+    pytest.importorskip("cv2")
+    from hfteama.vision.detect import box_silhouette, fit_box
+
+    cam = np.array([0.367, 0.637, 0.726])
+    dims = (0.058, 0.058, 0.039)
+    truth = (0.20, 0.15, np.radians(12))
+    outline = box_silhouette(*truth, dims, cam)
+    # start from the blob's centre (pushed away from the camera by the top) and a rough yaw
+    x, y, yaw = fit_box(outline, dims, cam, outline.mean(0), np.radians(5))
+    assert (x, y) == pytest.approx(truth[:2], abs=0.003)
+    assert np.hypot(*outline.mean(0) - truth[:2]) > 0.005  # the plain blob centre is off

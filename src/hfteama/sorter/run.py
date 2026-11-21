@@ -254,6 +254,19 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
         org = (u - int(40 * k), v - int(20 * k))
         for c, t in (((0, 0, 0), 6), ((255, 255, 0), 3)):
             cv2.putText(img, str(i), org, cv2.FONT_HERSHEY_SIMPLEX, 1.3 * k, c, int(t * k))
+    pcfg = cfg["pieces"]
+    if pcfg.get("fit_box") and "object_height" in pcfg:
+        # the fitted box: base on the table and top at its height, as the camera sees them
+        L, W, H = pcfg["object_length"], pcfg["object_width"], pcfg["object_height"]
+        for pc in scene.pieces:
+            u = np.array([np.cos(pc.yaw), np.sin(pc.yaw)])
+            v = np.array([-u[1], u[0]])
+            sq = [
+                np.array([pc.x, pc.y]) + su * W / 2 * u + sv * L / 2 * v
+                for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+            ]
+            poly([[*c, 0.0] for c in sq], (255, 0, 255), True, 1)
+            poly([[*c, H] for c in sq], (255, 0, 255), True, 2)
     for pc in scene.pieces:
         # coloured by the arm that takes it; red = nobody can; cyan when there is no plan
         unplanned = (0, 0, 255) if plan else (255, 255, 0)
