@@ -164,6 +164,7 @@ def find_pieces(
     max_area_cm2: float = 80.0,
     grasp_z: float = 0.015,
     ignore: dict | None = None,
+    max_length: float = 0.15,
 ):
     """Pieces inside `extent` (x0, x1, y0, y1). Returns (pieces, mask, top_down image).
 
@@ -199,6 +200,8 @@ def find_pieces(
         if not (min_area_cm2 <= area <= max_area_cm2):
             continue
         (u, v), (w, h), ang = cv2.minAreaRect(c)
+        if max(w, h) * MM_PER_PX / 1000 > max_length:
+            continue  # a cable or the table's edge, not a piece
         xy = _from_px(np.array([[u, v]]), extent)[0]
         # the blob is drawn on z = 0, but the camera sees the piece's top: re-cast the
         # centre at the grasp height so the grasp point sits over the piece
@@ -316,5 +319,6 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
         max_area_cm2=pc.get("max_area_cm2", 80.0),
         grasp_z=pc.get("grasp_z", 0.015),
         ignore=pc.get("ignore"),
+        max_length=pc.get("max_length", 0.15),
     )
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)

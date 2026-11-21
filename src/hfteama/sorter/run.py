@@ -145,11 +145,36 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
                 img, text, (u + 8, v - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55 * k, c, int(t * k)
             )
 
+    # the table frame: each tag's id and coordinates, the axes from the origin
+    tags = {int(i): v for i, v in cfg["table"]["tags"].items()}
+    for i, (tx, ty) in tags.items():
+        label([tx, ty, 0], f"tag {i} ({tx:.3f}, {ty:.3f})", (0, 255, 255))
+    o = next((v for v in tags.values() if v[0] == 0 and v[1] == 0), None)
+    if o is not None:
+        for (dx, dy), name in (((0.1, 0), "x"), ((0, 0.1), "y")):
+            a3 = np.round(project([[0, 0, 0], [dx, dy, 0]], pose, intr)).astype(int)
+            cv2.arrowedLine(img, tuple(a3[0]), tuple(a3[1]), (0, 255, 255), int(3 * k))
+            cv2.putText(
+                img,
+                name,
+                tuple(a3[1] + 6),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9 * k,
+                (0, 255, 255),
+                int(2 * k),
+            )
     for side, arm in arms.items():
         p = arm.placement
         u, v = np.round(project([[p.x, p.y, 0]], pose, intr)[0]).astype(int)
         cv2.drawMarker(img, (u, v), COLOURS.get(side), cv2.MARKER_CROSS, int(30 * k), int(3 * k))
         label([p.x, p.y, 0], f"{side} ({p.x:.3f}, {p.y:.3f})", COLOURS.get(side))
+        # how far the arm centre is from the nearest tag, along x and y (what is measured)
+        tx, ty = min(tags.values(), key=lambda t: np.hypot(t[0] - p.x, t[1] - p.y))
+        corner = [p.x, ty, 0]
+        poly([[tx, ty, 0], corner], COLOURS.get(side), False, 2)
+        poly([corner, [p.x, p.y, 0]], COLOURS.get(side), False, 2)
+        label([(tx + p.x) / 2, ty, 0], f"{abs(p.x - tx) * 100:.1f} cm", COLOURS.get(side))
+        label([p.x, (ty + p.y) / 2 - 0.02, 0], f"{abs(p.y - ty) * 100:.1f} cm", COLOURS.get(side))
     if scene.box is not None:
         b = scene.box
         label([b.x, b.y, cfg["box"]["height"]], f"box ({b.x:.3f}, {b.y:.3f})", (255, 0, 255))
@@ -798,6 +823,13 @@ def cmd_fit_grasps(args) -> int:
         print(f"No grasps logged for {side}: grasp pieces with `hfteama sort jog {side}` (g).")
         return 1
     pl = Placement.from_config(cfg["arms"][side])
+    # a grasp's aim is a table point under the placement in use then: re-express it with
+    # today's placement (same arm-frame point), so a corrected base doesn't skew the fit
+    for e in entries:
+        if "placement" in e:
+            x, y, yaw, z = e["placement"]
+            then = Placement(x, y, np.radians(yaw), z)
+            e["aim"] = list(pl.to_table(then.to_arm(e["aim"]))[:2])
     aim, jaw, rms = fit_aim(entries, pl.yaw)
     print(
         f"{len(entries)} grasps, jaw headings: "
