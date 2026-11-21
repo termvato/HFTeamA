@@ -31,6 +31,7 @@ _ORIENT_WEIGHT = 0.01
 _MAX_ITERS = 200
 _N_RANDOM_SEEDS = 4
 _DOWN = np.array([0.0, 0.0, -1.0])
+ELBOW_MAX_RAD = 1.45  # Menagerie issue #325: elbow self-collision starts near 1.474 rad
 
 
 @dataclass(frozen=True)
@@ -65,12 +66,15 @@ class Kinematics:
         self.base = base
         self._model = mujoco.MjModel.from_xml_path(str(MODEL_XML))
         self._data = mujoco.MjData(self._model)
+        self._precheck_data = mujoco.MjData(self._model)
         self._site = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_SITE, TCP_SITE)
         jids = [mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, j) for j in ARM_JOINTS]
         self._qadr = np.array([self._model.jnt_qposadr[j] for j in jids])
         self._dadr = np.array([self._model.jnt_dofadr[j] for j in jids])
         self._lo = np.array([LIMITS_RAD[j][0] for j in ARM_JOINTS])
         self._hi = np.array([LIMITS_RAD[j][1] for j in ARM_JOINTS])
+        self._elbow_idx = ARM_JOINTS.index("elbow_flex")
+        self._hi[self._elbow_idx] = min(self._hi[self._elbow_idx], ELBOW_MAX_RAD)
         self._rng = np.random.default_rng(0)
         self._rot_inv = self.base._rot().T
 
@@ -145,3 +149,42 @@ class Kinematics:
                 break
         assert best is not None
         return IKResult(q=best[1], error_m=best[2], ok=best[2] <= tol)
+
+    def precheck(
+        self,
+        pick_xyz: np.ndarray,
+        place_xyz: np.ndarray,
+        table_z: float = 0.0,
+        hover_dz: float = 0.07,
+        tol: float = 0.010,
+        min_sv: float = 1e-3,
+    ) -> tuple[bool, str]:
+        """Verify pick/place and hover waypoints on a scratch MjData before real motion."""
+        pick = np.asarray(pick_xyz, float)
+        place = np.asarray(place_xyz, float)
+        waypoints = (
+            pick + np.array([0.0, 0.0, hover_dz]),
+            pick,
+            place + np.array([0.0, 0.0, hover_dz]),
+            place,
+        )
+        seed: np.ndarray | None = None
+        jacp = np.zeros((3, self._model.nv))
+        jacr = np.zeros((3, self._model.nv))
+        for tgt in waypoints:
+            if float(tgt[2]) < table_z + 0.01:
+                return False, "below table"
+            res = self.solve(tgt, seed=seed, down=True, tol=tol)
+            if not res.ok:
+                return False, f"unreachable ({res.error_m:.3f} m)"
+            if float(res.q[self._elbow_idx]) > ELBOW_MAX_RAD + 1e-6:
+                return False, "elbow limit"
+            self._precheck_data.qpos[self._qadr] = res.q
+            mujoco.mj_kinematics(self._model, self._precheck_data)
+            mujoco.mj_comPos(self._model, self._precheck_data)
+            mujoco.mj_jacSite(self._model, self._precheck_data, jacp, jacr, self._site)
+            sv = float(np.linalg.svd(jacp[:, self._dadr], compute_uv=False)[-1])
+            if sv < min_sv:
+                return False, f"singular ({sv:.2e})"
+            seed = res.q
+        return True, "ok"

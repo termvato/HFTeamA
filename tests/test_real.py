@@ -316,3 +316,22 @@ def test_settle_tolerance_is_configurable(robot: FakeRobot) -> None:
     with pytest.raises(MotionError, match="stall"):
         tight.move_joints(GOAL)
     make_driver(robot, settle_tol_rad=0.1).move_joints(GOAL)
+
+
+def test_sag_compensation_and_preload(robot: FakeRobot) -> None:
+    d_plain = make_driver(robot)
+    d_comp = make_driver(robot, sag_coeffs=(-0.01, 0.0, 0.0))
+    target = np.array([0.2, 0.0, 0.04])
+    d_plain.move_to(target)
+    p_plain, _ = Kinematics().fk(d_plain.read_joints()[:5])
+    d_comp.move_to(target)
+    p_comp, _ = Kinematics().fk(d_comp.read_joints()[:5])
+    assert p_comp[2] - p_plain[2] == pytest.approx(0.01, abs=0.004)
+
+    robot.grip_floor = 35.0
+    d_preload = make_driver(robot, preload_pct=5.0)
+    grasp = d_preload.close_gripper()
+    assert grasp.holding
+    assert robot.actions[-1]["gripper.pos"] == pytest.approx(30.0)
+    ok, _ = d_preload.precheck(np.array([0.2, 0.05, 0.03]), np.array([0.2, -0.05, 0.03]))
+    assert ok

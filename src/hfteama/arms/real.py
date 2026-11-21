@@ -56,6 +56,9 @@ class LeRobotDriver:
         speed_scale: float = 1.0,
         settle_tol_rad: float = SETTLE_TOL_RAD,
         settle_timeout_s: float = SETTLE_TIMEOUT_S,
+        sag_coeffs: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        preload_pct: float = 0.0,
+        min_hold_load_pct: float = 0.0,
     ) -> None:
         self.arm_id = arm_id
         self.table_z = table_z
@@ -70,6 +73,9 @@ class LeRobotDriver:
         self._speed_scale = speed_scale  # global slow-down for first runs (0.3 = 30 % speed)
         self._settle_tol = settle_tol_rad
         self._settle_timeout = settle_timeout_s
+        self._sag_coeffs = tuple(float(x) for x in sag_coeffs)
+        self._preload_pct = float(preload_pct)
+        self._min_hold_load_pct = float(min_hold_load_pct)
         self._bus_lock = threading.RLock()  # re-entrant: a callback inside a bus call may stop()
         self._torque_off = False
         self._stop = threading.Event()
@@ -160,10 +166,24 @@ class LeRobotDriver:
             return False
         return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
 
+    def _sag_offset_m(self, xyz: np.ndarray) -> float:
+        a, b, c = self._sag_coeffs
+        if a == 0.0 and b == 0.0 and c == 0.0:
+            return 0.0
+        r = float(np.linalg.norm(np.asarray(xyz, float)[:2] - np.asarray(self._kin.base.xyz[:2])))
+        return a + b * r + c * (r * r)
+
+    def precheck(
+        self, pick_xyz: np.ndarray, place_xyz: np.ndarray, hover_dz: float = 0.07
+    ) -> tuple[bool, str]:
+        """Run fast MuJoCo reach/limit/singularity pre-check before real motion."""
+        return self._kin.precheck(pick_xyz, place_xyz, table_z=self.table_z, hover_dz=hover_dz)
+
     def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
         self._begin()
-        xyz = np.asarray(xyz, float)
+        xyz = np.asarray(xyz, float).copy()
         check_point(xyz, self.table_z)
+        xyz[2] = max(self.table_z + 0.01, xyz[2] - self._sag_offset_m(xyz))
         result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)
         if not result.ok:
             raise MotionError("unreachable")
@@ -179,6 +199,17 @@ class LeRobotDriver:
     def _gripper_pct(self) -> float:
         return float(self._observe()["gripper.pos"])
 
+    def _read_gripper_load_pct(self) -> float | None:
+        bus = getattr(self._robot, "bus", None)
+        if bus is None or not hasattr(bus, "read"):
+            return None
+        with self._bus_lock:
+            try:
+                raw = bus.read("Present_Load", "gripper")
+            except Exception:  # noqa: BLE001
+                return None
+        return abs(float(raw)) / 10.0
+
     def open_gripper(self) -> None:
         self._begin()
         self._closed = False
@@ -189,7 +220,17 @@ class LeRobotDriver:
         self._set_gripper(0.0)
         self._closed = True
         pct = self._gripper_pct()
-        return Grasp(holding=pct >= self._min_pct, position=float(self.read_joints()[5]))
+        load_pct = self._read_gripper_load_pct()
+        is_holding = pct >= self._min_pct
+        if self._min_hold_load_pct > 0.0 and load_pct is not None:
+            is_holding = is_holding and (load_pct >= self._min_hold_load_pct)
+        if is_holding and self._preload_pct > 0.0:
+            self._set_gripper(max(0.0, pct - self._preload_pct))
+        return Grasp(
+            holding=is_holding,
+            position=float(self.read_joints()[5]),
+            effort=load_pct if load_pct is not None else 0.0,
+        )
 
     def holding(self) -> bool:
         """Closed and stalled short of fully closed: something is between the fingers."""
@@ -260,4 +301,7 @@ def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver
         grip_holding_min_pct=float(cfg["grip_holding_min_pct"]),
         speed_scale=float(cfg.get("speed_scale", 0.3)),
         settle_tol_rad=float(np.radians(cfg.get("settle_tol_deg", 5.7))),
+        sag_coeffs=tuple(float(v) for v in cfg.get("sag_coeffs", (0.0, 0.0, 0.0))),
+        preload_pct=float(cfg.get("preload_pct", 0.0)),
+        min_hold_load_pct=float(cfg.get("min_hold_load_pct", 0.0)),
     )
