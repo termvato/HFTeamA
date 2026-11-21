@@ -51,6 +51,7 @@ episode. Episodes have no time limit by default: press **Stop & save** when the 
 | `record.sh single\|dual` | record episodes, push the dataset to the Hub |
 | `studio.sh single\|dual` | the same recording from a local web page: live cameras, buttons, upload |
 | `cameras.sh list\|check` | list the cameras; check the configured ones together before recording |
+| `multi_arm_policy.md` | research: one trained policy on any number of arms, with the orchestrator splitting the work |
 
 ## Cameras
 
@@ -234,6 +235,9 @@ lerobot-train \
 - Measure success over 10-20 trials per object position before wiring it in.
 
 ## Part 6 (later): Use the policy in our architecture
+
+How one policy trained on one arm serves 2+ arms (who splits the work, what transfers to an
+untrained arm, what to record): [`multi_arm_policy.md`](multi_arm_policy.md).
 
 A `VLAArmWorker` implements the same `ArmWorker` contract as the scripted arm, so the orchestrator
 does not change:
