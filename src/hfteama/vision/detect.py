@@ -456,4 +456,6 @@ def detect_scene(
     )
     if pc.get("tags", {}).get("enabled") and piece_tags is not None:
         pieces = pieces_from_tags(piece_tags, pose, intr, pc, extent)
+    if box is not None:  # pieces already dropped in the box are done
+        pieces = [p for p in pieces if np.hypot(p.x - box.x, p.y - box.y) > box.radius]
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)
