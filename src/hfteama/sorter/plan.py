@@ -40,6 +40,12 @@ class ArmModel:
     # part proportional to where the piece is: G @ (forward, left) of the piece from the base
     # (arm frame, m); [[0, -a], [a, 0]] is a small turn by a rad about the base
     aim_gain: tuple = ((0.0, 0.0), (0.0, 0.0))
+    # the jaw offset was fitted on pieces about jaw_ref_width wide (m); a piece of width w
+    # needs jaw_width_gain * (w - jaw_ref_width) more along the closing axis (0.5: half the
+    # extra width, the fixed jaw stays on the piece's edge)
+    jaw_ref_width: float = 0.025
+    jaw_width_gain: float = 0.0
+    object_width: float | None = None  # known piece width (m); None = the camera's estimate
     # extra height (m) by distance from the base: [(r_m, dz_m), ...] sorted by r, linearly
     # interpolated, held at the ends (e.g. lower close to the base)
     z_by_distance: tuple = ()
@@ -68,11 +74,17 @@ class ArmModel:
         fwd, left, dzt = (float(np.interp(b, k[:, 0], k[:, i])) for i in (1, 2, 3))
         return fwd, left, dzt + dz
 
-    def aim(self, x: float, y: float, heading: float = 0.0) -> tuple[float, float]:
+    def aim(
+        self, x: float, y: float, heading: float = 0.0, width: float | None = None
+    ) -> tuple[float, float]:
         """Table xy to aim the tool at to grasp a piece seen at (x, y), with the jaws'
-        closing axis heading along `heading` (rad, table frame)."""
+        closing axis heading along `heading` (rad, table frame). `width`: the piece's width
+        across the jaws (m); a wider piece sits further from the fixed jaw, so the aim moves
+        along the closing axis by jaw_width_gain x (width - jaw_ref_width)."""
         c, s = np.cos(heading), np.sin(heading)
-        j = np.asarray(self.jaw_offset)
+        j = np.asarray(self.jaw_offset, float).copy()
+        if width is not None:
+            j[0] += self.jaw_width_gain * (width - self.jaw_ref_width)
         fwd, left, _ = self.correction(x, y)
         p = self.placement.to_arm([x, y])
         a = p + np.array([fwd, left]) + np.asarray(self.aim_gain, float) @ p
@@ -88,7 +100,7 @@ class ArmModel:
         yaw = self.placement.yaw_to_arm(piece.yaw)
         sol = solve_ik(self.placement.to_arm([piece.x, piece.y, z]), yaw=yaw, limits=self.limits)
         heading = jaw_yaw(fk(sol.q)) + self.placement.yaw
-        ax, ay = self.aim(piece.x, piece.y, heading)
+        ax, ay = self.aim(piece.x, piece.y, heading, self.object_width or piece.width)
         return ax, ay, yaw, heading, self.correction(piece.x, piece.y)[2]
 
 

@@ -317,7 +317,7 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
         colour_threshold=pc.get("colour_threshold", 25.0),
         min_area_cm2=pc.get("min_area_cm2", 1.0),
         max_area_cm2=pc.get("max_area_cm2", 80.0),
-        grasp_z=pc.get("grasp_z", 0.015),
+        grasp_z=pc.get("centre_z", pc.get("grasp_z", 0.015)),
         ignore=pc.get("ignore"),
         max_length=pc.get("max_length", 0.15),
     )

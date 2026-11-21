@@ -112,6 +112,9 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             aim_gain=tuple(map(tuple, a.get("aim_gain", ((0.0, 0.0), (0.0, 0.0))))),
             bearing_range=tuple(a.get("bearing_range_deg", (-180.0, 180.0))),
             z_by_distance=tuple(tuple(r) for r in sorted(a.get("z_by_distance", []))),
+            jaw_ref_width=a.get("jaw_ref_width", 0.025),
+            jaw_width_gain=a.get("jaw_width_gain", 0.0),
+            object_width=cfg["pieces"].get("object_width"),
         )
     return out
 
@@ -828,7 +831,8 @@ def cmd_jog(args) -> int:
     stop = threading.Event()
     with Eye(cfg) as eye:
         drv = ArmDriver(side, cfg["arms"][side], cfg["motion"], args.config).connect()
-        jog = Jog(cfg, side, arm, drv, eye, args.z, args.step / 1000)
+        hover = args.z if args.z is not None else cfg["pieces"].get("approach_z", 0.05)
+        jog = Jog(cfg, side, arm, drv, eye, hover, args.step / 1000)
         jog.lock = threading.Lock()
         viewer = None
         try:
@@ -1058,7 +1062,9 @@ def add_parser(sub) -> None:
 
     j = ss.add_parser("jog", help="Hover over a piece, correct by hand, fit the arm's placement")
     j.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
-    j.add_argument("--z", type=float, default=0.05, help="Hover height above the table (m)")
+    j.add_argument(
+        "--z", type=float, help="Hover height above the table (m); default pieces.approach_z"
+    )
     j.add_argument("--step", type=float, default=5.0, help="Jog step (mm)")
     j.add_argument("--no-viewer", action="store_true", help="Don't open the Rerun viewer")
 
