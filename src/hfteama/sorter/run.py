@@ -329,28 +329,59 @@ def cmd_touch(args) -> int:
 
 
 def cmd_goto(args) -> int:
-    """Hover the tool tip over a table point (a tag centre or x y), then go home."""
+    """Hover the tool tip over a table point (a tag centre, x y, or the box seen by the
+    camera), wait for Enter, then go home."""
+    from hfteama.sorter.plan import plan_drop
     from hfteama.sorter.robot import ArmDriver
 
     cfg = load_config(args.sorter_config)
     side = args.arm
+    if side not in cfg["arms"]:
+        raise SystemExit(f"Unknown arm {side!r}; config has {list(cfg['arms'])}")
     arm = arm_models(cfg, [side])[side]
-    if args.tag is not None:
-        xy = cfg["table"]["tags"].get(str(args.tag))
-        if xy is None:
-            raise SystemExit(f"Tag {args.tag} is not a reference tag")
-    elif args.xy:
-        xy = args.xy
+    if args.box:
+        bc, mc = cfg["box"], cfg["motion"]
+        with Eye(cfg, args.image) as eye:
+            _, _, scene = eye.look()
+        if scene.box is None:
+            raise SystemExit("Box not found by the camera.")
+        b = scene.box
+        above = bc.get("drop_above", 0.04) if args.z is None else args.z
+        print(
+            f"box centre ({b.x:.3f}, {b.y:.3f}); rim at {bc['height']:.3f} m,"
+            f" going {above:.3f} above it"
+        )
+        sol = plan_drop(arm, b, bc["height"], above, np.radians(mc.get("drop_max_tilt_deg", 60.0)))
+        if sol is None:
+            d = np.hypot(b.x - arm.placement.x, b.y - arm.placement.y)
+            print(
+                f"{side} arm can't reach over the box ({d * 100:.0f} cm from its base)."
+                " Move the box closer."
+            )
+            return 1
+        xy = arm.placement.to_table(fk(sol.q)[:3, 3])
+        z = xy[2]
     else:
-        raise SystemExit("Give --tag ID or --xy X Y")
-    target = arm.placement.to_arm([xy[0], xy[1], args.z])
-    sol = solve_ik(target, limits=arm.limits)
+        z = 0.03 if args.z is None else args.z
+        if args.tag is not None:
+            xy = cfg["table"]["tags"].get(str(args.tag))
+            if xy is None:
+                raise SystemExit(f"Tag {args.tag} is not a reference tag")
+        elif args.xy:
+            xy = args.xy
+        else:
+            raise SystemExit("Give --box, --tag ID or --xy X Y")
+        sol = solve_ik(arm.placement.to_arm([xy[0], xy[1], z]), limits=arm.limits)
+    target = arm.placement.to_arm([xy[0], xy[1], z])
     print(
-        f"target table ({xy[0]:.3f}, {xy[1]:.3f}, {args.z:.3f}) = arm "
+        f"target table ({xy[0]:.3f}, {xy[1]:.3f}, {z:.3f}) = arm "
         f"({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}); IK ok={sol.ok} "
         f"err {sol.position_error * 1000:.1f} mm tilt {np.degrees(sol.tilt):.0f} deg"
     )
-    if not sol.ok:
+    print(
+        "joints (LeRobot deg):", {k: round(v, 1) for k, v in _lerobot_deg(cfg, side, sol.q).items()}
+    )
+    if not sol.ok and not args.box:
         return 1
     if args.dry_run:
         return 0
@@ -359,10 +390,18 @@ def cmd_goto(args) -> int:
         drv.move_q(sol.q)
         tip = arm.placement.to_table(drv.tcp())
         print(f"tip now at table ({tip[0]:.3f}, {tip[1]:.3f}, {tip[2]:.3f}) by the joint readings")
-        input("Measure the gap between the tip and the point, then Enter to go home... ")
+        input("Check where the tip is, then Enter to go home... ")
     finally:
         drv.disconnect()
     return 0
+
+
+def _lerobot_deg(cfg, side, q) -> dict:
+    from hfteama.arms.kinematics import ArmFrame
+
+    a = cfg["arms"][side]
+    frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, **a.get("offsets_deg", {})})
+    return frame.to_lerobot(q, clip=False)
 
 
 def cmd_run(args) -> int:
@@ -475,7 +514,13 @@ def add_parser(sub) -> None:
     g.add_argument("arm", help="left or right")
     g.add_argument("--tag", type=int, help="Reference tag id")
     g.add_argument("--xy", type=float, nargs=2, metavar=("X", "Y"), help="Table point (m)")
-    g.add_argument("--z", type=float, default=0.03, help="Height above the table (m)")
+    g.add_argument("--box", action="store_true", help="Over the box, found by the camera")
+    g.add_argument(
+        "--z",
+        type=float,
+        help="Height (m): above the table (default 0.03), or above the rim with --box",
+    )
+    g.add_argument("--image", help="With -n and --box: find the box in a saved frame")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. left or left,right (default: all)")
