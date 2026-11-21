@@ -91,6 +91,7 @@
     lastJoined = m.counts.joined;
     setText(joined, String(m.counts.joined));
     setText($('c-known'), String(m.counts.known));
+    setText($('c-label'), m.counts.known === 1 ? 'robot joined' : 'robots joined');
 
     const list = $('robot-list');
     m.nodes.forEach((n) => {
@@ -216,7 +217,13 @@
     const usb = n.serial ? `USB ${n.serial}` : 'USB';
     if (!n.connected && !n.joined) return `${usb} · not seen`;
     const where = n.port ? ` on ${n.port}` : '';
-    const how = m.source === 'demo' ? 'simulated' : n.backend === 'real' ? 'Feetech bus via LeRobot' : n.backend;
+    const how = m.source === 'demo'
+      ? 'simulated'
+      : n.backend === 'real'
+        ? 'Feetech bus via LeRobot'
+        : n.backend === 'fake'
+          ? 'fake: USB cable only, servos and 12 V not checked'
+          : n.backend;
     return `${usb}${where} · ${how}`;
   }
 

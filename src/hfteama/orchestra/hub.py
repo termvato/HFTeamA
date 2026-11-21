@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -135,6 +136,22 @@ class StateHub:
             self._tail()
             return [(i + 1, e) for i, e in enumerate(self._events) if i + 1 > after]
 
+    _port_cache: tuple[float, dict[str, str]] = (0.0, {})
+
+    def _ports(self) -> dict[str, str]:
+        """USB serial -> port name (COM3, /dev/ttyACM0), at most every 2 s. Display only."""
+        at, ports = self._port_cache
+        if time.monotonic() - at < 2.0:
+            return ports
+        try:
+            from serial.tools import list_ports
+
+            ports = {p.serial_number: p.device for p in list_ports.comports() if p.serial_number}
+        except Exception:  # no pyserial, or the scan failed: the screen just shows no port
+            ports = {}
+        self._port_cache = (time.monotonic(), ports)
+        return ports
+
     def note(self, text: str, level: str = "info") -> None:
         with self._lock:
             self.notes = [{"text": text, "level": level, "wall": self.clock.time()}, *self.notes][
@@ -221,6 +238,7 @@ class StateHub:
 
         joined = set(snap["arms"])
         present = self.watcher.present() if self.watching else set(joined)
+        ports = self._ports() if self.watching else {}
         errors = dict(self.watcher.errors)
         items = []
         for i, arm in enumerate(self.arm_ids):
@@ -264,7 +282,9 @@ class StateHub:
                     "color": colour,
                     "pair": self.pairs.get(arm, {}).get("pair"),
                     "serial": self.pairs.get(arm, {}).get("serial"),
-                    "port": None,
+                    "port": ports.get(self.pairs.get(arm, {}).get("serial", ""))
+                    if arm in present
+                    else None,
                     "node_state": node,
                     "arm_state": state_word,
                     "backend": getattr(worker, "backend", self.backend) if worker else self.backend,
