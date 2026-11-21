@@ -1,6 +1,7 @@
 """Arm registry and reachability (backlog #3)."""
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -143,3 +144,26 @@ def test_registry_events_and_heartbeat(tmp_path: Path) -> None:
     ]
     kinds = [e.kind for e in log.read()]
     assert kinds == ["arm_added", "arm_added", "arm_failed", "arm_removed"]
+
+
+def test_travel_makes_the_nearer_arm_faster() -> None:
+    from hfteama.scheduler.heft import heft
+    from hfteama.scheduler.problem import Problem
+
+    # two SO-101s 0.4 m apart facing -y (as on the hacklab table); one object near each
+    a = ArmNode("a", (0.0, 0.4, 0.0), base_yaw_deg=-90.0, reach=SO101_REACH)
+    b = ArmNode("b", (0.4, 0.4, 0.0), base_yaw_deg=-90.0, reach=SO101_REACH)
+    near_b, near_a = (
+        pair("ob", (0.35, 0.2, 0), (0.2, 0.0, 0)),
+        pair("oa", (0.05, 0.2, 0), (0.2, 0, 0)),
+    )
+    g = graph(*near_b, *near_a)
+    r = resolve(g, [a, b], travel_s_per_m=10.0)
+    t = r.graph.tasks["pick_ob"]
+    assert t.duration_on("b") < t.duration_on("a")
+    assert t.duration_on("a") == pytest.approx(4.0 + 10.0 * math.dist(a.pan_axis_xy, (0.35, 0.2)))
+    plan = heft(Problem(r.graph, ["a", "b"]))
+    arm_of = {x.task_id: x.arm_id for x in plan.assignments}
+    assert arm_of["pick_ob"] == "b" and arm_of["pick_oa"] == "a"
+    # without travel, durations are untouched
+    assert resolve(g, [a, b]).graph.tasks["pick_ob"].durations == {}

@@ -8,7 +8,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 16:41)
+## Now (Sat 21 Nov, 17:20)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
@@ -17,8 +17,20 @@ Update it when you start, finish or decide something. Notes for each other go un
    (camera + Go -> categories -> steps), step check (`Executor(verifier=...)`, place steps only),
    re-scan (`Executor.update_graph`). Reachability fills `allowed_arms` (SO-101 reach). Real Qwen
    run on the RTX 4060 passed on a synthetic image; a real camera photo is still to test.
-4. **Next: VLM pipeline into the live screen** (Aravind): Go -> camera frame -> detect -> sort ->
-   reachability -> executor, plus a periodic re-scan. Then the RTX rehearsal (#33, Vato).
+4. **Real top camera, end to end (dry run): done** (Aravind). C920 -> ArUco calibration -> Qwen
+   object positions in metres -> reach -> executor split over the two arms (fake workers, no
+   motion): `scripts/real_table_plan.py --device "HD Pro Webcam C920"`. 1 arm 53 s, 2 arms 37 s.
+5. **Blockers for the real arms** (see below). Next for Aravind: VLM pipeline into the live screen.
+
+## Blockers: real arms
+
+| # | Blocker | Who | State |
+|---|---|---|---|
+| 1 | No code moves a real arm: `SkillWorker`, IK, primitives, skills and the real driver are all "todo" on `action-arm-skills` (last commit 14:59). Without it the executor can only run fake workers | Action (Vivek) | open: need an ETA, or Operations takes part |
+| 2 | Arm base poses in the table frame (marker 0): estimated from the image +-3-5 cm; spacing checked (0.40 m centre to centre, 30 cm gap). Grasping needs a tape measure from marker 2 to each base centre | Hardware / Aravind | open |
+| 3 | Which machine runs what: camera + VLM on Aravind's laptop (RTX 4060), arms on Hardware's Linux machines, Isaac Sim on a second machine; the executor must reach the arm workers | team | open |
+| 4 | Grasp angle: pointing gives position only; long objects (scissors, tubes) need their axis (VLM or wrist camera) | Aravind / Action | open |
+| 5 | Arg names: `object`, `target`, `pick_xyz`, `place_xyz` (metres, table frame) | Action, Operations | agreed in both designs; to confirm on #20 |
 
 ## Who does what (proposed, to confirm)
 
@@ -69,10 +81,18 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
 | #18 | Re-split policy questions | open |
 | new | VLM decomposer, step check, re-scan | done; step check wired as `Executor(verifier=...)`. Real run on the RTX 4060 (Qwen3-VL-4B, 4-bit, synthetic table image, `scripts/vlm_smoke.py`): sorting by colour right on the first try, 12 s (once at Go); step check correct, 2.8 s per call; peak VRAM 3.1 GB. Not yet on a real camera photo |
-| new | VLM pipeline into the live screen | in progress (Aravind) |
+| new | VLM pipeline into the live screen | next (Aravind) |
+| new | Camera calibration from the table's ArUco markers | done (Aravind): `perception/markers.py`, 4x4 tags, 7 cm; focal length + camera pose fitted on all corners (0.7 px). Real C920: f 1412-1431 px, camera 0.74 m above the table, stable between frames within 1 cm. Table config `configs/hacklab_table.json` |
+| new | Distance-aware step times | done (Aravind): `resolve(..., travel_s_per_m=...)` gives each arm its own duration by distance, so the planner picks the nearer arm; measured durations take over once recorded |
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 17:20 (Aravind): Real top camera tested end to end. The C920 is on Aravind's laptop (Windows:
+  frames through ffmpeg/DirectShow; OpenCV could not open it by index). Calibration comes from the
+  ArUco markers already on the table, every run, so moving the camera only needs a new frame.
+  Qwen at 1920 px finds all objects (1024 px missed one small object); positions agree with the
+  image. Table frame = marker 0, y towards the arms. Arm bases still estimated (Blockers #2).
 
 - 16:41 (Aravind): Taking "VLM pipeline into the live screen" from Vato's 16:32 list. It touches
   `view/__main__.py` (Go): I'll add the VLM path next to the fake-arm rig and keep the rig as is.
@@ -147,6 +167,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 17:20 (Aravind): real camera end to end (markers, Qwen positions, reach, executor split); blockers table for the real arms.
 - 16:41 (Aravind): status tidied (#15 done by Vato, asks answered); Aravind takes the VLM -> live screen wiring.
 - 21 Nov (Aravind): registry + reachability (#3), VLM decomposer / step check / re-scan, Qwen GPU safeguards, executor verifier hook.
 - 14:31 Product section in `docs/plan.md`.
