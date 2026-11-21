@@ -9,6 +9,7 @@ source "$VLA_DIR/config.sh"
 CALIB_DIR="${HF_LEROBOT_CALIBRATION:-$HOME/.cache/huggingface/lerobot/calibration}"
 
 need_port() {  # fail early with a useful hint instead of a LeRobot stack trace
+    [[ "${SKIP_CHECKS:-0}" == 1 ]] && return 0
     for p in "$@"; do
         [[ -e "$p" ]] || { echo "missing $p: plugged in? udev rules installed? (python vla/detect_arms.py list)" >&2; exit 1; }
     done
@@ -16,6 +17,7 @@ need_port() {  # fail early with a useful hint instead of a LeRobot stack trace
 
 need_calib() {  # kind=robots/so_follower or teleoperators/so_leader, then ids
     local kind=$1; shift
+    [[ "${SKIP_CHECKS:-0}" == 1 ]] && return 0
     for id in "$@"; do
         [[ -e "$CALIB_DIR/$kind/$id.json" ]] || {
             echo "no calibration $CALIB_DIR/$kind/$id.json: run ./vla/calibrate.sh <arm> for each arm" >&2; exit 1; }

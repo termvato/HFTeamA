@@ -19,6 +19,7 @@ echo "recording $MODE -> $REPO  task: \"$TASK\""
 lerobot-record "${ROBOT_ARGS[@]}" "${TELEOP_ARGS[@]}" \
     --display_data=true \
     --dataset.repo_id="$REPO" \
+    --dataset.no_stamp=true \
     --dataset.single_task="$TASK" \
     --dataset.fps="$FPS" \
     --dataset.num_episodes="$NUM_EPISODES" \

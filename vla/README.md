@@ -30,11 +30,31 @@ run over every object.
 | `calibrate.sh <arm>` | LeRobot calibration for one arm, reused by dual mode |
 | `teleop.sh single\|dual` | leader drives follower, cameras on screen, nothing recorded |
 | `record.sh single\|dual` | record episodes, push the dataset to the Hub |
+| `studio.sh single\|dual` | the same recording from a local web page: live cameras, buttons, upload |
 
 Arm names: `follower_a` + `leader_a` = robot 1, `follower_b` + `leader_b` = robot 2. In dual
 mode, A is left and B is right.
 
 ---
+
+## Recording from the browser (studio)
+
+```bash
+./vla/studio.sh single          # or dual; then open http://localhost:8765
+```
+- **Connect arms** starts teleop: the leader drives the follower, and the cameras and joint
+  values show live. **Cameras only** previews the feeds before the arms are plugged in.
+- **Start** (Space) records an episode with the instruction in the text box. **Save** (→) and
+  **Discard** (←) end it. It also saves on its own at `EPISODE_TIME_S`. Change the text between
+  episodes to record another object.
+- **Auto-start** begins the next episode `RESET_TIME_S` after a save, for long sessions alone.
+- **Upload to Hugging Face** pushes everything recorded so far. You can keep recording into the
+  same dataset afterwards, and episodes already on disk (from earlier sessions or `record.sh`)
+  are added to.
+- **Disconnect** turns the follower's torque off, so put the arm in its rest pose first.
+- It writes the same dataset as `record.sh` (same features, video and Hub format). It only binds
+  to localhost. Calibration is not done from the page: an uncalibrated arm shows an error that
+  points to `calibrate.sh`.
 
 ## Part 0: Machine setup (once)
 
@@ -70,9 +90,9 @@ hf auth login                        # write token, for pushing datasets
    ./vla/calibrate.sh follower_a
    ./vla/calibrate.sh leader_a
    ```
-6. Cameras: find them, then set `CAM_TOP` / `CAM_FRONT` in `config.sh`. Prefer
-   `/dev/v4l/by-id/...` paths so they survive replugging. Keep the same two camera names for
-   single and dual data, so one policy can read both.
+6. Camera: one front camera that sees both arms, the objects and the box. Find it, then set
+   `CAM_FRONT` in `config.sh`. Prefer the `/dev/v4l/by-id/...` path so it survives replugging.
+   The same camera and name (`front`) are used for single and dual data, so one policy can read both.
    ```bash
    lerobot-find-cameras opencv               # saves a test frame from each camera
    ```
@@ -116,7 +136,7 @@ TASK="Pick up the red cube and put it in the box" ./vla/record.sh dual
 - Both arms work at the same time, each on objects on its own side, into the shared box. This is
   the 2-arm case of the same batch, so the cameras also see the other arm moving.
 - Pushed to `<HF_USER>/so101_sort_dual`. Each frame holds both arms: `left_*` (arm A) and
-  `right_*` (arm B) joints, plus the shared `top` and `front` cameras.
+  `right_*` (arm B) joints, plus the shared `front` camera.
 - Time a few full 2-arm sorts against the Part 2 baseline.
 
 **Decide before recording much (it changes Part 5):**
@@ -141,7 +161,7 @@ lerobot-train \
   --policy.path=lerobot/smolvla_base \
   --dataset.repo_id=<HF_USER>/so101_sort_single \
   --policy.repo_id=<HF_USER>/smolvla_so101_sort \
-  --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.front": "observation.images.camera2"}' \
+  --rename_map='{"observation.images.front": "observation.images.camera1"}' \
   --batch_size=64 --steps=20000 \
   --output_dir=outputs/train/smolvla_so101_sort --job_name=smolvla_so101_sort
 ```

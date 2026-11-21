@@ -2,7 +2,16 @@
 # Sourced by bash; values can also be overridden from the shell: TASK="..." ./vla/record_single.sh
 
 # ---- Hugging Face
-HF_USER="${HF_USER:-$(hf auth whoami 2>/dev/null | sed -n 's/^user=//p')}"
+if [[ -z "${HF_USER:-}" ]]; then
+    _whoami="$(hf auth whoami 2>&1 || true)"  # || true: under set -e a failure would exit silently
+    HF_USER="$(sed -n 's/^user=//p' <<<"$_whoami")"
+fi
+if [[ -z "$HF_USER" ]]; then  # offline or not logged in: refuse rather than record to "/so101_..."
+    echo "Could not get your Hugging Face username from 'hf auth whoami' ($(command -v hf)):" >&2
+    echo "$_whoami" | head -5 >&2
+    echo "Fix: hf auth login   or skip the lookup: export HF_USER=<name>" >&2
+    exit 1
+fi
 DATASET_SINGLE="${DATASET_SINGLE:-${HF_USER}/so101_sort_single}"
 DATASET_DUAL="${DATASET_DUAL:-${HF_USER}/so101_sort_dual}"
 PRIVATE="${PRIVATE:-true}"          # datasets start private on the Hub; flip when ready to share
@@ -21,10 +30,11 @@ BI_LEADER_ID="bi_leader"
 # ---- Cameras (lerobot-find-cameras opencv lists them; /dev/v4l/by-id/... paths survive replugging)
 # Keep the same camera names in single and dual data so one policy can read both.
 CAM_W=640; CAM_H=480; CAM_FPS=30
-CAM_TOP="${CAM_TOP:-/dev/video2}"     # overhead, sees both arms, the objects and the box
-CAM_FRONT="${CAM_FRONT:-/dev/video4}" # front/side view
+CAM_FRONT="${CAM_FRONT:-/dev/v4l/by-id/usb-046d_HD_Pro_Webcam_C920_65ECE41F-video-index0}" # front view, sees both arms, the objects and the box
 cam() { echo "{type: opencv, index_or_path: $1, width: $CAM_W, height: $CAM_H, fps: $CAM_FPS, fourcc: MJPG}"; }
-CAMERAS="{ top: $(cam "$CAM_TOP"), front: $(cam "$CAM_FRONT") }"
+CAMERAS="{ front: $(cam "$CAM_FRONT") }"
+# A second camera later (e.g. overhead or wrist): add it here with its own name, in both modes:
+# CAMERAS="{ front: $(cam "$CAM_FRONT"), top: $(cam "$CAM_TOP") }"
 
 # ---- Task: one episode = one object picked and placed in the box (see vla/README.md, "Episodes")
 TASK="${TASK:-Pick up the object and put it in the box}"
