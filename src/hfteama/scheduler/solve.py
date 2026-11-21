@@ -81,12 +81,15 @@ def retime(old: Plan, p: Problem) -> Plan | None:
     return plan
 
 
-def whatif(p: Problem, counts: tuple[int, ...] = (1, 2, 3, 4)) -> dict[int, float]:
-    """Seconds from now to finish with n arms. Arms beyond the real ones are virtual copies that
-    can do any step open to every arm."""
+def whatif(
+    p: Problem, counts: tuple[int, ...] = (1, 2, 3, 4), spare: list[str] | None = None
+) -> dict[int, float]:
+    """Seconds from now to finish with n arms. Beyond the connected arms it adds `spare` arms
+    first (known arms not plugged in, e.g. from the reachability catalog, so their reach counts),
+    then virtual copies that can do any step open to every arm."""
     out: dict[int, float] = {}
     busy = [a.arm_id for a in p.running.values()]
-    order = list(dict.fromkeys([*busy, *p.arms]))
+    order = list(dict.fromkeys([*busy, *p.arms, *(spare or [])]))
     for n in counts:
         arms = order[:n] + [f"virtual-{k}" for k in range(1, n - len(order) + 1)]
         keep_running = {t: a for t, a in p.running.items() if a.arm_id in arms}

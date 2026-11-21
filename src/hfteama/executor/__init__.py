@@ -14,6 +14,6 @@ Done when: a batch on 3 fake arms survives "add arm" and "remove arm" mid-run, e
 scheduler/check.py, and the event log replays into the view.
 """
 
-from hfteama.executor.executor import Executor, TaskState
+from hfteama.executor.executor import PLACE_SKILLS, Executor, TaskState
 
-__all__ = ["Executor", "TaskState"]
+__all__ = ["PLACE_SKILLS", "Executor", "TaskState"]

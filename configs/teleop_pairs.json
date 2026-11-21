@@ -1,5 +1,5 @@
 {
-  "note": "Leader/follower pairs for teleoperation and data recording. Committed: serials and calibration ids belong to the physical arms. Ports are found from each arm's USB serial; 'port' is only the fallback. See docs/hardware/so101_setup.md.",
+  "note": "Leader/follower pairs for teleoperation and data recording. Committed: serials and calibration ids belong to the physical arms. Ports are found from each arm's USB serial; 'port' is only the fallback. See docs/hardware/so101_setup.md. A pair's 'record' overrides the shared 'record' settings (each pair records to its own dataset).",
   "default_pair": "rakesh",
   "pairs": {
     "rakesh": {
@@ -25,6 +25,9 @@
           "fourcc": "MJPG",
           "warmup_s": 3
         }
+      },
+      "record": {
+        "repo_id": "diegoloayza789/hfteam_rakesh_so101"
       }
     },
     "hacklab": {
@@ -50,16 +53,27 @@
           "fourcc": "MJPG",
           "warmup_s": 3
         }
+      },
+      "record": {
+        "repo_id": "diegoloayza789/hfteam_hacklab_so101"
       }
     }
   },
   "record": {
-    "repo_id": "diegoloayza789/hfteam_rakesh_so101",
     "single_task": "Pick up the object and place it in the box",
     "num_episodes": 10,
     "episode_time_s": 60,
     "reset_time_s": 30,
     "fps": 30,
     "push_to_hub": false
+  },
+  "bimanual": {
+    "note": "`hfteama bimanual teleop|record`: these two pairs as one LeRobot bi_so_follower/bi_so_leader robot. Left/right = the arms' places on the table, seen from the operator.",
+    "id": "hfteam_bi",
+    "left": "rakesh",
+    "right": "hacklab",
+    "record": {
+      "repo_id": "diegoloayza789/hfteam_bimanual_so101"
+    }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "note": "Copy to configs/arms.json (git-ignored) and fill in. Serial from: ls -l /dev/serial/by-id/",
+  "note": "Copy to configs/arms.json (git-ignored) and fill in. Serial from: ls -l /dev/serial/by-id/. base_pose_m: base origin in the table frame (m). base_yaw_deg: mounting yaw, the arm's forward direction at shoulder_pan = 0. reach: \"so101\" (0.44 m fully extended, hip +-110 deg), \"*\" (everything), or {\"preset\": \"so101\", \"r_max\": ...} to override.",
   "arms": [
     {
       "id": "arm_a",
@@ -11,7 +11,8 @@
         0.0,
         0.0
       ],
-      "reach": "*"
+      "base_yaw_deg": 90.0,
+      "reach": "so101"
     },
     {
       "id": "arm_b",
@@ -23,7 +24,8 @@
         0.0,
         0.0
       ],
-      "reach": "*"
+      "base_yaw_deg": 90.0,
+      "reach": "so101"
     },
     {
       "id": "arm_c",
@@ -35,7 +37,8 @@
         0.0,
         0.0
       ],
-      "reach": "*"
+      "base_yaw_deg": 90.0,
+      "reach": "so101"
     }
   ]
 }

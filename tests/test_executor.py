@@ -128,7 +128,7 @@ def test_dead_arm_work_flows_to_the_others(tmp_path: Path) -> None:
 
 
 def test_stuck_step_times_out_and_moves(tmp_path: Path) -> None:
-    ex, log, clock = make(tmp_path, timeout_factor=2.0)
+    ex, log, clock = make(tmp_path, timeout_guess=2.0)
     slow = arm("b", clock)
     slow.set_slow(10.0)
     ex.add_arm(arm("a", clock))
@@ -186,3 +186,95 @@ def test_estimate_before_go(tmp_path: Path) -> None:
     last = kinds(log, "replan")[-1].data
     assert last["reason"] == "estimate" and last["binding"] == "arms"
     assert float(last["whatif"]["1"]) > float(last["whatif"]["2"]) > float(last["whatif"]["3"])
+
+
+def test_timeout_is_3x_guess_then_1_5x_measured(tmp_path: Path) -> None:
+    ex, _, clock = make(tmp_path / "guess")
+    ex.add_arm(arm("a", clock))
+    with ex._lock:
+        ex._launch("pick_01", "a")
+    assert ex._runs["pick_01"].limit == pytest.approx(3.0 * 4.0)  # task file says 4 s
+
+    ex2, _, clock2 = make(tmp_path / "measured")
+    ex2.add_arm(arm("a", clock2))
+    for _ in range(3):
+        ex2.durations.record("a", "pick", 5.0)
+    with ex2._lock:
+        ex2._launch("pick_01", "a")
+    assert ex2._runs["pick_01"].limit == pytest.approx(1.5 * 5.0)
+
+
+def _more(graph: TaskGraph, n_new: int, start: int = 13) -> TaskGraph:
+    tasks = dict(graph.tasks)
+    for i in range(start, start + n_new):
+        k = f"{i:02d}"
+        tasks[f"pick_{k}"] = Task(f"pick_{k}", "pick", resources=("input_bin",), duration=4.0)
+        tasks[f"place_{k}"] = Task(
+            f"place_{k}", "place", deps=(f"pick_{k}",), same_arm_as=f"pick_{k}", duration=6.0
+        )
+    return TaskGraph(graph.name, tasks)
+
+
+def test_update_graph_mid_run_adds_and_drops(tmp_path: Path) -> None:
+    ex, log, clock = make(tmp_path)
+    ex.add_arm(arm("a", clock))
+    ex.add_arm(arm("b", clock))
+    ex.start()
+    until(lambda: ex.snapshot()["now"] > 10)
+    status = ex.snapshot()["status"]
+    pending = [t for t in ("pick_12", "place_12") if status[t] == "pending"]
+    g = _more(SORT12, 1)
+    for t in pending:
+        del g.tasks[t]
+    ex.update_graph(g)
+    assert ex.wait(10)
+    final = ex.snapshot()["status"]
+    assert final["pick_13"] == final["place_13"] == "done"
+    for t in pending:
+        assert t not in final
+    upd = [e for e in kinds(log, "replan") if e.data.get("reason") == "graph_updated"]
+    assert upd and "pick_13" in upd[0].data["added"]
+
+
+def test_update_graph_after_finish_runs_again(tmp_path: Path) -> None:
+    ex, log, clock = make(tmp_path)
+    ex.add_arm(arm("a", clock))
+    ex.add_arm(arm("b", clock))
+    ex.start()
+    assert ex.wait(10)
+    ex.update_graph(_more(SORT12, 1))
+    until(lambda: ex.snapshot()["status"].get("place_13") == "done")
+    assert ex.wait(5)
+
+
+def test_whatif_uses_spare_catalog_arms(tmp_path: Path) -> None:
+    g = TaskGraph(
+        "reach",
+        {
+            "near": Task("near", "pick_place", allowed_arms=("a", "z"), duration=2.0),
+            "far": Task("far", "pick_place", allowed_arms=("z",), duration=3.0),
+        },
+    )
+    ex, log, clock = make(tmp_path, graph=g, catalog=["a", "z"])
+    ex.add_arm(arm("a", clock))
+    ex.estimate()
+    w = kinds(log, "replan")[-1].data["whatif"]
+    assert "2" in w  # with the spare arm z the far step becomes possible
+    assert "1" not in w  # arm a alone cannot finish (far is blocked)
+
+
+def test_camera_checks_only_place_steps_in_demo_setting(tmp_path: Path) -> None:
+    from hfteama.executor import PLACE_SKILLS
+
+    checked: list[str] = []
+
+    def verifier(task, result) -> bool:
+        checked.append(task.skill)
+        return True
+
+    ex, _, clock = make(tmp_path, verifier=verifier, verify_skills=PLACE_SKILLS)
+    ex.add_arm(arm("a", clock))
+    ex.add_arm(arm("b", clock))
+    ex.start()
+    assert ex.wait(10)
+    assert checked and set(checked) == {"place"} and len(checked) == 12

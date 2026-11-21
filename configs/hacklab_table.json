@@ -1,0 +1,12 @@
+{
+  "note": "The hacklab table (21 Nov). Table frame = ArUco marker 0 (bottom-left in the top camera): origin at its centre, x towards marker 3 (right), y towards marker 2 (towards the arms), z up; metres. Camera pose comes from the markers each run (perception/markers.py). Arm bases: read off the top-camera image, spacing set to 0.40 m centre to centre (measured gap 30 +-2 cm between the bases, SO-101 base ~10 cm wide); absolute position +-3-5 cm until measured from marker 2. Both arms face the camera (-y). Bowl: centre of its bottom, from the image.",
+  "markers": {"dictionary": "DICT_4X4_50", "size_m": 0.07, "reference_id": 0},
+  "camera": {"name": "HD Pro Webcam C920", "size": [1920, 1080]},
+  "arms": [
+    {"id": "rakesh_follower", "description": "black arm, left in the top camera", "base_pose_m": [0.089, 0.420, 0.0], "base_yaw_deg": -90.0, "reach": "so101"},
+    {"id": "vato_follower", "description": "green arm, right in the top camera", "base_pose_m": [0.488, 0.440, 0.0], "base_yaw_deg": -90.0, "reach": "so101"}
+  ],
+  "bins": [
+    {"id": "bowl", "label": "the round paper bowl in the middle of the table", "xyz": [0.317, 0.126, 0.10], "radius_m": 0.12, "shared": true}
+  ]
+}
