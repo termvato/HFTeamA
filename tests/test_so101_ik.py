@@ -93,3 +93,22 @@ def test_upright_stands_the_arm_up_keeping_pan_and_roll() -> None:
     tip = chain_points(q)[-1]
     assert tip[2] > 0.45  # about 52 cm above the base
     assert np.hypot(tip[0], tip[1]) < 0.05  # straight above it
+
+
+def test_roll_window_keeps_the_moving_jaw_on_one_side() -> None:
+    from hfteama.arms.kinematics import ArmFrame
+    from hfteama.arms.so101_ik import roll_window
+
+    frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, "wrist_roll": 90.0})
+    lo, hi = roll_window((LOWER, UPPER), frame, 0.0, 90.0)
+    # LeRobot -90..90 = model -180..0 with the 90 deg offset (and inside the model's limits)
+    assert np.degrees(lo[4]) == pytest.approx(max(-180.0, np.degrees(LOWER[4])))
+    assert np.degrees(hi[4]) == pytest.approx(0.0)
+    headings = []
+    for yaw in np.radians(np.arange(0, 360, 15)):
+        sol = solve_ik((0.2, 0.05, 0.03), yaw=yaw, limits=(lo, hi))
+        assert lo[4] - 1e-9 <= sol.q[4] <= hi[4] + 1e-9
+        headings.append(jaw_yaw(fk(sol.q)))
+    # every jaw heading the IK picks lies in one half-turn: the jaws never swap sides
+    h = np.unwrap(np.sort(np.array(headings)))
+    assert np.ptp(h) <= np.pi + np.radians(2)

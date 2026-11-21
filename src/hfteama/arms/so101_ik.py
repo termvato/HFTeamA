@@ -78,6 +78,22 @@ def calibrated_limits(calibration: dict, frame=None, margin_deg: float = 3.0):
     return lo, hi
 
 
+def roll_window(limits, frame=None, center_deg: float = 0.0, half_deg: float = 90.0):
+    """`limits` with wrist_roll kept within center +- half_deg (LeRobot degrees).
+
+    The jaws are not symmetric (one fixed, one moving). A jaw line can be reached at two
+    wrist rolls 180 deg apart, which swaps the jaws' sides; within a 180 deg window there is
+    only one, so the moving jaw is always on the same side."""
+    from hfteama.arms.kinematics import ArmFrame
+
+    frame = frame or ArmFrame()
+    lo, hi = (np.array(v, float).copy() for v in limits)
+    off, sign = frame.offsets_deg["wrist_roll"], frame.signs["wrist_roll"]
+    ends = [np.radians((d - off) / sign) for d in (center_deg - half_deg, center_deg + half_deg)]
+    lo[4], hi[4] = max(lo[4], min(ends)), min(hi[4], max(ends))
+    return lo, hi
+
+
 def _rotz(a: float) -> np.ndarray:
     T = np.eye(4)
     c, s = np.cos(a), np.sin(a)
@@ -267,7 +283,7 @@ def _set_yaw(q, yaw, lo=LOWER, hi=UPPER):
         for cand in (a, a + 2 * np.pi, a - 2 * np.pi):
             if lo[4] <= cand <= hi[4] and (best is None or abs(cand) < abs(best)):
                 best = cand
-    q[4] = best if best is not None else 0.0
+    q[4] = best if best is not None else float(np.clip(0.0, lo[4], hi[4]))
     return q
 
 

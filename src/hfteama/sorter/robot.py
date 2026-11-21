@@ -18,7 +18,7 @@ import time
 import numpy as np
 
 from hfteama.arms.kinematics import BODY, ArmFrame
-from hfteama.arms.so101_ik import calibrated_limits, fk, solve_ik
+from hfteama.arms.so101_ik import calibrated_limits, fk, roll_window, solve_ik
 
 
 class ArmDriver:
@@ -33,7 +33,12 @@ class ArmDriver:
             offsets_deg={**ArmFrame().offsets_deg, **arm_cfg.get("offsets_deg", {})}
         )
         cal_file = self.arm.calibration_dir / f"{self.arm.id}.json"
-        self.limits = calibrated_limits(json.loads(cal_file.read_text()), self.frame)
+        self.limits = roll_window(
+            calibrated_limits(json.loads(cal_file.read_text()), self.frame),
+            self.frame,
+            arm_cfg.get("wrist_roll_center_deg", 0.0),
+            motion.get("wrist_roll_half_range_deg", 90.0),
+        )
         self.robot = None
         self.home: dict | None = None
         self.gripper_target = motion.get("gripper_open", 60.0)

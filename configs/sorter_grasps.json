@@ -131,7 +131,8 @@
     -0.015,
     90.0,
     -0.015
-   ]
+   ],
+   "excluded": "fits no other grasp (5.7 cm off): probably not really held"
   },
   {
    "time": "2026-11-21 20:40:41",
@@ -150,7 +151,8 @@
     -0.015,
     90.0,
     -0.015
-   ]
+   ],
+   "excluded": "fits no other grasp (5.7 cm off): probably not really held"
   },
   {
    "time": "2026-11-21 20:43:24",
@@ -202,6 +204,44 @@
     0.1753
    ],
    "heading_deg": 10.0,
+   "placement": [
+    0.571,
+    -0.015,
+    90.0,
+    -0.015
+   ]
+  },
+  {
+   "time": "2026-11-21 20:53:47",
+   "camera": [
+    0.4815,
+    0.1905
+   ],
+   "piece_yaw_deg": 180.0,
+   "aim": [
+    0.4615,
+    0.1833
+   ],
+   "heading_deg": -0.0,
+   "placement": [
+    0.571,
+    -0.015,
+    90.0,
+    -0.015
+   ]
+  },
+  {
+   "time": "2026-11-21 20:54:36",
+   "camera": [
+    0.637,
+    0.1743
+   ],
+   "piece_yaw_deg": 172.1,
+   "aim": [
+    0.5899,
+    0.1938
+   ],
+   "heading_deg": 172.1,
    "placement": [
     0.571,
     -0.015,

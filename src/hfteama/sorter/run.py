@@ -85,7 +85,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
     import json
 
     from hfteama.arms.kinematics import ArmFrame
-    from hfteama.arms.so101_ik import calibrated_limits
+    from hfteama.arms.so101_ik import calibrated_limits, roll_window
     from hfteama.hardware.pairs import FOLLOWER_CALIBRATION_DIR, read_config
 
     pairs = read_config()["pairs"]
@@ -96,7 +96,12 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
         cal = FOLLOWER_CALIBRATION_DIR / f"{pairs[a['pair']]['follower']['id']}.json"
         if cal.exists():
             frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, **a.get("offsets_deg", {})})
-            limits = calibrated_limits(json.loads(cal.read_text()), frame)
+            limits = roll_window(
+                calibrated_limits(json.loads(cal.read_text()), frame),
+                frame,
+                a.get("wrist_roll_center_deg", 0.0),
+                cfg["motion"].get("wrist_roll_half_range_deg", 90.0),
+            )
         out[side] = ArmModel(
             side,
             Placement.from_config(a),
@@ -840,6 +845,10 @@ def cmd_fit_grasps(args) -> int:
     cfg = load_config(args.sorter_config)
     side = args.arm
     entries = json.loads(GRASPS_FILE.read_text()).get(side, []) if GRASPS_FILE.exists() else []
+    skipped = [e for e in entries if e.get("excluded")]
+    entries = [e for e in entries if not e.get("excluded")]
+    if skipped:
+        print(f"({len(skipped)} grasps marked excluded in {GRASPS_FILE.name})")
     if not entries:
         print(f"No grasps logged for {side}: grasp pieces with `hfteama sort jog {side}` (g).")
         return 1
