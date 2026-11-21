@@ -128,7 +128,7 @@ def test_dead_arm_work_flows_to_the_others(tmp_path: Path) -> None:
 
 
 def test_stuck_step_times_out_and_moves(tmp_path: Path) -> None:
-    ex, log, clock = make(tmp_path, timeout_factor=2.0)
+    ex, log, clock = make(tmp_path, timeout_guess=2.0)
     slow = arm("b", clock)
     slow.set_slow(10.0)
     ex.add_arm(arm("a", clock))
@@ -186,3 +186,19 @@ def test_estimate_before_go(tmp_path: Path) -> None:
     last = kinds(log, "replan")[-1].data
     assert last["reason"] == "estimate" and last["binding"] == "arms"
     assert float(last["whatif"]["1"]) > float(last["whatif"]["2"]) > float(last["whatif"]["3"])
+
+
+def test_timeout_is_3x_guess_then_1_5x_measured(tmp_path: Path) -> None:
+    ex, _, clock = make(tmp_path / "guess")
+    ex.add_arm(arm("a", clock))
+    with ex._lock:
+        ex._launch("pick_01", "a")
+    assert ex._runs["pick_01"].limit == pytest.approx(3.0 * 4.0)  # task file says 4 s
+
+    ex2, _, clock2 = make(tmp_path / "measured")
+    ex2.add_arm(arm("a", clock2))
+    for _ in range(3):
+        ex2.durations.record("a", "pick", 5.0)
+    with ex2._lock:
+        ex2._launch("pick_01", "a")
+    assert ex2._runs["pick_01"].limit == pytest.approx(1.5 * 5.0)
