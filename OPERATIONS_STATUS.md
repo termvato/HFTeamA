@@ -8,7 +8,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 17:55)
+## Now (Sat 21 Nov, 18:05)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
@@ -88,6 +88,57 @@ Update it when you start, finish or decide something. Notes for each other go un
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 18:27 (Vato): **RTX rehearsal bridge works (#33):** `view/joint_stream.py` streams each simulated
+  arm's joints over UDP; `python -m hfteama.demo --backend sim --isaac HOST:PORT` turns it on.
+  Checked: Isaac Sim (headless, 60 fps, 2.5 GB) followed Action's MuJoCo arms run by our executor
+  for 4179 arm-frames. Still open: the Isaac scene uses its own 3-arm layout (not the table
+  config) and does not show carried cubes. Seen in that run: with sort12 on 3 sim arms under our
+  executor, `pick_11` ended in `stall` on two arms in a row (2 steps done in 25 s); Action's own
+  harness completes 24/24, so the difference (which arm takes which block, or lock timing around
+  the shared bin) needs a look together with Vivek before a sim rehearsal is shown.
+
+- 18:24 (Vato): Three executor / planner changes on `orchestrator`:
+  1. **Lost part waits for a re-scan:** `Executor(rescan=fn)` where `fn() -> TaskGraph | None`
+     (camera -> re-scan -> resolved graph). After a failed place, or an arm lost while holding a
+     part, that object's pick and place are held until `fn` returns, then `update_graph` applies it.
+     Without the hook the old behaviour stays (retry at the old position). Aravind: this is where
+     `rescan(...)` + `resolve(...)` plugs in.
+  2. **Lower bound is tight for shared areas:** earliest start + total time + shortest work that
+     must follow. sort12 with 3+ arms: 54 s (was 48), equal to the best plan; assemble3: 41 s (was
+     31) and the limit is named correctly as the output tray, not "order".
+  3. **`method="auto"`** (demo default): CP-SAT when arms change or something fails (up to 40
+     pending steps, 1 s limit), HEFT for the frequent re-plans after each finished step.
+
+- 18:09 (Vato): **VLM -> reach -> executor -> IK validated in MuJoCo** on the hacklab layout, with
+  `orchestrator` + `action-arm-skills` merged locally (scripts in `scripts/validation/`; they need
+  Action's arm code). Results:
+  1. Interfaces fit with no glue code: `sort_steps` tasks (`pick_xyz` at z = 0.02, `place_xyz` =
+     bowl) run unchanged through `resolve` -> `Executor` -> `SkillWorker` -> IK. 4 of 5 objects
+     sorted by two arms; each alone sorts the 5th too. Bowl placement: IK error 0.4 mm, both arms.
+  2. **Reach is too generous (for Aravind):** `SO101_REACH` says 0 to 0.44 m; the pick skill's IK
+     (tool down, hover + grasp + 10 cm lift) solves only from about 0.14 m to 0.42 m from the pan
+     axis. On a 4 cm grid, 33 of 171 points the planner calls reachable fail in IK (36 of 173 for
+     the other arm); none the other way round. Proposed: `r_min=0.14, r_max=0.42`. I tried it:
+     `test_so101_reach_sector` and `test_vlm_plan_runs_on_executor_with_step_check` encode the old
+     numbers and need their points moved, so the change is left to you.
+  3. **Arms can block each other outside the bowl (likely, not confirmed by contact inspection):**
+     with both arms working, an object between them (0.30, 0.30) ended in `stall` twice, while
+     either arm alone sorts it. Only the bowl is a shared resource today. Proposed: `resolve` marks
+     every pick point both arms can reach as a shared resource (the overlap zone of the design doc).
+  4. **After a failed place the part is not where it was:** the executor re-queues the pick at the
+     old `pick_xyz`, which then fails. With the camera this needs a re-scan + `update_graph` before
+     the retry (Operations, mine).
+
+- 18:05 (Vato): **Demo runner built** (`python -m hfteama.demo`, `src/hfteama/demo.py`): executor +
+  plug-in detection + live screen; `--backend fake|sim|real` (sim and real load Action's
+  `SkillWorker` when that code is in the checkout); manual plug / remove / pull-cable controls on
+  the screen as the stage fallback. Checked first: nothing like it existed (Vivek's
+  `scripts/sim_demo.py` is a harness with its own mini-scheduler, no executor or screen).
+  **Hooks for Aravind:** `--planner module:function` must return a resolved `TaskGraph`
+  (camera -> calibration -> Qwen -> decompose -> `registry.resolve`); `--verifier module:function`
+  must return `StepChecker(...).as_verifier(grab)`. Re-scan can call `executor.update_graph`.
+  Docs updated: README (Run the demo), `docs/plan.md` (layout, state), `docs/README.md`.
 
 - 17:59 (Vato): **Plug-in detection built** (`src/hfteama/discovery.py`, extra `arms` = pyserial):
   `ArmWatcher(executor, followers_from_pairs("configs/teleop_pairs.json"), factory)` polls USB

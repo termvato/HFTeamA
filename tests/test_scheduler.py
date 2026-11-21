@@ -38,7 +38,9 @@ def test_solve_respects_lower_bound_and_names_limit(graph: TaskGraph) -> None:
         assert plan.makespan >= plan.lower_bound - 1e-6
         assert plan.binding
     assert solve(Problem(SORT12, arms(3))).binding == "resource:input_bin"
-    assert solve(Problem(ASSEMBLE3, arms(4))).binding == "order"
+    assemble = solve(Problem(ASSEMBLE3, arms(4)))
+    assert assemble.binding == "resource:output_tray"  # 26 s of ordered steps, then the tray
+    assert assemble.lower_bound == pytest.approx(41.0) == pytest.approx(assemble.makespan)
 
 
 def test_one_arm_is_sequential_and_more_arms_help() -> None:
