@@ -4,10 +4,10 @@ A 48-hour team should build a **classical scheduler wrapped in a thin LLM front 
 
 Throughout, "(inference, not checked)" marks reasoning that no source or local run backs. LeRobot facts were checked against a local clone of LeRobot 0.6.2 (commit `d3793b7`, 23 Oct 2026).
 
-## What Vato brings to the team (confirm on site)
-- **Arm:** one SO-101 follower with 12 V STS3215 servos, run at LeRobot's register settings (P 16, D 32), plus its 12 V supply and USB servo board. Leader arm: to confirm.
+## What Vato brings to the team
+- **Arm:** one SO-101 follower with 12 V STS3215 servos, run at LeRobot's register settings (P 16, D 32), plus its 12 V supply and USB servo board. No leader arm (teleop needs a teammate's leader).
 - **Compute:** a Linux laptop with an RTX 4070 Laptop GPU (8 GB), with LeRobot (0.6.x from source), MuJoCo 3.17 and Menagerie's SO-101 model installed; a MacBook (M4) for development.
-- **Cameras:** two Logitech C920 webcams (calibrated as a stereo pair at home; needs re-registration on a new table) and a ChArUco board, if packed.
+- **Cameras:** two Logitech C920 webcams (calibrated as a stereo pair at home; needs re-registration on a new table) and a ChArUco board.
 - **Safety tooling (private):** guarded real-arm runs with a slow stop (freeze, lower, torque off) instead of a hard torque cut, joint and table limits checked before any goal is sent, and a sim check of every motion before it runs on the real arm.
 - **Calibrated digital twin of this arm (private, Vato Labs):** it predicts how the real arm tracks commanded motions, so it can supply per-skill duration estimates for the scheduler as a black box. The fitting method stays private.
 - **Experience:** system identification of the STS3215 servo loop, real-arm policy-transfer experiments, MuJoCo multi-arm scenes.
