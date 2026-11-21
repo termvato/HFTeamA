@@ -3,7 +3,7 @@
 Finish a batch of work faster by plugging in more SO-101 arms. When an arm is added, removed or
 fails, the orchestrator re-splits the remaining work live and shows the new predicted finish time
 and what limits further speed-up. Task-agnostic: any job that splits into steps, order and shared
-zones (see `tasks/README.md`). Plan and teams: `docs/plan.md`. Visual map: `docs/README.md`.
+zones (see `tasks/README.md`). Plan and teams: `docs/plan.md`. Who is doing what right now: [`STATUS.md`](STATUS.md). Visual map: `docs/README.md`.
 
 ## How it works
 
