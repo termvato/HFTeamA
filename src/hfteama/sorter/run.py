@@ -457,6 +457,7 @@ JOG_HELP = """Commands (directions as seen from BEHIND the arm, looking where it
   o / c   open / close the gripper                 g       grasp here: down to grasp_z, close, up
   g N     grasp going down exactly N cm             z N     the tip is really N cm above the table
   box     over the box and open (drop)             scan    home, look again, renumber
+  log     the last grasp DID hold the piece (if `g` said empty): log it for fit-grasps
   ok      the tip is right over the piece's centre: record camera-vs-arm offset
   h       help                                     q       finish (fit, save) and go home"""
 
@@ -477,6 +478,7 @@ class Jog:
         self.q = drv.q()
         self.pairs_arm, self.pairs_table = [], []
         self.z_changed = False
+        self.last_grasp = None  # (piece, aim, q) of the last `g` not logged yet, for `log`
 
     # --- vision -------------------------------------------------------------------------------
 
@@ -627,8 +629,14 @@ class Jog:
             closed = self.drv.gripper(self.mc.get("gripper_closed", 2.0))
             held = closed > self.mc.get("gripper_closed", 2.0) + self.mc.get("grasp_min_open", 4.0)
             print(f"  gripper closed to {closed:.1f}: {'HOLDING something' if held else 'empty'}")
-            if held and self.piece is not None:
-                self._log_grasp()
+            self.last_grasp = (
+                None if self.piece is None else (self.piece, self.target.copy(), self.q.copy())
+            )
+            if held and self.last_grasp:
+                self._log_grasp(*self.last_grasp)
+                self.last_grasp = None
+            elif self.last_grasp:
+                print("  (if it did hold the piece, type `log` to log this grasp)")
             self.q = self.drv.move_line(self.drv.q(), up, self.yaw, steps=4)
         except RuntimeError as e:
             print(f"  {e}")
@@ -670,22 +678,22 @@ class Jog:
         self.z_changed = True
         print(f"  z_offset now {pl.z * 100:+.1f} cm (saved with q); aim height {real * 100:.1f} cm")
 
-    def _log_grasp(self) -> None:
+    def _log_grasp(self, piece: int, target, q) -> None:
         """Save where the tool really had to be for this piece (data for fit-grasps)."""
         import time as _time
 
         from hfteama.arms.so101_ik import jaw_yaw
         from hfteama.sorter.geometry import log_grasp
 
-        p, pl = self.scene.pieces[self.piece], self.arm.placement
-        heading = jaw_yaw(fk(self.q)) + pl.yaw
+        p, pl = self.scene.pieces[piece], self.arm.placement
+        heading = jaw_yaw(fk(q)) + pl.yaw
         n = log_grasp(
             self.side,
             {
                 "time": _time.strftime("%Y-%m-%d %H:%M:%S"),
                 "camera": [round(p.x, 4), round(p.y, 4)],
                 "piece_yaw_deg": round(float(np.degrees(p.yaw)), 1),
-                "aim": [round(float(self.target[0]), 4), round(float(self.target[1]), 4)],
+                "aim": [round(float(target[0]), 4), round(float(target[1]), 4)],
                 "heading_deg": round(float(np.degrees(heading)), 1),
                 "placement": [pl.x, pl.y, round(float(np.degrees(pl.yaw)), 2), pl.z],
             },
@@ -720,6 +728,12 @@ class Jog:
             self.record()
         elif cmd == "box":
             self.drop()
+        elif cmd == "log":
+            if self.last_grasp is None:
+                print("  nothing to log: `g` over a piece first")
+            else:
+                self._log_grasp(*self.last_grasp)
+                self.last_grasp = None
         elif cmd == "scan":
             self.scan()
         elif key == "q":

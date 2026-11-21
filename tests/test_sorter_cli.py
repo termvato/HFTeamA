@@ -122,3 +122,72 @@ def test_gripper_ramps_under_the_relative_cap_and_holds_where_it_stopped() -> No
     end = drv.gripper(2.0, wait=3.0)
     assert end == pytest.approx(20.0, abs=0.5)
     assert drv.gripper_target == pytest.approx(12.0, abs=0.5)  # 20 squeezed by 8, not 2
+
+
+def test_jog_log_saves_a_grasp_the_gripper_reading_missed(monkeypatch, capsys, tmp_path) -> None:
+    """`g` reads an empty gripper (a thin piece); the operator says it held: `log` saves it,
+    even after `box`."""
+    import json
+
+    import numpy as np
+
+    import hfteama.sorter.geometry as geometry
+    import hfteama.sorter.robot as robot
+    import hfteama.sorter.run as run
+    from hfteama.arms.so101_ik import fk
+    from hfteama.vision.detect import Box, Piece, Scene
+
+    class FakeEye:
+        def __init__(self, cfg, image=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def look(self, arm_chains=()):
+            p = Piece(x=0.50, y=0.15, length=0.06, width=0.015, yaw=0.0, area_cm2=8.0)
+            return None, None, Scene(box=Box(0.5, 0.25, 0.09), pieces=[p])
+
+    class FakeDriver:
+        def __init__(self, side, arm_cfg, motion, pairs_config=None):
+            self.limits = None
+            self._q = np.array([0.0, -1.5, 1.5, 1.0, 0.0])
+
+        def connect(self):
+            return self
+
+        def disconnect(self):
+            pass
+
+        def q(self):
+            return self._q
+
+        def tcp(self):
+            return fk(self._q)[:3, 3]
+
+        def move_q(self, q, speed=None):
+            self._q = np.asarray(q, float)
+
+        def move_line(self, q_from, target_to, yaw, steps=8, speed=None):
+            return self._q
+
+        def gripper(self, value, wait=None):
+            return 2.5  # closes almost fully: reads as empty
+
+        def go_home(self):
+            pass
+
+    log = tmp_path / "grasps.json"
+    monkeypatch.setattr(geometry, "GRASPS_FILE", log)
+    monkeypatch.setattr(run, "Eye", FakeEye)
+    monkeypatch.setattr(robot, "ArmDriver", FakeDriver)
+    answers = iter(["1", "g", "box", "log", "q"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert main(["sort", "jog", "rakesh", "--no-viewer"]) == 0
+    out = capsys.readouterr().out
+    assert "empty" in out and "type `log`" in out
+    entries = json.loads(log.read_text())["rakesh"]
+    assert len(entries) == 1 and entries[0]["camera"] == [0.5, 0.15]
