@@ -27,6 +27,14 @@ class ArmModel:
     side: str
     placement: Placement
     limits: tuple[np.ndarray, np.ndarray] | None = None  # rad; None = model limits
+    # grasp aim shift in the arm frame (m): (forward, left) as seen from behind the arm
+    aim_offset: tuple[float, float] = (0.0, 0.0)
+
+    def aim(self, x: float, y: float) -> tuple[float, float]:
+        """Table xy to aim the tool at to grasp a piece seen at (x, y)."""
+        a = self.placement.to_arm([x, y]) + np.asarray(self.aim_offset)
+        t = self.placement.to_table(a)
+        return float(t[0]), float(t[1])
 
 
 @dataclass
@@ -51,9 +59,11 @@ class Plan:
 
 def plan_pick(arm: ArmModel, piece: Piece, mc: dict, pc: dict) -> PickPlan | None:
     max_tilt = np.radians(mc.get("max_tilt_deg", 30.0))
-    g = arm.placement.to_arm([piece.x, piece.y, pc.get("grasp_z", 0.015)])
+    ax, ay = arm.aim(piece.x, piece.y)
+    g = arm.placement.to_arm([ax, ay, pc.get("grasp_z", 0.005)])
+    a = arm.placement.to_arm([ax, ay, pc.get("approach_z", 0.05)])
     yaw = arm.placement.yaw_to_arm(piece.yaw)
-    above = solve_ik([g[0], g[1], pc.get("approach_z", 0.06)], yaw=yaw, limits=arm.limits)
+    above = solve_ik(a, yaw=yaw, limits=arm.limits)
     if not above.ok or above.tilt > max_tilt:
         return None
     grasp = solve_ik(g, yaw=yaw, seed=above.q, limits=arm.limits)

@@ -97,7 +97,9 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
         if cal.exists():
             frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, **a.get("offsets_deg", {})})
             limits = calibrated_limits(json.loads(cal.read_text()), frame)
-        out[side] = ArmModel(side, Placement.from_config(a), limits)
+        out[side] = ArmModel(
+            side, Placement.from_config(a), limits, tuple(a.get("aim_offset", (0.0, 0.0)))
+        )
     return out
 
 
@@ -535,7 +537,8 @@ class Jog:
             print("  no such piece (scan to renumber)")
             return
         p = self.scene.pieces[i]
-        if self.move([p.x, p.y, self.z], self.arm.placement.yaw_to_arm(p.yaw)):
+        ax, ay = self.arm.aim(p.x, p.y)
+        if self.move([ax, ay, self.z], self.arm.placement.yaw_to_arm(p.yaw)):
             self.piece = i
             print(
                 f"  over piece {i + 1}: camera says ({p.x:.3f}, {p.y:.3f}),"
@@ -633,12 +636,15 @@ class Jog:
             print("  go over a piece first")
             return
         p = self.scene.pieces[self.piece]
+        # where the tip should have been: the camera's point plus the arm's aim offset (so
+        # the fit corrects the placement only, not the aim offset a second time)
+        want = np.array(self.arm.aim(p.x, p.y))
         tip = self.drv.tcp()
-        off = (self.arm.placement.to_table(tip)[:2] - [p.x, p.y]) * 100
+        off = (self.arm.placement.to_table(tip)[:2] - want) * 100
         self.pairs_arm.append(tip[:2])
-        self.pairs_table.append([p.x, p.y])
+        self.pairs_table.append(want)
         print(
-            f"  recorded: real = camera + ({off[0]:+.1f}, {off[1]:+.1f}) cm"
+            f"  recorded: real = planned aim + ({off[0]:+.1f}, {off[1]:+.1f}) cm"
             f" ({len(self.pairs_arm)} points)"
         )
 

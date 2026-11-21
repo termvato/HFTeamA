@@ -160,14 +160,33 @@ class ArmDriver:
         return q
 
     def gripper(self, value: float, wait: float | None = None) -> float:
-        """Set the gripper (LeRobot 0 closed .. 100 open); return where it ended up."""
-        self.gripper_target = float(value)
+        """Move the gripper (LeRobot 0 closed .. 100 open) and wait until it gets there or
+        stops on an object; the arm holds still meanwhile. Returns where the gripper ended up.
+
+        Steps stay under max_relative_target, else LeRobot clips each command and the gripper
+        would only finish moving during the next arm motion."""
+        rate = self.motion.get("rate_hz", 50)
+        speed = self.motion.get("gripper_speed", 150.0)  # gripper units per second
+        cap = self.motion.get("max_relative_target", 10.0) * 0.9
         now = self.read()
-        self.robot.send_action(
-            {**{f"{j}.pos": now[f"{j}.pos"] for j in BODY}, "gripper.pos": value}
-        )
-        time.sleep(wait if wait is not None else self.motion.get("gripper_wait_s", 0.6))
-        return self.read()["gripper.pos"]
+        hold = {f"{j}.pos": now[f"{j}.pos"] for j in BODY}
+        g0 = now["gripper.pos"]
+        n = max(1, int(np.ceil(abs(value - g0) / min(speed / rate, cap))))
+        for i in range(1, n + 1):
+            self.robot.send_action({**hold, "gripper.pos": g0 + (value - g0) * i / n})
+            time.sleep(1 / rate)
+        # wait until it stops moving (reached, or blocked by the piece)
+        deadline = time.perf_counter() + (wait if wait is not None else 1.5)
+        last, still = self.read()["gripper.pos"], 0
+        while time.perf_counter() < deadline and still < 3:
+            time.sleep(0.05)
+            g = self.read()["gripper.pos"]
+            still = still + 1 if abs(g - last) < 0.3 else 0
+            last = g
+        # hold where it stopped, squeezing a little (within max_relative_target): the arm's
+        # next moves resend this, and a far target would be clipped (and warned) every step
+        self.gripper_target = float(last + np.clip(value - last, -cap, cap))
+        return last
 
     def go_home(self) -> None:
         self.move_deg(self.home)

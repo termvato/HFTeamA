@@ -70,8 +70,8 @@ def calibrated_limits(calibration: dict, frame=None, margin_deg: float = 3.0):
     lo, hi = LOWER.copy(), UPPER.copy()
     for k, j in enumerate(BODY):
         c = calibration.get(j)
-        if not c or j == "wrist_roll":
-            continue  # wrist_roll turns fully; keep the model's limits
+        if not c:
+            continue
         half = (c["range_max"] - c["range_min"]) / 2 * 360 / 4095 - margin_deg
         ends = [np.radians((d - frame.offsets_deg[j]) / frame.signs[j]) for d in (-half, half)]
         lo[k], hi[k] = min(ends), max(ends)

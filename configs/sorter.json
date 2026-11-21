@@ -53,10 +53,11 @@
       "min_area_cm2": 15.0,
       "grow": 0.02
     },
-    "grasp_z": 0.005,
-    "approach_z": 0.06
+    "grasp_z": 0.0,
+    "approach_z": 0.05
   },
   "arms_note": "Arms are named after their pair. Seen from BEHIND the arms (facing the camera): rakesh (black) is on the right, hacklab (green) on the left. Seen from the camera it is the other way round. base = base_link origin in the table frame.",
+  "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m).",
   "arms": {
     "rakesh": {
       "pair": "rakesh",
@@ -64,6 +65,8 @@
       "base": [0.163, 0.37],
       "yaw_deg": -90.0,
       "z_offset": -0.015,
+      "offsets_deg": {"wrist_roll": 90.0},
+      "aim_offset": [0.0, 0.025],
       "mask_radius": 0.12
     },
     "hacklab": {
@@ -82,6 +85,7 @@
     "gripper_open": 60.0,
     "gripper_closed": 2.0,
     "gripper_wait_s": 0.6,
+    "gripper_speed": 150.0,
     "grasp_min_open": 4.0,
     "max_relative_target": 10.0,
     "home_note": "Home (camera-clear) pose = the pose the arm has when the sorter connects: leave each arm folded at rest before starting.",

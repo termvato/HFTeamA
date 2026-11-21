@@ -79,6 +79,9 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
         def move_q(self, q, speed=None):
             self._q = np.asarray(q, float)
 
+        def gripper(self, value, wait=None):
+            return value
+
         def go_home(self):
             pass
 
@@ -89,5 +92,33 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
     assert main(["sort", "jog", "rakesh", "--step", "10", "--no-viewer"]) == 0
     out = capsys.readouterr().out
     # rakesh faces the camera: forward = table -y, its left = table +x
-    assert "recorded: real = camera + (+1.0, -2.0) cm" in out
+    assert "recorded: real = planned aim + (+1.0, -2.0) cm" in out
     assert "placement from 1 points" in out
+
+
+def test_gripper_ramps_under_the_relative_cap_and_holds_where_it_stopped() -> None:
+    import hfteama.sorter.robot as robot
+
+    class FakeRobot:
+        """Gripper follows commands but stops at 20 (a piece in the jaws)."""
+
+        def __init__(self):
+            self.g, self.sent = 60.0, []
+
+        def get_observation(self):
+            obs = {f"{j}.pos": 0.0 for j in robot.BODY}
+            obs["gripper.pos"] = self.g
+            return obs
+
+        def send_action(self, act):
+            self.sent.append(act["gripper.pos"])
+            self.g = max(20.0, act["gripper.pos"])
+
+    drv = robot.ArmDriver.__new__(robot.ArmDriver)
+    drv.motion = {"max_relative_target": 10.0, "rate_hz": 1000, "gripper_speed": 1e6}
+    drv.robot = FakeRobot()
+    end = drv.gripper(2.0, wait=0.3)
+    assert end == 20.0
+    steps = [abs(b - a) for a, b in zip([60.0, *drv.robot.sent], drv.robot.sent, strict=False)]
+    assert max(steps) <= 9.0 + 1e-9
+    assert drv.gripper_target == 11.0  # 20 squeezed by 9 (0.9 x the cap), not 2
