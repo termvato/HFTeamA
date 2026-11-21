@@ -17,7 +17,8 @@ Runs a plan as a partial order and re-plans the remaining work whenever somethin
   `timeout_measured` x the arm's measured 80th-percentile time once it has one (default 1.5x).
 - Removing an arm is a slow stop: it finishes its step (and places a held part), then parks.
 - Step check: an optional `verifier(task, result)` (e.g. the VLM looking at the camera) confirms
-  each successful step before it counts as done.
+  a successful step before it counts as done; `verify_skills=PLACE_SKILLS` limits it to placing
+  steps (the demo setting).
 
 Every plan, start, end, arm change and re-plan goes to the event log; the screen reads only that.
 """
@@ -42,6 +43,9 @@ from hfteama.scheduler.solve import retime, solve, whatif
 from hfteama.taskgraph import Task, TaskGraph
 
 Verifier = Callable[[Task, Result], "bool | tuple[bool, str]"]
+
+
+PLACE_SKILLS = frozenset({"place", "pick_place"})  # steps the demo's camera check confirms
 
 
 class TaskState(str, Enum):
@@ -79,6 +83,7 @@ class Executor:
         max_retries: int = 2,
         heartbeat_timeout: float = 1.5,
         verifier: Verifier | None = None,
+        verify_skills: frozenset[str] | None = None,
         durations: DurationModel | None = None,
         whatif_counts: tuple[int, ...] = (1, 2, 3, 4),
         catalog: list[str] | None = None,  # every known arm id (for the what-if row)
@@ -96,6 +101,9 @@ class Executor:
         self.max_retries = max_retries
         self.heartbeat_timeout = heartbeat_timeout
         self.verifier = verifier
+        # Which skills the camera confirms; None = every step. The demo passes PLACE_SKILLS
+        # (decided 21 Nov: only placing steps; a failed pick shows up as a grasp failure).
+        self.verify_skills = verify_skills
         self.durations = durations or DurationModel()
         self.whatif_counts = whatif_counts
         self.catalog = list(catalog or [])
@@ -415,7 +423,9 @@ class Executor:
         )
         if outcome is Outcome.OK:
             self.durations.record(arm, task.skill, res.duration)
-            if self.verifier is None:
+            if self.verifier is None or (
+                self.verify_skills is not None and task.skill not in self.verify_skills
+            ):
                 self._done(tid, arm)
                 self._replan("task_done", force=False)
             else:
