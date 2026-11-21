@@ -8,7 +8,7 @@ Arm frame (base_link): x forward (away from the base, the way the arm points at 
 y to the arm's left, z up, origin on the underside of the base, i.e. on the table.
 
 The tool point (TCP) is the URDF's gripper_frame_link: between the finger tips. Its z axis is
-the approach direction (from the wrist towards the tips).
+the approach direction (from the wrist towards the tips); the jaws close along its x axis.
 
 Usage:
     from hfteama.arms.so101_ik import fk, solve_ik
@@ -98,8 +98,9 @@ def tcp_position(q) -> np.ndarray:
 
 
 def jaw_yaw(T: np.ndarray) -> float:
-    """Heading (rad, in the arm's xy plane) of the TCP x axis: the line the jaws close along
-    is perpendicular to it. Meaningful when the gripper points down."""
+    """Heading (rad, in the arm's xy plane) of the TCP x axis, which is the direction the
+    jaws close along (the moving jaw's tip moves along TCP x). Meaningful when the gripper
+    points down."""
     return float(np.arctan2(T[1, 0], T[0, 0]))
 
 

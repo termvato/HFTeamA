@@ -35,7 +35,7 @@
   },
   "box": {
     "diameter": 0.18,
-    "height": 0.08,
+    "height": 0.052,
     "drop_above": 0.04
   },
   "pieces": {
