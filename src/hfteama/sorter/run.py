@@ -466,7 +466,7 @@ JOG_HELP = """Commands (directions as seen from BEHIND the arm, looking where it
   f / b   forward (away from the arm) / back      l / r   left / right
   u / d   up / down                                add a number for several steps: f3
   s N     step size in mm (now {step:.0f})          y N     turn the jaws by N deg
-  o / c   open / close the gripper                 g       grasp here: down to grasp_z, close, up
+  o [N] / c  open (to N) / close the gripper                g       grasp here: down to grasp_z, close, up
   g N     grasp going down exactly N cm             z N     the tip is really N cm above the table
   box     over the box and open (drop)             scan    home, look again, renumber
   log     the last grasp DID hold the piece (if `g` said empty): log it for fit-grasps
@@ -791,8 +791,12 @@ class Jog:
                 self.target, self.yaw + np.radians(float(arg))
             ):
                 self._where()
-        elif cmd == "o":
-            self.drv.gripper(self.mc.get("gripper_open", 60.0))
+        elif key == "o" and (not arg or _is_number(arg)):
+            want = float(arg) if arg else self.mc.get("gripper_open", 60.0)
+            got = self.drv.gripper(want)
+            print(
+                f"  gripper asked {want:.0f}, reached {got:.1f} (0 closed .. 100 = calibrated max)"
+            )
         elif cmd == "c":
             print(f"  gripper at {self.drv.gripper(self.mc.get('gripper_closed', 2.0)):.1f}")
         elif cmd == "g":
