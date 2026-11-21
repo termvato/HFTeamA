@@ -7,7 +7,7 @@ hold a part (a `same_arm_as` partner finished on them) must place it before anyt
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from hfteama.scheduler.plan import Assignment
 from hfteama.taskgraph import Task, TaskGraph
@@ -28,6 +28,7 @@ class Problem:
     restrict: dict[str, frozenset[str]] = field(default_factory=dict)  # arm -> only these tasks
     capabilities: dict[str, frozenset[str]] | None = None
     estimate: Callable[[Task, str], float] | None = None  # duration model; default task's own
+    dropped: frozenset[str] = frozenset()  # failed for good: never planned again
 
     def task(self, tid: str) -> Task:
         return self.graph.tasks[tid]
@@ -79,7 +80,7 @@ def blocked_tasks(p: Problem) -> set[str]:
         arms = p.capable_arms(tid)
         if pin is not None:
             arms = [a for a in arms if a == pin]
-        if not arms or any(d in blocked for d in t.deps):
+        if tid in p.dropped or not arms or any(d in blocked for d in t.deps):
             blocked.add(tid)
         elif t.same_arm_as and t.same_arm_as in blocked:
             blocked.add(tid)
@@ -92,19 +93,7 @@ def unblocked_by(p: Problem, new_arm: str, capabilities: frozenset[str] | None =
     caps = dict(p.capabilities) if p.capabilities else None
     if caps is not None and capabilities is not None:
         caps[new_arm] = capabilities
-    after = blocked_tasks(
-        Problem(
-            p.graph,
-            [*p.arms, new_arm],
-            p.now,
-            p.done,
-            p.running,
-            p.held,
-            p.restrict,
-            caps,
-            p.estimate,
-        )
-    )
+    after = blocked_tasks(replace(p, arms=[*p.arms, new_arm], capabilities=caps))
     return before - after
 
 

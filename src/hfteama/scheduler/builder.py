@@ -109,7 +109,9 @@ class Builder:
             if f and f not in self.p.done and f not in self.p.running and f not in self.blocked:
                 firsts[a.arm_id] = f
         for arm, f in firsts.items():
-            if f in self.placed or f in self.blocked or arm not in self.p.arms:
+            if f in self.placed or f in self.blocked or f in self.p.running or f in self.p.done:
+                continue
+            if arm not in self.p.arms:
                 continue
             ready = max(self.ready(f), self.arm_free(arm))
             res = [_res(r) for r in self.p.task(f).resources]

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 
 from hfteama.scheduler.bound import lower_bound
 from hfteama.scheduler.builder import Builder
@@ -89,17 +90,8 @@ def whatif(p: Problem, counts: tuple[int, ...] = (1, 2, 3, 4)) -> dict[int, floa
     for n in counts:
         arms = order[:n] + [f"virtual-{k}" for k in range(1, n - len(order) + 1)]
         keep_running = {t: a for t, a in p.running.items() if a.arm_id in arms}
-        sub = Problem(
-            p.graph,
-            arms,
-            p.now,
-            p.done,
-            keep_running,
-            {a: f for a, f in p.held.items() if a in arms},
-            p.restrict,
-            p.capabilities,
-            p.estimate,
-        )
+        held = {a: f for a, f in p.held.items() if a in arms}
+        sub = replace(p, arms=arms, running=keep_running, held=held)
         try:
             plan = heft(sub)
         except PlanError:
