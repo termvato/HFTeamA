@@ -158,7 +158,7 @@
       ],
       "jaw_ref_width": 0.025,
       "jaw_width_gain": 0.5,
-      "note": "Start values: wrist_roll +90 (model convention, as rakesh) and the jaw offsets (gripper geometry, as rakesh). Height, aim offset, aim_gain and working range still to measure with `sort jog hacklab`.",
+      "note": "wrist_roll +90 and jaw offsets as rakesh (gripper geometry). aim_offset from its first 4 grasps (fixed part only); aim_gain still to fit (8+ grasps).",
       "x_range": [
         -1.0,
         0.367
@@ -169,7 +169,11 @@
         "elbow_flex.pos": 96.0,
         "wrist_flex.pos": 29.6,
         "wrist_roll.pos": -91.4
-      }
+      },
+      "aim_offset": [
+        -0.005,
+        -0.01
+      ]
     }
   },
   "motion": {
