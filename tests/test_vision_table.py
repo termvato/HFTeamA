@@ -160,3 +160,19 @@ def test_touching_blobs_are_split() -> None:
     single = np.zeros((200, 300), np.uint8)
     cv2.rectangle(single, (50, 80), (250, 110), 255, -1)
     assert len(_split_touching(single)) == 1
+
+
+def test_dark_and_green_regions_are_ignored_but_small_spots_kept() -> None:
+    cv2 = pytest.importorskip("cv2")
+    from hfteama.vision.detect import _ignored
+
+    top = np.full((300, 400, 3), (60, 140, 210), np.uint8)  # BGR wood
+    cv2.rectangle(top, (10, 10), (110, 110), (20, 20, 20), -1)  # black arm, 100 cm2
+    cv2.rectangle(top, (250, 10), (350, 110), (150, 210, 140), -1)  # mint-green arm
+    cv2.circle(top, (200, 250), 6, (25, 25, 25), -1)  # dark cap of a piece, ~1 cm2
+    cv2.circle(top, (100, 250), 15, (150, 60, 20), -1)  # blue lip balm
+    lab = cv2.cvtColor(top, cv2.COLOR_BGR2LAB).astype(np.float32)
+    m = _ignored(top, lab, {"grow": 0.01})
+    assert m[60, 60] and m[60, 300]
+    assert m[60, 118]  # grown by 1 cm past the arm's edge
+    assert not m[250, 200] and not m[250, 100] and not m[200, 200]

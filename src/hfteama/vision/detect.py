@@ -163,8 +163,12 @@ def find_pieces(
     min_area_cm2: float = 1.0,
     max_area_cm2: float = 80.0,
     grasp_z: float = 0.015,
+    ignore: dict | None = None,
 ):
-    """Pieces inside `extent` (x0, x1, y0, y1). Returns (pieces, mask, top_down image)."""
+    """Pieces inside `extent` (x0, x1, y0, y1). Returns (pieces, mask, top_down image).
+
+    ignore: colours of things that are never pieces (the arms, their wrist cameras); see
+    _ignored."""
     import cv2
 
     top, X, Y = _warp(image, pose, intr, extent, 0.0)
@@ -178,6 +182,8 @@ def find_pieces(
         cv2.fillPoly(valid, [np.round(_to_px(poly, extent)).astype(np.int32)], 0)
 
     lab = cv2.cvtColor(top, cv2.COLOR_BGR2LAB).astype(np.float32)
+    if ignore:
+        valid[_ignored(top, lab, ignore) > 0] = 0
     table_colour = np.median(lab[valid > 0], axis=0)
     # lightness counts half: shadows and wood grain change it more than the hue
     dist = np.linalg.norm((lab - table_colour) * np.array([0.5, 1.0, 1.0], np.float32), axis=2)
@@ -215,6 +221,28 @@ def find_pieces(
             )
         )
     return pieces, mask, top
+
+
+def _ignored(top, lab, ig: dict):
+    """Mask of large dark or green regions (the black and the green arm, the wrist cameras,
+    cables), grown by ig["grow"] m so their edges and servo wires go too. Small dark or green
+    spots (a cap, a logo) stay: pieces are never removed for a detail."""
+    import cv2
+
+    hsv = cv2.cvtColor(top, cv2.COLOR_BGR2HSV)
+    dark = lab[..., 0] < ig.get("dark_l_max", 75)
+    h0, h1 = ig.get("green_hue", (30, 75))  # OpenCV hue, 0..180
+    green = (hsv[..., 0] >= h0) & (hsv[..., 0] <= h1) & (hsv[..., 1] >= ig.get("green_s_min", 50))
+    m = ((dark | green) * 255).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
+    n, lab_cc, stats, _ = cv2.connectedComponentsWithStats(m)
+    min_px = ig.get("min_area_cm2", 15.0) / (MM_PER_PX / 10) ** 2
+    big = np.zeros_like(m)
+    for i in range(1, n):
+        if stats[i, cv2.CC_STAT_AREA] >= min_px:
+            big[lab_cc == i] = 255
+    g = max(1, int(ig.get("grow", 0.02) * 1000 / MM_PER_PX))
+    return cv2.dilate(big, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * g + 1, 2 * g + 1)))
 
 
 def _split_touching(mask, solidity: float = 0.85):
@@ -285,5 +313,6 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
         min_area_cm2=pc.get("min_area_cm2", 1.0),
         max_area_cm2=pc.get("max_area_cm2", 80.0),
         grasp_z=pc.get("grasp_z", 0.015),
+        ignore=pc.get("ignore"),
     )
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)
