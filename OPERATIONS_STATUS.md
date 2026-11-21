@@ -47,7 +47,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 |---|---|---|
 | #2 | Task model and task graph | first version on `main` (no JSON schema file yet) |
 | #3 | Arm registry | not started |
-| #4 | Worker interface | first version on `main`, pending the contract decision |
+| #4 | Worker interface | locked; in `arms/base.py` |
 | #5 | Event log | first version on `main` |
 | #6 | Greedy allocator | done: greedy fallback + HEFT full schedule (`scheduler/greedy.py`, `heft.py`) |
 | #7 | CP-SAT | done (`scheduler/cpsat.py`); benchmark in `scripts/bench_planners.py`: matches HEFT, proves optimal < 2 s at 4-8 arms, hits the limit at 2 arms; HEFT stays the live default |
