@@ -1,0 +1,450 @@
+{
+ "name": "hacklab12",
+ "note": "Placeholder durations (s). 12 blocks, 6 in front of each arm (allowed_arms = the arm that reaches them), all sorted into the one shared bowl (a resource: one arm over it at a time). Each arm places on its own half of the bowl.",
+ "tasks": [
+  {
+   "id": "pick_01",
+   "skill": "pick",
+   "args": {
+    "object": "block_01"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_01",
+   "skill": "place",
+   "args": {
+    "object": "block_01",
+    "to": "bowl",
+    "place_xyz": [
+     0.249,
+     0.081,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_01"
+   ],
+   "same_arm_as": "pick_01",
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_02",
+   "skill": "pick",
+   "args": {
+    "object": "block_02"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_02",
+   "skill": "place",
+   "args": {
+    "object": "block_02",
+    "to": "bowl",
+    "place_xyz": [
+     0.294,
+     0.081,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_02"
+   ],
+   "same_arm_as": "pick_02",
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_03",
+   "skill": "pick",
+   "args": {
+    "object": "block_03"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_03",
+   "skill": "place",
+   "args": {
+    "object": "block_03",
+    "to": "bowl",
+    "place_xyz": [
+     0.249,
+     0.126,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_03"
+   ],
+   "same_arm_as": "pick_03",
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_04",
+   "skill": "pick",
+   "args": {
+    "object": "block_04"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_04",
+   "skill": "place",
+   "args": {
+    "object": "block_04",
+    "to": "bowl",
+    "place_xyz": [
+     0.294,
+     0.126,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_04"
+   ],
+   "same_arm_as": "pick_04",
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_05",
+   "skill": "pick",
+   "args": {
+    "object": "block_05"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_05",
+   "skill": "place",
+   "args": {
+    "object": "block_05",
+    "to": "bowl",
+    "place_xyz": [
+     0.249,
+     0.171,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_05"
+   ],
+   "same_arm_as": "pick_05",
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_06",
+   "skill": "pick",
+   "args": {
+    "object": "block_06"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_06",
+   "skill": "place",
+   "args": {
+    "object": "block_06",
+    "to": "bowl",
+    "place_xyz": [
+     0.294,
+     0.171,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_06"
+   ],
+   "same_arm_as": "pick_06",
+   "allowed_arms": [
+    "rakesh_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_07",
+   "skill": "pick",
+   "args": {
+    "object": "block_07"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_07",
+   "skill": "place",
+   "args": {
+    "object": "block_07",
+    "to": "bowl",
+    "place_xyz": [
+     0.34,
+     0.081,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_07"
+   ],
+   "same_arm_as": "pick_07",
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_08",
+   "skill": "pick",
+   "args": {
+    "object": "block_08"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_08",
+   "skill": "place",
+   "args": {
+    "object": "block_08",
+    "to": "bowl",
+    "place_xyz": [
+     0.385,
+     0.081,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_08"
+   ],
+   "same_arm_as": "pick_08",
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_09",
+   "skill": "pick",
+   "args": {
+    "object": "block_09"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_09",
+   "skill": "place",
+   "args": {
+    "object": "block_09",
+    "to": "bowl",
+    "place_xyz": [
+     0.34,
+     0.126,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_09"
+   ],
+   "same_arm_as": "pick_09",
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_10",
+   "skill": "pick",
+   "args": {
+    "object": "block_10"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_10",
+   "skill": "place",
+   "args": {
+    "object": "block_10",
+    "to": "bowl",
+    "place_xyz": [
+     0.385,
+     0.126,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_10"
+   ],
+   "same_arm_as": "pick_10",
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_11",
+   "skill": "pick",
+   "args": {
+    "object": "block_11"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_11",
+   "skill": "place",
+   "args": {
+    "object": "block_11",
+    "to": "bowl",
+    "place_xyz": [
+     0.34,
+     0.171,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_11"
+   ],
+   "same_arm_as": "pick_11",
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  },
+  {
+   "id": "pick_12",
+   "skill": "pick",
+   "args": {
+    "object": "block_12"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 4.0,
+   "resources": []
+  },
+  {
+   "id": "place_12",
+   "skill": "place",
+   "args": {
+    "object": "block_12",
+    "to": "bowl",
+    "place_xyz": [
+     0.385,
+     0.171,
+     0.1
+    ]
+   },
+   "deps": [
+    "pick_12"
+   ],
+   "same_arm_as": "pick_12",
+   "allowed_arms": [
+    "vato_follower"
+   ],
+   "duration": 6.0,
+   "resources": [
+    "bowl"
+   ]
+  }
+ ]
+}
