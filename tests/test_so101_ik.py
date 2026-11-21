@@ -83,3 +83,13 @@ def test_chain_points_run_from_base_to_tcp() -> None:
     assert pts.shape == (7, 3)
     assert pts[0] == pytest.approx([0, 0, 0])
     assert pts[-1] == pytest.approx(fk(q)[:3, 3])
+
+
+def test_upright_stands_the_arm_up_keeping_pan_and_roll() -> None:
+    from hfteama.arms.so101_ik import chain_points, upright
+
+    q = upright([0.7, 0.3, 0.4, 1.0, -0.5])
+    assert q[0] == 0.7 and q[4] == -0.5
+    tip = chain_points(q)[-1]
+    assert tip[2] > 0.45  # about 52 cm above the base
+    assert np.hypot(tip[0], tip[1]) < 0.05  # straight above it

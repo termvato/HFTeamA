@@ -194,5 +194,11 @@ class ArmDriver:
         self.gripper_target = float(g + np.clip(value - g, -cap, cap))
         return g
 
+    def go_upright(self) -> None:
+        """Stand the arm straight up, keeping its pan and wrist roll."""
+        from hfteama.arms.so101_ik import upright
+
+        self.move_q(upright(self.q(), self.limits))
+
     def go_home(self) -> None:
         self.move_deg(self.home)

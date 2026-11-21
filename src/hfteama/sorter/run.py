@@ -660,11 +660,14 @@ class Jog:
             print("  can't reach over the box")
             return
         self.drv.move_q(sol.q)
-        self.q = sol.q
         self.drv.gripper(self.mc.get("gripper_open", 60.0))
-        self.target = self.arm.placement.to_table(fk(sol.q)[:3, 3])
+        tip = self.arm.placement.to_table(fk(sol.q)[:3, 3])
+        print(f"  dropped from {(tip[2] - bc['height']) * 100:.0f} cm over the rim")
+        self.drv.go_upright()  # straight up, clear of the box, before going anywhere else
+        self.q = self.drv.q()
+        self.target = None
         self.piece = None
-        print("  dropped; `scan` to look again")
+        print("  arm upright; `scan` to look again, or a piece number")
 
     def set_height(self, real: float) -> None:
         """The operator measured the tip at `real` m above the table: shift the arm's z."""
@@ -951,6 +954,7 @@ def pick_and_drop(drv, pick, drop, mc: dict, pc: dict) -> bool:
             return False
         drv.move_q(drop.q)
         drv.gripper(mc.get("gripper_open", 60.0))
+        drv.go_upright()  # straight up, clear of the box, then home
         drv.go_home()
         return True
     except (RuntimeError, ValueError) as e:

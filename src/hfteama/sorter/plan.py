@@ -89,15 +89,18 @@ def plan_pick(arm: ArmModel, piece: Piece, mc: dict, pc: dict) -> PickPlan | Non
 
 
 def plan_drop(arm: ArmModel, box: Box, height: float, drop_above: float, max_tilt: float):
-    """Drop pose over the box for this arm, or None."""
+    """Drop pose over the box for this arm, or None: drop_above over the rim if reachable,
+    else lower in 1 cm steps down to 3 cm; at each height the point may move from the box
+    centre towards the arm, up to 3 cm inside the rim."""
     toward = np.array([arm.placement.x - box.x, arm.placement.y - box.y])
     toward /= max(np.linalg.norm(toward), 1e-9)
-    z = height + drop_above
-    for shift in np.arange(0.0, max(box.radius - 0.03, 0.0) + 1e-9, 0.01):
-        p = arm.placement.to_arm([box.x + shift * toward[0], box.y + shift * toward[1], z])
-        sol = solve_ik(p, limits=arm.limits, max_tilt=max_tilt)
-        if sol.ok:
-            return sol
+    for above in np.arange(drop_above, 0.03 - 1e-9, -0.01):
+        z = height + above
+        for shift in np.arange(0.0, max(box.radius - 0.03, 0.0) + 1e-9, 0.01):
+            p = arm.placement.to_arm([box.x + shift * toward[0], box.y + shift * toward[1], z])
+            sol = solve_ik(p, limits=arm.limits, max_tilt=max_tilt)
+            if sol.ok:
+                return sol
     return None
 
 

@@ -48,7 +48,7 @@
   "box": {
     "diameter": 0.18,
     "height": 0.052,
-    "drop_above": 0.04
+    "drop_above": 0.08
   },
   "pieces": {
     "min_area_cm2": 2.0,

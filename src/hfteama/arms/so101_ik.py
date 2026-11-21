@@ -124,6 +124,20 @@ class IKSolution:
     ok: bool
 
 
+# The arm standing straight up (shoulder_lift, elbow_flex, wrist_flex; rad, model convention):
+# the highest tool point the joint limits allow, found by a grid search over FK. A safe pose
+# to pass through when leaving the box: the gripper clears its rim, nothing sweeps the table.
+UPRIGHT = np.radians([-23.2, -73.3, -6.6])
+
+
+def upright(q, limits=None) -> np.ndarray:
+    """q with the arm standing up; shoulder_pan and wrist_roll kept."""
+    lo, hi = limits if limits is not None else (LOWER, UPPER)
+    out = np.asarray(q, float).copy()
+    out[1:4] = np.clip(UPRIGHT, lo[1:4], hi[1:4])
+    return out
+
+
 # A pose with the gripper hanging down in front of the base: a good seed for table work.
 SEED = np.array([0.0, -0.3, 0.6, 1.3, 0.0])
 

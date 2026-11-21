@@ -177,6 +177,9 @@ def test_jog_log_saves_a_grasp_the_gripper_reading_missed(monkeypatch, capsys, t
         def gripper(self, value, wait=None):
             return 2.5  # closes almost fully: reads as empty
 
+        def go_upright(self):
+            pass
+
         def go_home(self):
             pass
 
