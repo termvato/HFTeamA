@@ -17,6 +17,19 @@ Each team owns a problem. How to solve it, and how to split it inside the team, 
 | Action | Vivek, Sahil | Real and simulated arms carry out the steps of a task and report how long they take | #20 |
 | Operations | Vato, Aravind | Decide who does what, run it, re-split live, show finish time and bottleneck | #21 (backlog #2 to #18) |
 
+## Branches
+
+One branch per team. Work on your team's branch; open a PR to `main` when CI is green.
+
+| Branch | Team | Merged in so far |
+|---|---|---|
+| `orchestrator` | Operations (Vato, Aravind) | `termvato`, `aravinds1610` |
+| `hardware` | Hardware (Diego, Om) | `lemillion789` (empty) |
+| `action` | Action (Vivek, Sahil) | `VivekSai07`, `sahilrajpurkar03` |
+
+The per-person branches are kept for now; new work goes on the team branch:
+`git fetch && git switch <team> && git pull`.
+
 ## Where teams meet
 
 These are the only things teams must agree on. Change them together, not alone.
