@@ -26,6 +26,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
+| Real-arm adapter: real follower as an arm worker (from Hardware's pairs config), safety checks, slow moves and park, heartbeat, runs Action's skills | Vato | #4, #19, #20 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -64,6 +65,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #18 | Re-split policy questions | open |
 
 ## Notes
+
+- 15:31 (Vato): Operations builds the real-arm adapter (`arms/real.py`), on top of Hardware's `configs/teleop_pairs.json` and calibrations. Hardware and Action notified on #19 and #20.
 
 - 15:06 (Vato): Vato's backlog items are built and tested on fake arms (#6-#8, #10-#14, #16, #17).
   Step timeout is a setting (`Executor(timeout_factor=...)`), default 3x until we decide.
