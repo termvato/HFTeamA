@@ -1,5 +1,13 @@
 # Helpers shared by the vla/ scripts. Settings live in config.sh.
 VLA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# In the dialout group (/etc/group) but this terminal started before joining: rerun the calling
+# script with the group applied, instead of failing on the serial ports. Logging out and back in
+# makes this unnecessary.
+if [[ -z "${VLA_SG:-}" ]] && ! id -nG | grep -qw dialout && id -nG "$USER" | grep -qw dialout; then
+    export VLA_SG=1
+    exec sg dialout -c "$(printf '%q ' "$0" "$@")"
+fi
 if [[ "${CONDA_DEFAULT_ENV:-}" != "lerobot" ]]; then  # before set -u: conda's activate trips on it
     source "$HOME/miniconda3/etc/profile.d/conda.sh" && conda activate lerobot
 fi
