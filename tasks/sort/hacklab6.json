@@ -1,0 +1,216 @@
+{
+  "name": "hacklab6",
+  "note": "Six objects on the hacklab table (table frame, metres), sorted into the shared bowl. Stand-in for the VLM's plan: same task format. Placeholder durations.",
+  "tasks": [
+    {
+      "id": "pick_lip_balm",
+      "skill": "pick",
+      "args": {
+        "object": "lip_balm",
+        "label": "lip balm",
+        "pick_xyz": [
+          0.1,
+          0.1,
+          0.02
+        ]
+      },
+      "duration": 5.0
+    },
+    {
+      "id": "place_lip_balm",
+      "skill": "place",
+      "args": {
+        "object": "lip_balm",
+        "target": "bowl",
+        "place_xyz": [
+          0.317,
+          0.126,
+          0.1
+        ]
+      },
+      "deps": [
+        "pick_lip_balm"
+      ],
+      "same_arm_as": "pick_lip_balm",
+      "resources": [
+        "bowl"
+      ],
+      "duration": 4.0
+    },
+    {
+      "id": "pick_tube",
+      "skill": "pick",
+      "args": {
+        "object": "tube",
+        "label": "tube",
+        "pick_xyz": [
+          0.2,
+          0.02,
+          0.02
+        ]
+      },
+      "duration": 5.0
+    },
+    {
+      "id": "place_tube",
+      "skill": "place",
+      "args": {
+        "object": "tube",
+        "target": "bowl",
+        "place_xyz": [
+          0.317,
+          0.126,
+          0.1
+        ]
+      },
+      "deps": [
+        "pick_tube"
+      ],
+      "same_arm_as": "pick_tube",
+      "resources": [
+        "bowl"
+      ],
+      "duration": 4.0
+    },
+    {
+      "id": "pick_tape",
+      "skill": "pick",
+      "args": {
+        "object": "tape",
+        "label": "tape",
+        "pick_xyz": [
+          0.26,
+          0.16,
+          0.02
+        ]
+      },
+      "duration": 5.0
+    },
+    {
+      "id": "place_tape",
+      "skill": "place",
+      "args": {
+        "object": "tape",
+        "target": "bowl",
+        "place_xyz": [
+          0.317,
+          0.126,
+          0.1
+        ]
+      },
+      "deps": [
+        "pick_tape"
+      ],
+      "same_arm_as": "pick_tape",
+      "resources": [
+        "bowl"
+      ],
+      "duration": 4.0
+    },
+    {
+      "id": "pick_snack_bar",
+      "skill": "pick",
+      "args": {
+        "object": "snack_bar",
+        "label": "snack bar",
+        "pick_xyz": [
+          0.42,
+          0.04,
+          0.02
+        ]
+      },
+      "duration": 5.0
+    },
+    {
+      "id": "place_snack_bar",
+      "skill": "place",
+      "args": {
+        "object": "snack_bar",
+        "target": "bowl",
+        "place_xyz": [
+          0.317,
+          0.126,
+          0.1
+        ]
+      },
+      "deps": [
+        "pick_snack_bar"
+      ],
+      "same_arm_as": "pick_snack_bar",
+      "resources": [
+        "bowl"
+      ],
+      "duration": 4.0
+    },
+    {
+      "id": "pick_marker",
+      "skill": "pick",
+      "args": {
+        "object": "marker",
+        "label": "marker",
+        "pick_xyz": [
+          0.52,
+          0.14,
+          0.02
+        ]
+      },
+      "duration": 5.0
+    },
+    {
+      "id": "place_marker",
+      "skill": "place",
+      "args": {
+        "object": "marker",
+        "target": "bowl",
+        "place_xyz": [
+          0.317,
+          0.126,
+          0.1
+        ]
+      },
+      "deps": [
+        "pick_marker"
+      ],
+      "same_arm_as": "pick_marker",
+      "resources": [
+        "bowl"
+      ],
+      "duration": 4.0
+    },
+    {
+      "id": "pick_clip",
+      "skill": "pick",
+      "args": {
+        "object": "clip",
+        "label": "clip",
+        "pick_xyz": [
+          0.6,
+          0.06,
+          0.02
+        ]
+      },
+      "duration": 5.0
+    },
+    {
+      "id": "place_clip",
+      "skill": "place",
+      "args": {
+        "object": "clip",
+        "target": "bowl",
+        "place_xyz": [
+          0.317,
+          0.126,
+          0.1
+        ]
+      },
+      "deps": [
+        "pick_clip"
+      ],
+      "same_arm_as": "pick_clip",
+      "resources": [
+        "bowl"
+      ],
+      "duration": 4.0
+    }
+  ]
+}

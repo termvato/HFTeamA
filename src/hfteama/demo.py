@@ -12,6 +12,8 @@ Then open http://127.0.0.1:8050 and press Go.
 - What an arm is (`--backend`): `fake` sleeps for each step's duration; `sim` and `real` are
   Action's `SkillWorker` on its MuJoCo or LeRobot driver (imported only when asked for, so this
   file runs without them). `real` moves real arms: a person must be at the rig.
+- `--table configs/hacklab_table.json`: the real table layout. Each step's allowed arms then come
+  from reach, and the screen shows a top view of who takes what.
 - What the batch is: a task file (`--task`), or a planner hook `module:function` returning a
   `TaskGraph` (the camera + VLM pipeline plugs in here), optionally with `--verifier
   module:function` returning the executor's step-check function.
@@ -29,7 +31,7 @@ from typing import Any
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
 from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs
-from hfteama.events import EventLog
+from hfteama.events import Event, EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
 
@@ -82,6 +84,43 @@ def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[
         return SkillWorker(arm_id, table.driver(arm_id), poses, backend="sim", clock=table.sim_time)
 
     return make_sim
+
+
+def with_table(graph: TaskGraph, table: str, arm_ids: list[str]) -> tuple[TaskGraph, dict]:
+    """Fill each step's allowed arms from reach on the real table layout, and describe the table
+    for the screen's top view (arms with their reach, bins, objects with their steps)."""
+    import json
+
+    from hfteama.registry import load_catalog, resolve
+
+    catalog = {a: n for a, n in load_catalog(table).items() if a in arm_ids}
+    resolved = resolve(graph, catalog.values(), travel_s_per_m=10.0).graph
+    objects: dict[str, dict] = {}
+    for t in resolved.tasks.values():
+        oid = t.args.get("object")
+        if oid is None:
+            continue
+        o = objects.setdefault(oid, {"id": oid, "label": t.args.get("label", ""), "tasks": []})
+        o["tasks"].append(t.id)
+        if "pick_xyz" in t.args:
+            o["xy"] = [float(v) for v in t.args["pick_xyz"][:2]]
+    scene = {
+        "arms": [
+            {
+                "id": a,
+                "xy": list(n.pan_axis_xy),
+                "r_min": n.reach.r_min,
+                "r_max": n.reach.r_max,
+            }
+            for a, n in catalog.items()
+        ],
+        "bins": [
+            {"id": b["id"], "xy": b["xyz"][:2], "radius": b.get("radius_m", 0.08)}
+            for b in json.loads(Path(table).read_text()).get("bins", [])
+        ],
+        "objects": [o for o in objects.values() if "xy" in o],
+    }
+    return resolved, scene
 
 
 class Rig:
@@ -175,6 +214,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None)
     ap.add_argument("--method", default="auto", choices=["auto", "greedy", "heft", "cpsat"])
     ap.add_argument("--scale", type=float, default=1.0, help="clock speed-up (fake arms only)")
+    ap.add_argument(
+        "--table", help="table layout JSON (arm poses, bins): fills reach and draws the map"
+    )
     ap.add_argument("--log", default=None)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8050)
@@ -186,6 +228,9 @@ def main(argv: list[str] | None = None) -> None:
     known = followers_from_pairs(args.pairs)
     graph = hook(args.planner)() if args.planner else load(args.task)
     verifier = hook(args.verifier)() if args.verifier else None
+    scene = None
+    if args.table:
+        graph, scene = with_table(graph, args.table, list(known.values()))
     if args.backend == "fake":
         factory = fake_factory(clock)
     else:
@@ -203,6 +248,8 @@ def main(argv: list[str] | None = None) -> None:
         verifier=verifier,
         method=args.method,
     )
+    if scene:
+        log.write(Event("scene", data=scene))
     for arm_id in filter(None, args.plugged.split(",")):
         watcher.plug(arm_id.strip())
     if not watcher.joined():

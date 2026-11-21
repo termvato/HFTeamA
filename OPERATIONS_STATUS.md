@@ -88,6 +88,18 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 18:56 (Vato): **Demo plan updated** (`docs/plan.md`, Demo): VLM splits the task on screen ->
+  one arm sorting -> second arm plugged in -> visible re-planning moment -> time comes down ->
+  both arms work. Built on `orchestrator`: the re-planning banner (4 s: "re-planning…", then
+  before / after and the plans compared), a top-view map "who takes what" (arms' reach, bowl,
+  objects coloured by planned arm), `python -m hfteama.demo --table configs/hacklab_table.json`
+  (reach from the table layout), stand-in batch `tasks/sort/hacklab6.json`.
+  **Aravind, needed for the film:** (1) `--planner` hook returning your resolved graph, with
+  `args.object`, `args.label` and `pick_xyz` on the pick steps (the map reads them); (2) reach
+  0.14-0.42 m; (3) write a `scene` event or tell me the object list after each scan so the map
+  follows re-scans. **Layout rule for the film:** arm 1 must reach every object, otherwise the
+  time goes up when arm 2 joins (seen on the hacklab layout: 0:43 -> 0:50).
+
 - 18:48 (Vato): **Isaac Sim is dropped** (#33 closed; scripts and the joint streamer removed).
   **The demo is filmed on the real setup:** one arm sorting, the second arm is plugged in, the
   screen shows the re-planning moment, the predicted finish time comes down, both arms work

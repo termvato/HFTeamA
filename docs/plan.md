@@ -86,11 +86,21 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 
 ## Demo (filmed on the real setup)
 
-1. One real arm is sorting; the screen shows the predicted finish time.
-2. Someone plugs in the second arm.
-3. The system notices it and re-plans (a visible "re-planning" moment on the screen).
-4. The predicted finish time comes down.
-5. Both arms work together until the batch is done.
+1. **The VLM splits the task.** The top camera sees the table; the VLM names the objects and
+   decides where each goes. The screen shows a top view: every object in the colour of the arm
+   that will take it, each arm's reach, and the estimated time.
+2. **One real arm is sorting**; the countdown runs.
+3. **Someone plugs in the second arm.**
+4. **The system re-plans, visibly:** "Arm joined: re-planning…", then the plans it compared (reach,
+   free arms, shared areas) and the time before and after. Narration: once the plan settles on the
+   best split for reach and availability, the arms move.
+5. **The predicted finish time comes down** and **both arms work together** until the batch is done.
+
+For the time to come down in step 5, the first arm must be able to reach every object; objects only
+the second arm can reach add work when it joins, and the time goes up instead.
+
+Try it without hardware: `python -m hfteama.demo --backend fake --table configs/hacklab_table.json
+--task tasks/sort/hacklab6.json --plugged rakesh_follower`.
 
 ## Later extensions (not in the core build)
 
