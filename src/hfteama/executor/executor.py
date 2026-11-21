@@ -174,7 +174,7 @@ class Executor:
     # ------------------------------------------------------------------ loop
 
     def _submit(self, msg: tuple[Any, ...]) -> None:
-        if self._thread is None:  # before Go: apply directly
+        if self._thread is None or self._finished.is_set():  # before Go or after the end
             with self._lock:
                 self._handle(msg)
         else:
@@ -224,7 +224,8 @@ class Executor:
         arm = worker.arm_id
         if arm in self._active:
             return
-        unblocked = unblocked_by(self._problem(), arm)
+        # only meaningful when the arm joins others (the first arm "unblocks" everything)
+        unblocked = unblocked_by(self._problem(), arm) if self._active else set()
         self._workers[arm] = worker
         self._active.add(arm)
         self._emit(Event("arm_added", arm=arm, data={"backend": worker.backend}))
