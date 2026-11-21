@@ -66,7 +66,7 @@
       "yaw_deg": -90.0,
       "z_offset": -0.015,
       "offsets_deg": {"wrist_roll": 90.0},
-      "aim_offset": [0.0, 0.035],
+      "aim_offset": [0.04, 0.035],
       "mask_radius": 0.12
     },
     "hacklab": {
@@ -85,7 +85,7 @@
     "gripper_open": 60.0,
     "gripper_closed": 2.0,
     "gripper_wait_s": 0.6,
-    "gripper_speed": 150.0,
+    "gripper_timeout_s": 3.0,
     "grasp_min_open": 4.0,
     "max_relative_target": 10.0,
     "home_note": "Home (camera-clear) pose = the pose the arm has when the sorter connects: leave each arm folded at rest before starting.",

@@ -163,30 +163,31 @@ class ArmDriver:
         """Move the gripper (LeRobot 0 closed .. 100 open) and wait until it gets there or
         stops on an object; the arm holds still meanwhile. Returns where the gripper ended up.
 
-        Steps stay under max_relative_target, else LeRobot clips each command and the gripper
-        would only finish moving during the next arm motion."""
+        Each command is at most 0.8 x max_relative_target from the gripper's PRESENT position
+        (closed loop): LeRobot clips any bigger step, and the motor is slower than a fixed
+        ramp, so an open-loop ramp would run ahead of it."""
         rate = self.motion.get("rate_hz", 50)
-        speed = self.motion.get("gripper_speed", 150.0)  # gripper units per second
-        cap = self.motion.get("max_relative_target", 10.0) * 0.9
+        cap = self.motion.get("max_relative_target", 10.0) * 0.8
+        timeout = wait if wait is not None else self.motion.get("gripper_timeout_s", 3.0)
         now = self.read()
         hold = {f"{j}.pos": now[f"{j}.pos"] for j in BODY}
-        g0 = now["gripper.pos"]
-        n = max(1, int(np.ceil(abs(value - g0) / min(speed / rate, cap))))
-        for i in range(1, n + 1):
-            self.robot.send_action({**hold, "gripper.pos": g0 + (value - g0) * i / n})
+        g = now["gripper.pos"]
+        best, since = g, time.perf_counter()  # stall detection: no progress for 0.3 s
+        deadline = time.perf_counter() + timeout
+        while time.perf_counter() < deadline and abs(value - g) > 1.0:
+            self.robot.send_action(
+                {**hold, "gripper.pos": g + float(np.clip(value - g, -cap, cap))}
+            )
             time.sleep(1 / rate)
-        # wait until it stops moving (reached, or blocked by the piece)
-        deadline = time.perf_counter() + (wait if wait is not None else 1.5)
-        last, still = self.read()["gripper.pos"], 0
-        while time.perf_counter() < deadline and still < 3:
-            time.sleep(0.05)
             g = self.read()["gripper.pos"]
-            still = still + 1 if abs(g - last) < 0.3 else 0
-            last = g
-        # hold where it stopped, squeezing a little (within max_relative_target): the arm's
-        # next moves resend this, and a far target would be clipped (and warned) every step
-        self.gripper_target = float(last + np.clip(value - last, -cap, cap))
-        return last
+            if abs(value - g) < abs(value - best) - 0.3:
+                best, since = g, time.perf_counter()
+            elif time.perf_counter() - since > 0.3:
+                break  # blocked by the piece
+        # hold where it stopped, squeezing a little (within the cap): the arm's next moves
+        # resend this, and a far target would be clipped (and warned) on every step
+        self.gripper_target = float(g + np.clip(value - g, -cap, cap))
+        return g
 
     def go_home(self) -> None:
         self.move_deg(self.home)

@@ -111,14 +111,14 @@ def test_gripper_ramps_under_the_relative_cap_and_holds_where_it_stopped() -> No
             return obs
 
         def send_action(self, act):
+            assert abs(act["gripper.pos"] - self.g) <= 10.0, "LeRobot would clip this"
             self.sent.append(act["gripper.pos"])
-            self.g = max(20.0, act["gripper.pos"])
+            # a slow motor: covers half of each step
+            self.g = max(20.0, self.g + 0.5 * (act["gripper.pos"] - self.g))
 
     drv = robot.ArmDriver.__new__(robot.ArmDriver)
-    drv.motion = {"max_relative_target": 10.0, "rate_hz": 1000, "gripper_speed": 1e6}
+    drv.motion = {"max_relative_target": 10.0, "rate_hz": 1000}
     drv.robot = FakeRobot()
-    end = drv.gripper(2.0, wait=0.3)
-    assert end == 20.0
-    steps = [abs(b - a) for a, b in zip([60.0, *drv.robot.sent], drv.robot.sent, strict=False)]
-    assert max(steps) <= 9.0 + 1e-9
-    assert drv.gripper_target == 11.0  # 20 squeezed by 9 (0.9 x the cap), not 2
+    end = drv.gripper(2.0, wait=3.0)
+    assert end == pytest.approx(20.0, abs=0.5)
+    assert drv.gripper_target == pytest.approx(12.0, abs=0.5)  # 20 squeezed by 8, not 2
