@@ -15,14 +15,14 @@ Design approved and updated after the team sync. Next: implementation plan.
 |---|---|---|---|---|
 | 0 | Design doc | Vivek | done | updated after 14:50 sync |
 | 1 | Implementation plan | Vivek | in review | `docs/superpowers/plans/2026-11-21-action-arm-skills.md` |
-| 2 | Vendor SO-101 model; MuJoCo 4.0.1 vs 3.17 check | Vivek | todo | |
-| 3 | IK (`arms/ik.py`) | Vivek | todo | |
-| 4 | Primitives protocol (`arms/primitives.py`) | Vivek | todo | post draft to Hardware (#19) |
-| 5 | Sim table + driver (`arms/sim.py`) | Vivek | todo | option B grasp |
-| 6 | Generic skills + `poses.json` | Vivek | todo | |
-| 7 | `SkillWorker` (`arms/worker.py`) | Vivek | todo | |
-| 8 | Sim demo on sort12, 3 arms | Vivek | todo | proof on MuJoCo |
-| 9 | Duration measurement script | Vivek | todo | feeds Ops #13 |
+| 2 | Vendor SO-101 model; MuJoCo 4.0.1 vs 3.17 check | Vivek | done | vendored so101-nexus model, MuJoCo 4.0.1 works |
+| 3 | IK (`arms/ik.py`) | Vivek | done | `arms/ik.py`, orientation weight 0.01 |
+| 4 | Primitives protocol (`arms/primitives.py`) | Vivek | done | `arms/primitives.py`; draft to post on #19 is in Task 9 |
+| 5 | Sim table + driver (`arms/sim.py`) | Vivek | done | `arms/sim.py`, option B grasp |
+| 6 | Generic skills + `poses.json` | Vivek | done | `arms/generic_skills.py`, `arms/poses.py`, `tasks/sort/poses.json` |
+| 7 | `SkillWorker` (`arms/worker.py`) | Vivek | done | `arms/worker.py` |
+| 8 | Sim demo on sort12, 3 arms | Vivek | done | `scripts/sim_demo.py`: 24/24 steps ok on 3 arms, 40.5 s sim time; grasp failure recovers |
+| 9 | Duration measurement script | Vivek | done | `scripts/measure_durations.py`; table below |
 | 10 | Real backend (`arms/real.py`) | Vivek | todo | mocked-bus tests only |
 | 11 | Handoff doc to Hardware | Vivek | todo | `docs/handoff/action-to-hardware.md` |
 | 12 | Option A: contact grasping in sim | Vivek | later | follow-up |
@@ -43,3 +43,15 @@ Design approved and updated after the team sync. Next: implementation plan.
   (Sahil's `vla/`) and `origin/main`. Ops locked the architecture: sim arms only in the what-if
   estimate, task args carry table coordinates; design updated. `vla/detect_arms.py` fails ruff
   (Sahil's, on his list).
+- 2026-11-21 ~16:00: Tasks 1-7 of the plan done (model, IK, primitives, skills, worker, sim, sort12 demo,
+  durations). Merged origin/main (Operations' planner, executor, fake arm, view) first; suite 160 green.
+
+## Measured sim durations (sort poses, 5 cycles per arm, sim seconds)
+
+| skill | arm_a p50 / p80 | arm_b p50 / p80 | arm_c p50 / p80 |
+|---|---|---|---|
+| pick | 3.28 / 3.30 | 3.34 / 3.42 | 3.54 / 3.57 |
+| place | 2.24 / 2.27 | 2.19 / 2.27 | 2.44 / 2.45 |
+
+`tasks/sort/sort12.json` still has placeholders (pick 4.0, place 6.0); real-arm numbers will differ.
+Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_sim.json`).

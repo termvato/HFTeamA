@@ -46,7 +46,12 @@ SETTLE_TIMEOUT_S = 3.0
 SETTLE_TOL_RAD = 0.02
 MAX_TARGET_STEP_RAD = 0.05  # per set_joint_target call
 OBJECT_HALF_M = 0.015
-PARK_Q = np.zeros(5)
+# Folded sideways rest/park pose (pan, lift, elbow, wrist flex, wrist roll). The zero pose stretches
+# every arm toward the bin, so arms that face each other interpenetrate; this one keeps all
+# arm geometry >= 0.2 m from the bin centre with no self or arm-arm contact (checked for the sort
+# layout in tasks/sort/poses.json).
+REST_Q = np.array([1.85, -1.6, 1.6, 1.0, 0.0])
+PARK_Q = REST_Q
 
 # MuJoCo collision bits: the model's arm geoms use bit 1. Objects use bit 2 and the floor both, so
 # objects rest on the floor and bump each other but never touch an arm (option B carries them).
@@ -138,14 +143,12 @@ class SimTable:
         return mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, name)
 
     def reset(self) -> None:
-        """Objects back at their poses, arms at the zero pose with the gripper open, no grasps."""
+        """Objects back at their poses, arms at the rest pose, no grasps."""
         with self._lock:
             m, d = self._model, self._data
             for arm_id in self.arm_ids:
-                for j in JOINTS:
-                    d.qpos[m.jnt_qposadr[self._jnt(f"{arm_id}/{j}")]] = (
-                        GRIPPER_OPEN if j == "gripper" else 0.0
-                    )
+                for j, v in zip(JOINTS, (*REST_Q, GRIPPER_CLOSED), strict=True):
+                    d.qpos[m.jnt_qposadr[self._jnt(f"{arm_id}/{j}")]] = v
             for name, xyz in self.poses.objects.items():
                 jid = m.body(name).jntadr[0]
                 qadr, dadr = m.jnt_qposadr[jid], m.jnt_dofadr[jid]

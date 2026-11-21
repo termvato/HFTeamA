@@ -47,7 +47,7 @@ def test_bound_on_ordered_task(n: int, value: float, binding: str) -> None:
 
 
 def test_every_task_graph_loads() -> None:
-    graphs = sorted(TASKS.glob("*/*.json"))
+    graphs = sorted(p for p in TASKS.glob("*/*.json") if p.name != "poses.json")
     assert len(graphs) >= 2
     for p in graphs:
         load(p)

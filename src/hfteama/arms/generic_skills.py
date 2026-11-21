@@ -68,6 +68,8 @@ def pick(arm: ArmDriver, task: Task, poses: Poses) -> None:
     arm.move_to(_above(p, APPROACH_DZ))
     arm.move_to(_above(p, GRASP_DZ))
     if not arm.close_gripper().holding:
+        arm.open_gripper()  # missed: leave the shared area before reporting, so others can enter
+        arm.move_to(_above(p, APPROACH_DZ))
         raise SkillFailed("grasp")
     arm.move_to(_above(p, LIFT_DZ))
     if not arm.holding():

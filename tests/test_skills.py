@@ -89,6 +89,16 @@ def test_grasp_failure_raises_grasp() -> None:
         REGISTRY["pick"](FakeDriver(fail_grasp=True), _task("pick", object="block_01"), POSES)
 
 
+def test_failed_grasp_retreats_upward_before_raising() -> None:
+    # A missed grasp must not leave the arm sitting in the shared area for the next arm to hit.
+    d = FakeDriver(fail_grasp=True)
+    with pytest.raises(SkillFailed, match="grasp"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
+    assert _names(d)[-2:] == ["open_gripper", "move_to"]
+    x, y, z = POSES.point("block_01", "arm_a")
+    assert _targets(d)[-1] == (x, y, z + gs.APPROACH_DZ)
+
+
 def test_drop_after_lift_raises_dropped() -> None:
     with pytest.raises(SkillFailed, match="dropped"):
         REGISTRY["pick"](FakeDriver(drop_after_lift=True), _task("pick", object="block_01"), POSES)
