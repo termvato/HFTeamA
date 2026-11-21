@@ -161,3 +161,39 @@ def test_a_stop_during_ik_is_not_forgotten(table: SimTable) -> None:
     assert box["r"] == "stopped"
     d.resume()
     d.move_to(np.array([0.2, 0.05, 0.05]))  # and the latch clears on resume
+
+
+def test_wait_stops_spinning_if_the_physics_thread_dies(table: SimTable) -> None:
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            table.wait(30.0)
+            box["r"] = "finished"
+        except RuntimeError as exc:
+            box["r"] = str(exc)
+
+    th = threading.Thread(target=run, daemon=True)
+    th.start()
+    time.sleep(0.1)
+    table._quit.set()  # the physics thread exits
+    th.join(3.0)
+    assert not th.is_alive() and "not running" in box["r"]
+
+
+def test_move_to_with_yaw_turns_the_gripper(table: SimTable) -> None:
+    d = table.driver("arm_a")
+    d.move_to(np.array([0.2, 0.0, 0.05]), yaw=1.0)
+    kin = Kinematics(ArmBase((0.0, 0.0, 0.0), 0.0))
+    err = (kin.tool_heading(d.read_joints()[:5]) - 1.0 + np.pi / 2) % np.pi - np.pi / 2
+    assert abs(err) < 0.08
+    assert d.reachable(np.array([0.2, 0.0, 0.05]), yaw=1.0)
+
+
+def test_bins_are_drawn_as_floor_markers_that_never_collide(table: SimTable) -> None:
+    m = table._model
+    names = [m.geom(i).name for i in range(m.ngeom)]
+    for marker in ("marker_input_bin", "marker_out"):
+        assert marker in names, names
+        g = m.geom(marker)
+        assert g.contype == 0 and g.conaffinity == 0  # decoration only: a block can be set on it

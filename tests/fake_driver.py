@@ -70,8 +70,9 @@ class FakeDriver:
     def move_joints(self, q: np.ndarray, speed: float = 1.0) -> None:
         self._enter("move_joints", tuple(q), speed)
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
-        self._enter("move_to", tuple(float(v) for v in xyz))
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
+        extra = () if yaw is None else (yaw,)
+        self._enter("move_to", tuple(float(v) for v in xyz), *extra)
         self._moves += 1
         if self.stall_at_move == self._moves:
             raise MotionError(self.stall_reason)
@@ -99,7 +100,7 @@ class FakeDriver:
     def resume(self) -> None:
         self._latched = False
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         return self.unreachable_above is None or float(xyz[2]) <= self.unreachable_above
 
     def park(self) -> None:

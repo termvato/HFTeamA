@@ -21,6 +21,7 @@ Not yet run on hardware: follow `docs/handoff/action-to-hardware.md` before the 
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from pathlib import Path
@@ -29,13 +30,23 @@ from typing import Any
 import numpy as np
 
 from hfteama.arms.ik import ArmBase, Kinematics
-from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, LIMITS_RAD, ArmFrame
-from hfteama.arms.primitives import ArmDown, Grasp, MotionError, check_joints, check_point
+from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, JOINTS, LIMITS_RAD, ArmFrame
+from hfteama.arms.primitives import (
+    ArmDown,
+    Grasp,
+    MotionError,
+    check_joints,
+    check_path,
+    check_point,
+)
+
+log = logging.getLogger(__name__)
 
 OPEN_PCT = 70.0  # gripper opening for approach and release, LeRobot 0..100
 SETTLE_TOL_RAD = 0.1  # STS3215 under arm load sits a few degrees off its goal
 SETTLE_TIMEOUT_S = 1.5
 PARK_SPEED = 0.3
+YAW_TOL_RAD = 0.1  # a requested grasp heading this far off is refused, not approximated
 HEARTBEAT_POLL_S = 0.5  # an idle arm does no bus traffic, so alive() reads the bus after this long
 DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "configs" / "real_arms.json"
 
@@ -106,8 +117,25 @@ class LeRobotDriver:
             self._target = q6.copy()
 
     def _base(self) -> np.ndarray:
-        """The pose commands are built on: the last one sent, else the measured one (first move)."""
-        return self._target.copy() if self._target is not None else self.read_joints()
+        """The pose commands are built on: the last one sent, else the measured one (first move).
+
+        An arm can rest slightly past a model limit (on its physical stop, whose calibrated range
+        is wider than the model's). Commands are never sent past the model's limits, so a measured
+        pose outside them is clipped in: the first command moves that joint inside by the
+        overshoot.
+        """
+        if self._target is not None:
+            return self._target.copy()
+        q = self.read_joints()
+        clipped = np.array([np.clip(v, *LIMITS_RAD[j]) for v, j in zip(q, JOINTS, strict=True)])
+        if np.abs(clipped - q).max() > 1e-6:
+            log.warning(
+                "%s rests outside the model's joint limits by %s rad; its first command will "
+                "move it inside",
+                self.arm_id,
+                np.round(q - clipped, 3).tolist(),
+            )
+        return clipped
 
     def _begin(self) -> None:
         """Start of every motion call. A latched stop stays latched until `resume()`."""
@@ -146,6 +174,7 @@ class LeRobotDriver:
         start = self._base()
         goal = start.copy()
         goal[: len(q)] = q
+        check_path(self._kin, start[:5], goal[:5], self.table_z)  # before the first command
         step = self._max_step * min(max(speed, 0.05), 1.0) * self._speed_scale
         n = max(1, int(np.ceil(np.abs(goal - start)[: len(q)].max() / step)))
         for k in range(1, n + 1):
@@ -158,13 +187,14 @@ class LeRobotDriver:
             self._tick()
             waited += self._dt
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         xyz = np.asarray(xyz, float)
         try:
             check_point(xyz, self.table_z)
         except MotionError:
             return False
-        return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
+        r = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
+        return r.ok and (yaw is None or abs(r.heading_error_rad or 0.0) <= YAW_TOL_RAD)
 
     def _sag_offset_m(self, xyz: np.ndarray) -> float:
         a, b, c = self._sag_coeffs
@@ -179,14 +209,16 @@ class LeRobotDriver:
         """Run fast MuJoCo reach/limit/singularity pre-check before real motion."""
         return self._kin.precheck(pick_xyz, place_xyz, table_z=self.table_z, hover_dz=hover_dz)
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         self._begin()
         xyz = np.asarray(xyz, float).copy()
         check_point(xyz, self.table_z)
         xyz[2] = max(self.table_z + 0.01, xyz[2] - self._sag_offset_m(xyz))
-        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)
+        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
         if not result.ok:
             raise MotionError("unreachable")
+        if yaw is not None and abs(result.heading_error_rad or 0.0) > YAW_TOL_RAD:
+            raise MotionError("unreachable yaw")
         self.move_joints(result.q, speed)  # re-checks the stop latch: a stop during IK is kept
 
     def _set_gripper(self, pct: float) -> None:
@@ -232,6 +264,14 @@ class LeRobotDriver:
             effort=load_pct if load_pct is not None else 0.0,
         )
 
+    def gripper_pct(self) -> float:
+        """Measured gripper reading, LeRobot 0..100 (for the check tool and the threshold)."""
+        return self._gripper_pct()
+
+    def tcp(self) -> tuple[np.ndarray, np.ndarray]:
+        """Measured tool-centre position and tool z axis, table frame (forward kinematics)."""
+        return self._kin.fk(self.read_joints()[:5])
+
     def holding(self) -> bool:
         """Closed and stalled short of fully closed: something is between the fingers."""
         return self._closed and self._gripper_pct() >= self._min_pct
@@ -269,6 +309,21 @@ class LeRobotDriver:
         return self._last_ok
 
 
+def prepare_port(port: str, baud: int = 1_000_000) -> dict[int, int]:
+    """Before LeRobot enables torque: make every servo's goal equal its present position.
+
+    `SOFollower.connect()` turns torque on without this, and a servo drives toward the goal it
+    holds, so an arm could lunge toward a stale goal the moment it is connected. Raises
+    `feetech.ArmNotReady` (having written nothing) if any of the six servos does not answer.
+    """
+    import serial
+
+    from hfteama.arms import feetech
+
+    with serial.Serial(port, baud, timeout=0.05) as bus:
+        return feetech.hold_present_pose(bus)
+
+
 def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver:
     """Build a driver from `configs/real_arms.json` and Hardware's pair config; connects the arm.
 
@@ -281,12 +336,14 @@ def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver
 
     cfg = json.loads(Path(path).read_text())["arms"][arm_id]
     pair = load_pair(pair=cfg["pair"])
+    prepare_port(pair.follower.port)  # goal := present, while torque is still off
     robot = SOFollower(
         SOFollowerRobotConfig(
             port=pair.follower.port,
             id=pair.follower.id,
             calibration_dir=pair.follower.calibration_dir,
             use_degrees=True,
+            disable_torque_on_disconnect=False,  # never cut torque on exit: park() does it, lowered
             max_relative_target=float(cfg.get("max_relative_target_deg", 10.0)),
         )
     )

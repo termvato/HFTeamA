@@ -84,10 +84,7 @@ class SkillWorker:
         return self._driver.alive()
 
     def cancel(self, task_id: str) -> None:
-        with self._lock:
-            running = self._state == ArmState.BUSY and self._current == task_id
-        if running:
-            self._request_stop("cancelled")
+        self._request_stop("cancelled", only_task=task_id)
 
     def park(self) -> None:
         """Abort the running step, then slow-park and mark the arm DOWN. Never raises.
@@ -162,8 +159,13 @@ class SkillWorker:
 
     # ---- internals
 
-    def _request_stop(self, why: str) -> None:
+    def _request_stop(self, why: str, only_task: str | None = None) -> None:
+        """Latch a stop. With `only_task`, only if that task is still the one running."""
         with self._lock:
+            if only_task is not None and not (
+                self._state == ArmState.BUSY and self._current == only_task
+            ):
+                return  # a stale cancel: that step already ended, a later one must not be hit
             if self._abort is None:
                 self._abort = why
             self._stopped.set()

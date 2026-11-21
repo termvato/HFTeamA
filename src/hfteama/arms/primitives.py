@@ -12,7 +12,7 @@ Positions are metres in the shared table frame; joint angles are radians in the 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -61,10 +61,12 @@ class ArmDriver(Protocol):
         """Blocking, interpolated move. Raises MotionError on a limit, stall or stop."""
         ...
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         """Move the tool centre to a table-frame point, gripper pointing down.
 
-        Raises MotionError("below table") or MotionError("unreachable") before moving.
+        `yaw` (rad, table frame) is the heading the jaws close along; None leaves the wrist roll to
+        the solver. Raises MotionError("below table"), ("unreachable") or ("unreachable yaw")
+        before moving.
         """
         ...
 
@@ -88,7 +90,7 @@ class ArmDriver(Protocol):
         """Clear a latched `stop()`; the worker calls this at the start of each step."""
         ...
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         """Whether `move_to(xyz)` would be accepted (above the table, IK solves). Never moves."""
         ...
 
@@ -107,6 +109,15 @@ def check_joints(q: np.ndarray) -> None:
         lo, hi = LIMITS_RAD[name]
         if not lo <= value <= hi:
             raise MotionError(f"joint limit: {name}")
+
+
+PATH_CLEARANCE_M = 0.005  # the tool centre may not dip closer than this to the table mid-move
+
+
+def check_path(kin: Any, start: np.ndarray, goal: np.ndarray, table_z: float) -> None:
+    """Raise MotionError("below table") if a joint-space move dips under the table on the way."""
+    if kin.min_tcp_z(start, goal) < table_z + PATH_CLEARANCE_M:
+        raise MotionError("below table (path)")
 
 
 def check_point(xyz: np.ndarray, table_z: float, clearance: float = 0.01) -> None:

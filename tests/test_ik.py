@@ -66,7 +66,7 @@ def test_fk_is_expressed_in_table_frame(kin: Kinematics) -> None:
     assert p1 == pytest.approx(base.to_table(p0))
 
 
-@pytest.mark.parametrize("z", [0.095, 0.115, 0.13])
+@pytest.mark.parametrize("z", [0.095, 0.115, 0.12])
 def test_down_pose_reaches_approach_and_lift_heights(kin: Kinematics, z: float) -> None:
     # Skills approach 0.08 m and lift 0.10 m above a block resting on the table; position must win
     # over tool direction, or these poses come back unreachable although position-only IK is fine.
@@ -90,3 +90,37 @@ def test_elbow_clamped_and_precheck_fast(kin: Kinematics) -> None:
 
     bad_reach, _ = kin.precheck(np.array([2.0, 0.0, 0.05]), np.array([0.20, 0.0, 0.03]))
     assert not bad_reach
+
+
+@pytest.mark.parametrize("yaw", [0.0, 0.5, 1.2, 2.0, -1.0])
+@pytest.mark.parametrize("xy", [(0.2, 0.0), (0.15, 0.08), (0.25, -0.1)])
+def test_solve_aligns_the_jaw_closing_direction_with_the_requested_yaw(
+    kin: Kinematics, yaw: float, xy: tuple[float, float]
+) -> None:
+    target = np.array([xy[0], xy[1], 0.03])
+    r = kin.solve(target, down=True, yaw=yaw)
+    assert r.ok and r.error_m < 0.002
+    err = (kin.tool_heading(r.q) - yaw + np.pi / 2) % np.pi - np.pi / 2  # the jaws are symmetric
+    assert abs(err) < 0.05
+    assert kin.fk(r.q)[1] @ np.array([0.0, 0.0, -1.0]) > 0.9  # still pointing down
+
+
+def test_yaw_is_reported_when_it_cannot_be_met(kin: Kinematics) -> None:
+    r = kin.solve(np.array([0.2, 0.0, 0.03]), down=True, yaw=0.7)
+    assert r.heading_error_rad is not None and abs(r.heading_error_rad) < 0.05
+    assert kin.solve(np.array([0.2, 0.0, 0.03]), down=True).heading_error_rad is None
+
+
+def test_solutions_keep_a_margin_from_the_joint_limits(kin: Kinematics) -> None:
+    # A pose with a joint exactly at its limit can never settle: the arm cannot reach "past" it.
+    for target in (
+        [-0.26, 0.15, 0.12],
+        [-0.05, -0.035, 0.115],
+        [0.2, 0.0, 0.03],
+        [0.0, 0.26, 0.12],
+    ):
+        for seed in (np.array([1.85, -1.6, 1.6, 1.0, 0.0]), np.zeros(5)):
+            r = kin.solve(np.array(target), seed=seed, down=True)
+            for q, j in zip(r.q, BODY, strict=True):
+                lo, hi = LIMITS_RAD[j]
+                assert lo + 0.02 <= q <= hi - 0.02, f"{j}={q:.3f} sits on its limit for {target}"

@@ -51,6 +51,8 @@ episode. Episodes have no time limit by default: press **Stop & save** when the 
 | `record.sh single\|dual` | record episodes, push the dataset to the Hub |
 | `studio.sh single\|dual` | the same recording from a local web page: live cameras, buttons, upload |
 | `cameras.sh list\|check` | list the cameras; check the configured ones together before recording |
+| `train.sh smolvla\|act` | train with held-out episodes and early stopping (`train_watch.py`) |
+| `multi_arm_policy.md` | research: one trained policy on any number of arms, with the orchestrator splitting the work |
 
 ## Cameras
 
@@ -214,26 +216,41 @@ Recording with `bi_so_follower` keeps both options open.
 
 ---
 
-## Part 5 (later): Train
+## Part 5: Train (with early stopping)
 
-SmolVLA fine-tuned from `lerobot/smolvla_base`. Our camera names are mapped to the ones the base
-model was trained with:
 ```bash
-lerobot-train \
-  --policy.path=lerobot/smolvla_base \
-  --dataset.repo_id=<HF_USER>/so101_stack_single_rakesh \
-  --policy.repo_id=<HF_USER>/smolvla_so101_stack \
-  --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist_a": "observation.images.camera2"}' \
-  --batch_size=64 --steps=20000 \
-  --output_dir=outputs/train/smolvla_so101_stack --job_name=smolvla_so101_stack
+./vla/train.sh smolvla          # or: ./vla/train.sh act
+tail -f ~/vla_runs/<run>.watch.log
 ```
-- This laptop has an RTX 3070 with 8 GB. That is enough to run SmolVLA, but tight for training it
-  at batch 64, so train on a bigger GPU (cloud or HF Jobs) or lower the batch size.
-- Train ACT on the same data as a baseline. It trains in a few hours, and it is the comparison the
-  research notes recommend.
-- Measure success over 10-20 trials per object position before wiring it in.
+- **Held-out episodes:** the last 10% of the episodes (`EVAL_SPLIT`) are never trained on.
+  Every 1000 steps (`EVAL_STEPS`) the loss is computed on them, and a checkpoint is saved.
+- **Early stopping:** `train_watch.py` keeps the best checkpoint and deletes the others. It
+  stops training after 3 validations in a row (`PATIENCE`) without at least a 2% improvement
+  (`MIN_DELTA`), and never before step 3000 (`MIN_STEPS`). `MAX_STEPS` (20000) is only a cap.
+  When training ends, it uploads the best checkpoint to the Hub as a private model.
+- **SmolVLA** starts from `lerobot/smolvla_base`. The dataset's cameras are mapped to the base
+  model's `camera1`, `camera2`, ... in the dataset's order.
+- **Runs in the background:** both processes survive closing the terminal. `kill <pid>` stops
+  training early; the best checkpoint stays on disk.
+- **Speed on the RTX 3070 laptop:** at batch size 8, SmolVLA takes 0.36 s per step and about 3 GB
+  of GPU memory; ACT takes 0.32 s per step and about 3.7 GB.
+- **The loss is not the success rate.** Test the best checkpoint on the arm, 10-20 trials.
+
+### Models trained
+
+| Model (Hugging Face, private) | Data | Stopped | Best validation loss |
+|---|---|---|---|
+| `sahilrajpurkar03/smolvla_so101_stack_single_rakesh_20261121_1903` | `so101_stack_single_rakesh`: 18 train / 2 held-out episodes | step 5000 (37 min) | 0.404 at step 2000 |
+
+Validation loss by step: 0.501 (1000), **0.404 (2000)**, 0.397 (3000), 0.424 (4000), 0.423 (5000).
+Over the same steps the training loss kept falling, from 0.36 to 0.18. That is overfitting: 18
+episodes are too few, so the next gain comes from more data, not from longer training.
 
 ## Part 6 (later): Use the policy in our architecture
+
+The team-facing summary of this alternate method is [`docs/alternate_method_vla.md`](../docs/alternate_method_vla.md).
+How one policy trained on one arm serves 2+ arms (who splits the work, what transfers to an
+untrained arm, what to record): [`multi_arm_policy.md`](multi_arm_policy.md).
 
 A `VLAArmWorker` implements the same `ArmWorker` contract as the scripted arm, so the orchestrator
 does not change:

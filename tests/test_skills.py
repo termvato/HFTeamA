@@ -212,3 +212,106 @@ def test_unreachable_carry_pose_is_refused_before_any_motion() -> None:
     with pytest.raises(MotionError, match="unreachable"):
         REGISTRY["pick"](d, _task("pick", object="block_01"), poses)
     assert d.calls == []
+
+
+@pytest.mark.parametrize(
+    "bad", [[0.2, 0.0], [0.2, 0.0, 0.1, 0.5], "abc", None, [float("nan"), 0, 0.1]]
+)
+def test_malformed_coordinates_fail_cleanly_before_any_motion(bad: object) -> None:
+    d = FakeDriver()
+    with pytest.raises(SkillFailed, match="bad coordinates"):
+        REGISTRY["pick"](d, _task("pick", pick_xyz=bad), POSES)
+    with pytest.raises(SkillFailed, match="bad coordinates"):
+        REGISTRY["place"](d, _task("place", place_xyz=bad), POSES)
+    assert d.calls == []
+
+
+def test_place_falls_through_to_the_next_name_like_pick_does() -> None:
+    d = FakeDriver()
+    REGISTRY["place"](d, _task("place", target="zzz", to="input_bin"), POSES)
+    assert _targets(d)[1][:2] == (0.2, 0.0)
+    with pytest.raises(SkillFailed, match="unknown location: zzz"):
+        REGISTRY["place"](FakeDriver(), _task("place", target="zzz", to="yyy"), POSES)
+
+
+def test_pick_warns_when_coordinates_and_object_disagree(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING"):
+        REGISTRY["pick"](
+            FakeDriver(), _task("pick", object="block_01", pick_xyz=[0.3, 0.1, 0.015]), POSES
+        )
+    assert "block_01" in caplog.text and "pick_xyz" in caplog.text
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        REGISTRY["pick"](
+            FakeDriver(), _task("pick", object="block_01", pick_xyz=[0.21, 0.01, 0.015]), POSES
+        )
+    assert caplog.text == ""
+
+
+def _yaws(d: FakeDriver) -> list:
+    return [a[1] if len(a) > 1 else None for n, a in d.calls if n == "move_to"]
+
+
+def test_pick_yaw_closes_the_jaws_across_the_objects_long_axis() -> None:
+    import math
+
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01", pick_yaw_deg=30.0), POSES)
+    want = math.radians(30.0) + math.pi / 2  # jaws close perpendicular to the long axis
+    assert _yaws(d) == [pytest.approx(want)] * 3  # approach, grasp, lift
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
+    assert _yaws(d) == [None, None, None]
+
+
+def test_the_carry_pose_does_not_inherit_the_pick_yaw() -> None:
+    poses = Poses(
+        objects={"block_01": [0.21, 0.01, 0.015]}, per_arm={"arm_a": {"carry": [0.05, 0.2, 0.12]}}
+    )
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01", pick_yaw_deg=10.0), poses)
+    assert _yaws(d)[-1] is None
+
+
+@pytest.mark.parametrize("bad", ["abc", None, float("nan"), [1, 2]])
+def test_bad_pick_yaw_fails_cleanly_before_any_motion(bad: object) -> None:
+    d = FakeDriver()
+    with pytest.raises(SkillFailed, match="bad coordinates"):
+        REGISTRY["pick"](d, _task("pick", object="block_01", pick_yaw_deg=bad), POSES)
+    assert d.calls == []
+
+
+CARRY_POSES = Poses(
+    objects={"block_01": [0.21, 0.01, 0.015]}, per_arm={"arm_a": {"carry": [0.05, 0.2, 0.12]}}
+)
+
+
+def test_pick_stages_through_the_carry_pose_before_entering_the_shared_area() -> None:
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01"), CARRY_POSES)
+    targets = _targets(d)
+    assert targets[0] == (0.05, 0.2, 0.12)  # first over its own side, never straight across
+    assert targets[1][2] == pytest.approx(0.015 + gs.APPROACH_DZ)
+
+
+def test_a_failed_grasp_retreats_to_the_carry_pose_not_over_the_bin() -> None:
+    d = FakeDriver(fail_grasp=True)
+    with pytest.raises(SkillFailed, match="grasp"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), CARRY_POSES)
+    assert _targets(d)[-1] == (0.05, 0.2, 0.12)
+
+
+def test_a_stalled_motion_retreats_to_the_carry_pose() -> None:
+    d = FakeDriver(stall_at_move=3)  # carry, approach, then stalls on the descent
+    with pytest.raises(MotionError, match="stall"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), CARRY_POSES)
+    assert _targets(d)[-1] == (0.05, 0.2, 0.12)
+
+
+def test_retreat_lifts_straight_up_before_swinging_to_the_carry_pose() -> None:
+    # A direct sweep from the low grasp pose to the carry pose clips the table and stalls.
+    x, y, z = CARRY_POSES.point("block_01", "arm_a")
+    for d in (FakeDriver(fail_grasp=True), FakeDriver(stall_at_move=4)):  # miss / stall on lift
+        with pytest.raises((SkillFailed, MotionError)):
+            REGISTRY["pick"](d, _task("pick", object="block_01"), CARRY_POSES)
+        assert _targets(d)[-2:] == [(x, y, z + gs.APPROACH_DZ), (0.05, 0.2, 0.12)]

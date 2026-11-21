@@ -33,6 +33,7 @@ from hfteama.arms.primitives import (
     Grasp,
     MotionError,
     check_joints,
+    check_path,
     check_point,
 )
 
@@ -46,12 +47,13 @@ SETTLE_TIMEOUT_S = 3.0
 SETTLE_TOL_RAD = 0.02
 MAX_TARGET_STEP_RAD = 0.05  # per set_joint_target call
 OBJECT_HALF_M = 0.015
+YAW_TOL_RAD = 0.1  # a requested grasp heading this far off is refused, not approximated
 # Folded sideways rest/park pose (pan, lift, elbow, wrist flex, wrist roll). The zero pose stretches
-# every arm toward the bin, so arms that face each other interpenetrate; this one keeps all
-# arm geometry >= 0.2 m from the bin centre with no self or arm-arm contact (checked for the sort
-# layout in tasks/sort/poses.json). Pan is negative so each arm rests on the side of its OWN output
-# bin; +1.85 pointed every arm at its neighbour's bin and arms collided there under the executor.
-REST_Q = np.array([-1.85, -1.6, 1.6, 1.0, 0.0])
+# every arm toward the bin, so arms that face each other interpenetrate. Folded, the gripper tucks
+# BEHIND the pan axis: with pan +1.85 each arm rests over its OWN output bin (-1.85 rests it over
+# its neighbour's, and the arms collide when that neighbour places). No self or arm-arm contact,
+# arm geometry >= 0.2 m from the bin centre (checked for the layout in tasks/sort/poses.json).
+REST_Q = np.array([1.85, -1.6, 1.6, 1.0, 0.0])
 PARK_Q = REST_Q
 
 # MuJoCo collision bits: the model's arm geoms use bit 1. Objects use bit 2 and the floor both, so
@@ -125,6 +127,7 @@ class SimTable:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
                 frame.attach_body(child.worldbody.first_body(), f"{arm_id}/", "")
+        self._add_markers(world)
         for name, xyz in self.poses.objects.items():
             body = world.add_body(name=name, pos=list(xyz))
             body.add_freejoint()
@@ -139,6 +142,35 @@ class SimTable:
             )
         self._model = spec.compile()
         self._data = mujoco.MjData(self._model)
+
+    def _add_markers(self, world: Any) -> None:
+        """Flat discs on the floor at every named location, so a recording shows the bins.
+
+        Decoration only (no collision): a part may be put down on one.
+        """
+        spots = [
+            (f"marker_{n}", xyz, [0.2, 0.35, 0.8, 1.0]) for n, xyz in self.poses.locations.items()
+        ]
+        for arm_id in self.arm_ids:
+            for n, xyz in self.poses.per_arm.get(arm_id, {}).items():
+                if n != "carry":
+                    spots.append(
+                        (
+                            f"marker_{n}_{arm_id}" if n != "out" else f"marker_{n}",
+                            xyz,
+                            [0.2, 0.7, 0.3, 1.0],
+                        )
+                    )
+        for name, xyz, rgba in spots:
+            world.add_geom(
+                name=name,
+                type=mujoco.mjtGeom.mjGEOM_CYLINDER,
+                size=[0.07, 0.0005, 0],
+                pos=[xyz[0], xyz[1], self.poses.table_z + 0.0006],
+                rgba=rgba,
+                contype=0,
+                conaffinity=0,
+            )
 
     def _jnt(self, name: str) -> int:
         return mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, name)
@@ -208,6 +240,8 @@ class SimTable:
             raise RuntimeError("SimTable is not running; use `with SimTable(...) as table:`")
         end = self.sim_time() + seconds
         while self.sim_time() < end:
+            if self._thread is None or not self._thread.is_alive() or self._quit.is_set():
+                raise RuntimeError("SimTable is not running; use `with SimTable(...) as table:`")
             if check is not None:
                 check()
             time.sleep(0.001)
@@ -315,13 +349,14 @@ class MujocoDriver:
     def resume(self) -> None:
         self._stop.clear()
 
-    def reachable(self, xyz: np.ndarray) -> bool:
+    def reachable(self, xyz: np.ndarray, yaw: float | None = None) -> bool:
         xyz = np.asarray(xyz, float)
         try:
             check_point(xyz, self.table_z)
         except MotionError:
             return False
-        return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
+        r = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
+        return r.ok and (yaw is None or abs(r.heading_error_rad or 0.0) <= YAW_TOL_RAD)
 
     def _inject(self, kind: str) -> None:
         if kind == "grasp":
@@ -357,6 +392,7 @@ class MujocoDriver:
         origin = self._target.copy()
         goal = origin.copy()
         goal[: len(q)] = q
+        check_path(self._kin, self.read_joints()[:5], goal[:5], self.table_z)
         dist = float(np.abs(goal[:5] - self.read_joints()[:5]).max())
         duration = max(dist / (JOINT_SPEED * max(speed, 1e-3) * self._slow), 0.1)
         n = int(duration / TICK_S) + 1
@@ -373,13 +409,15 @@ class MujocoDriver:
             self._table.wait(TICK_S, self._tick)
             waited += TICK_S
 
-    def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
+    def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         self._begin()
         xyz = np.asarray(xyz, float)
         check_point(xyz, self.table_z)
-        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)
+        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
         if not result.ok:
             raise MotionError("unreachable")
+        if yaw is not None and abs(result.heading_error_rad or 0.0) > YAW_TOL_RAD:
+            raise MotionError("unreachable yaw")
         self.move_joints(result.q, speed)
 
     def open_gripper(self) -> None:

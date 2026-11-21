@@ -215,3 +215,13 @@ def test_park_leaves_the_arm_frozen_if_the_step_will_not_stop(monkeypatch) -> No
     assert ("park", ()) not in d.calls  # a second trajectory next to a live one is the danger
     assert w.state() == ArmState.DOWN and "did not stop" in (w.park_error or "")
     th.join(3.0)
+
+
+def test_a_late_cancel_for_a_finished_task_does_not_stop_the_next_one() -> None:
+    d = FakeDriver()
+    w = _worker(d)
+    w._current, w._state = "new-task", ArmState.BUSY  # the next step is already running
+    w._request_stop("cancelled", only_task="old-task")  # the stale cancel arrives now
+    assert ("stop", ()) not in d.calls
+    w._request_stop("cancelled", only_task="new-task")
+    assert ("stop", ()) in d.calls
