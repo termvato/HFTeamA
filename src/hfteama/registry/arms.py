@@ -96,6 +96,16 @@ class ArmNode:
     def base_xy(self) -> tuple[float, float]:
         return (self.base_pose_m[0], self.base_pose_m[1])
 
+    @property
+    def pan_axis_xy(self) -> tuple[float, float]:
+        """Where the hip (shoulder_pan) axis meets the table plane: reach is measured from here."""
+        yaw = math.radians(self.base_yaw_deg)
+        off = self.reach.pan_offset_m
+        return (
+            self.base_pose_m[0] + off * math.cos(yaw),
+            self.base_pose_m[1] + off * math.sin(yaw),
+        )
+
     def reaches(self, point: tuple[float, ...] | list[float]) -> bool:
         """True if the table-frame point (x, y[, z]) is inside this arm's reach envelope."""
         return self.reach.contains(

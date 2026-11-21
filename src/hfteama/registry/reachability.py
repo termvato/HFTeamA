@@ -14,6 +14,7 @@ No handover chains in v1 (two-arm steps are a later extension, docs/plan.md).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
@@ -65,7 +66,9 @@ class ReachResult:
         return TaskGraph(name=self.graph.name, tasks=tasks)
 
 
-def resolve(graph: TaskGraph, arms: Iterable[ArmNode]) -> ReachResult:
+def resolve(
+    graph: TaskGraph, arms: Iterable[ArmNode], travel_s_per_m: float | None = None
+) -> ReachResult:
     """Fill allowed_arms from reach, and find the steps none of `arms` can do.
 
     With the planner on orchestrator, pass the whole catalog (every arm we own, plugged in or
@@ -75,6 +78,11 @@ def resolve(graph: TaskGraph, arms: Iterable[ArmNode]) -> ReachResult:
     then a new arm would be missing from allowed_arms until resolve is run again.
 
     Always pass the source graph (as decomposed), not a previous result's graph.
+
+    travel_s_per_m: if set, each allowed arm gets its own duration for the step (task.durations):
+    the step's duration plus this many seconds per metre from the arm's pan axis to the step's
+    points (architecture doc 4.3), so the planner prefers the nearer arm. A prior only: once an
+    arm has measured runs of a skill, the executor's DurationModel uses those instead.
     """
     arms = list(arms)
     allowed = {tid: arms_reaching(t, arms) for tid, t in graph.tasks.items()}
@@ -89,9 +97,17 @@ def resolve(graph: TaskGraph, arms: Iterable[ArmNode]) -> ReachResult:
         if any(d in blocked for d in graph.tasks[tid].deps):
             blocked.add(tid)
 
-    tasks = {
-        tid: replace(t, allowed_arms=tuple(sorted(allowed[tid]))) for tid, t in graph.tasks.items()
-    }
+    by_id = {a.arm_id: a for a in arms}
+    tasks = {}
+    for tid, t in graph.tasks.items():
+        durations = dict(t.durations)
+        pts = task_points(t)
+        if travel_s_per_m and pts:
+            for arm_id in allowed[tid]:
+                a = by_id[arm_id]
+                reach = sum(math.dist(a.pan_axis_xy, p[:2]) for p in pts) / len(pts)
+                durations[arm_id] = t.duration_on(arm_id) + travel_s_per_m * reach
+        tasks[tid] = replace(t, allowed_arms=tuple(sorted(allowed[tid])), durations=durations)
     return ReachResult(
         graph=TaskGraph(name=graph.name, tasks=tasks),
         blocked=frozenset(blocked),
