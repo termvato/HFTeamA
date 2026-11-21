@@ -325,3 +325,42 @@ def test_fit_grasps_removes_the_width_part(monkeypatch, capsys, tmp_path) -> Non
     saved = json.loads(places.read_text())["rakesh"]
     assert saved["aim_offset"] == pytest.approx([0.01, 0.03], abs=1e-4)
     assert saved["jaw_offset"] == pytest.approx([0.02, -0.005], abs=1e-4)
+
+
+def test_move_line_is_one_smooth_motion() -> None:
+    """The waypoints of a straight line are driven without stopping at each one, and no
+    joint step goes over the speed limit."""
+    import numpy as np
+
+    import hfteama.sorter.robot as robot
+    from hfteama.arms.kinematics import ArmFrame
+    from hfteama.arms.so101_ik import LOWER, UPPER, fk, solve_ik
+
+    q0 = solve_ik([0.2, 0.0, 0.08]).q
+    frame = ArmFrame()
+
+    class FakeRobot:
+        def __init__(self):
+            self.pos = frame.to_lerobot(q0, clip=False)
+            self.sent = []
+
+        def get_observation(self):
+            return {**self.pos, "gripper.pos": 50.0}
+
+        def send_action(self, act):
+            self.sent.append({k: v for k, v in act.items() if k != "gripper.pos"})
+            self.pos = {k: v for k, v in act.items() if k != "gripper.pos"}
+
+    drv = robot.ArmDriver.__new__(robot.ArmDriver)
+    drv.side, drv.frame, drv.limits = "test", frame, (LOWER, UPPER)
+    drv.motion = {"max_joint_speed_deg_s": 45.0, "rate_hz": 1000}
+    drv.gripper_target = 50.0
+    drv.robot = FakeRobot()
+    q = drv.move_line(q0, [0.2, 0.0, 0.0], yaw=None)
+    assert fk(q)[:3, 3] == pytest.approx([0.2, 0.0, 0.0], abs=2e-3)
+    path = np.array([[a[k] for k in sorted(a)] for a in drv.robot.sent])
+    steps = np.abs(np.diff(path, axis=0)).max(axis=1)
+    assert steps.max() <= 45.0 / 1000 * 1.01  # deg per tick at 45 deg/s
+    moving = steps[: int(len(steps) * 0.9)]
+    # after the start the arm keeps moving: no tick without motion before the end
+    assert (moving[len(moving) // 10 :] > 1e-6).all()

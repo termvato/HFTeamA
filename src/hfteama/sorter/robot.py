@@ -161,9 +161,11 @@ class ArmDriver:
         self, q_from, target_to, yaw: float | None, steps: int = 8, speed=None
     ) -> np.ndarray:
         """Straight TCP line (arm frame) from the pose q_from to target_to, through IK
-        waypoints seeded one from the other. Returns the final joint angles."""
+        waypoints seeded one from the other, driven as ONE smooth motion (no stop at each
+        waypoint). Returns the final joint angles."""
         p0 = fk(q_from)[:3, 3]
         q = np.asarray(q_from, float)
+        path = []
         for s in np.linspace(0, 1, steps + 1)[1:]:
             sol = solve_ik(
                 p0 + (np.asarray(target_to) - p0) * s, yaw=yaw, seed=q, limits=self.limits
@@ -171,8 +173,49 @@ class ArmDriver:
             if not sol.ok:
                 raise RuntimeError(f"{self.side}: IK failed on the way to {np.round(target_to, 3)}")
             q = sol.q
-            self.move_q(q, speed)
+            path.append(q)
+        self.move_path(path, speed)
         return q
+
+    def move_path(self, qs, speed: float | None = None, settle: float = 1.5) -> None:
+        """Drive through joint waypoints qs (rad, model) in one motion: the poses are spaced
+        by joint distance and timed with a single smooth start and stop, at most `speed`
+        deg/s on any joint; it only waits for the arm at the end."""
+        lo, hi = self.limits
+        for q in qs:
+            if np.any(np.asarray(q) < lo - 1e-6) or np.any(np.asarray(q) > hi + 1e-6):
+                raise ValueError(f"{self.side}: joint target outside the calibrated range")
+        speed = speed or self.motion.get("max_joint_speed_deg_s", 45.0)
+        rate = self.motion.get("rate_hz", 50)
+        keys = [f"{j}.pos" for j in BODY]
+        now = self.read()
+        pts = [np.array([now[k] for k in keys])]
+        pts += [np.array([self.frame.to_lerobot(q, clip=False)[k] for k in keys]) for q in qs]
+        pts = np.array(pts)
+        seg = np.abs(np.diff(pts, axis=0)).max(axis=1)  # joint distance of each segment
+        cum = np.concatenate([[0.0], np.cumsum(seg)])
+        total = cum[-1]
+        if total < 1e-6:
+            return
+        # smoothstep peaks at 1.5x the mean speed: size the steps so that stays <= speed
+        n = max(1, int(np.ceil(1.5 * total / (speed / rate))))
+        t0 = time.perf_counter()
+        for i in range(1, n + 1):
+            u = i / n
+            d = total * u * u * (3 - 2 * u)
+            pos = np.array([np.interp(d, cum, pts[:, m]) for m in range(len(keys))])
+            act = {k: float(pos[m]) for m, k in enumerate(keys)}
+            act["gripper.pos"] = self.gripper_target
+            self.robot.send_action(act)
+            time.sleep(max(0.0, t0 + i / rate - time.perf_counter()))
+        goal = {k: float(pts[-1][m]) for m, k in enumerate(keys)}
+        deadline = time.perf_counter() + settle
+        while time.perf_counter() < deadline:
+            cur = self.read()
+            if max(abs(cur[k] - goal[k]) for k in keys) < 3.0:
+                break
+            self.robot.send_action({**goal, "gripper.pos": self.gripper_target})
+            time.sleep(1 / rate)
 
     def gripper(self, value: float, wait: float | None = None) -> float:
         """Move the gripper (LeRobot 0 closed .. 100 open) and wait until it gets there or
