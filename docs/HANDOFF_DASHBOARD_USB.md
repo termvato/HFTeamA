@@ -6,13 +6,14 @@ connects to the stack").
 
 ## Read this first
 
-There are two screens. Only the first one is live today.
+There are two screens, both live from the same run: the Dash screen (http://127.0.0.1:8050) and
+the Orchestra page (http://127.0.0.1:8060, with `--orchestra`).
 
 | You want | Works today? | Go to |
 |---|---|---|
-| Plug a follower in by USB and see it **join** the run live; pull the cable and see it **leave** (the arm does not move) | **Yes**, on the Dash screen, http://127.0.0.1:8050 | Steps 1 to 3 |
+| Plug a follower in by USB and see it **join** the run live; pull the cable and see it **leave** (the arm does not move) | **Yes**, on both screens | Steps 1 to 3 |
+| The same on the **Orchestra** page (30 / 70 layout, robot cards) | **Yes**, add `--orchestra` | Steps 3 and 6 |
 | The real arms **do the work**, joining and leaving by USB | **Not yet.** Needs Action's code merged, measured config files, and the staged first-motion checks. No real arm has moved under the orchestrator yet | Steps 4 and 5 |
-| The same, on the new **Orchestra** page (30 / 70 layout) | **Not yet.** The page is built, but the small server that feeds it live data is not. Until then it shows demo data only | Step 6 |
 
 Rules that apply to every step:
 
@@ -44,7 +45,7 @@ Rules that apply to every step:
 | `hfteama` with extras `view`, `arms`, `sched` | from `pyproject.toml`: `dash>=2.17`, `plotly>=5.22`, `pyserial>=3.5`, `ortools>=9.10` | `pip install -e ".[view,arms,sched]"` | Steps 1 to 3 |
 | Extra `sim` | `mujoco>=4.0.1` (after the merge in Step 4) | `pip install -e ".[sim]"` | Steps 4 and 5: the IK runs in MuJoCo, also for real arms |
 | LeRobot | `lerobot[feetech,core-scripts]>=0.7` | `pip install "lerobot[feetech,core-scripts]>=0.7"` | Steps 4 and 5 only |
-| `fastapi`, `uvicorn` | `fastapi>=0.115`, `uvicorn>=0.30` (not in `pyproject.toml` yet) | `pip install fastapi uvicorn` | Step 6 only |
+| Extra `orchestra` | `fastapi>=0.115`, `uvicorn>=0.30` | `pip install -e ".[orchestra]"` | the Orchestra page (Step 6) |
 | A browser | Chrome or Edge | | both screens |
 | USB-serial driver for the follower's servo board | usually built into Windows | only if no COM port appears (see Troubleshooting) | detection |
 
@@ -59,7 +60,7 @@ git switch frontEndDash
 py -3.13 -m venv $HOME\venvs\hfteama
 & $HOME\venvs\hfteama\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -e ".[view,arms,sched]"
+pip install -e ".[view,arms,sched,orchestra]"
 ```
 
 The environment lives in your user folder (`$HOME\venvs\hfteama`), not inside `HFTeamA`, because
@@ -92,14 +93,14 @@ that this step does not see.
 ## Step 3. Watch the arms join and leave live (no motion)
 
 ```powershell
-python -m hfteama.demo --backend fake --watch --task tasks/sort/hacklab6.json --table configs/hacklab_table.json
+python -m hfteama.demo --backend fake --watch --task tasks/sort/hacklab6.json --table configs/hacklab_table.json --orchestra
 ```
 
-Open http://127.0.0.1:8050.
+Open http://127.0.0.1:8060 (Orchestra) and/or http://127.0.0.1:8050 (Dash). Both show the same run.
 
 | Do | You should see within about 1 second |
 |---|---|
-| Plug in a follower | Feed: "Arm rakesh_follower joined"; the estimate updates |
+| Plug in a follower | Orchestra: the counter goes `0 / 2` → `1 / 2` and the arm's card appears. Dash feed: "Arm rakesh_follower joined"; the estimate updates |
 | Press **Go** | The countdown starts; the plan splits the six objects over the joined arms |
 | Plug in the second follower mid-run | It joins; feed "Re-split: finish now …"; the countdown drops |
 | Pull a follower's USB cable | Feed: "Arm … lost (unplugged), moving its work"; its steps go to the other arm |
@@ -149,24 +150,30 @@ The runner starts even without LeRobot or a complete config (checked 21 Nov). Th
 only when an arm is plugged in: the console logs `arm <id> could not start: …` and the arm does not
 join. Read that line; the Troubleshooting table lists the usual causes.
 
-## Step 6. Live on the Orchestra page (still to build)
+## Step 6. The Orchestra page
 
-The Orchestra page is in `src/hfteama/orchestra/static/`. Opened today, it says "Demo data" and
-never looks at USB. To make it live, someone builds milestone M0/M1 of
-[`ORCHESTRA_DASHBOARD.md`](ORCHESTRA_DASHBOARD.md) (sections 5 and 8):
+Add `--orchestra` to the Step 3 or Step 5 command, then open http://127.0.0.1:8060. It runs in the
+same process as the Dash screen and shows the same run.
 
-1. Add to `pyproject.toml`: `orchestra = ["fastapi>=0.115", "uvicorn>=0.30"]`, then
-   `pip install -e ".[orchestra]"`.
-2. Build `src/hfteama/orchestra/` (API, state hub, commands) and a `--orchestra` flag on
-   `python -m hfteama.demo` that starts it on port 8060 next to the Dash screen. It serves the
-   page from `static/`.
-3. Add the small executor and watcher additions it reads: G3 (richer `snapshot()`), G4
-   (`ArmWatcher.present()`), G5 (`Rig.plug(arm_id)`), G6 (the flags).
+| On the page | Where it comes from |
+|---|---|
+| `n / 2 robots joined`, each robot's state on the left | the USB watcher (cable in or out) and the executor (joined, working, stopping, lost) |
+| The task on top, the countdown, the limit in words | the event log, through the same code as the Dash screen |
+| One card per robot that joined: current step, steps done, heartbeat | the executor and the arm's worker |
+| **Live** at the top left | the page has a live link. **Demo** means it is not connected to a run (it was opened as a file, or the runner is not running with `--orchestra`) |
 
-**Done when:**
-`python -m hfteama.demo --backend fake --watch --task tasks/sort/hacklab6.json --table configs/hacklab_table.json --orchestra`
-gives http://127.0.0.1:8060 showing **Live** (not "Demo"), and plugging in a follower moves the
-counter from `1 / 2` to `2 / 2` and adds its card within about 1 second.
+Controls on the page: Go, Pause / Resume, Stop all (slow stop), and per robot Remove (slow stop)
+and, under ⋯, Remove now, Simulate unplug (not on real arms) and Fail its next pick (fake arms
+only). With USB detection on, an arm joins only by its cable: the page will not plug in an arm
+whose USB serial it does not see. Every command, accepted or refused, is written to
+`commands.jsonl` next to the run's event log.
+
+The page listens on this laptop only. To open it from another machine, add
+`--orchestra-host 0.0.0.0 --orchestra-token <secret>`; commands then need that token
+(open the page once with `?token=<secret>`).
+
+Joint graphs and the IK line on the cards need joint readings from the arm. They are not wired yet
+(spec section 8, G7), so the cards say "no joint data" for now, on every backend.
 
 ---
 
@@ -186,7 +193,7 @@ counter from `1 / 2` to `2 / 2` and adds its card within about 1 second.
 | Console: `arm <id> could not start` mentioning access denied or the port being busy | Another program has the COM port open | Close teleop, recording or `arm_check`, then unplug and replug |
 | An arm joins and is dropped again about 1.5 s later | Heartbeat lost: the arm stopped answering on the bus | Check the 12 V supply and the cable; replug |
 | Page at :8050 does not load | Runner not running, or port 8050 taken | Look at the console; or add `--port 8051` and open that |
-| The Orchestra page says "Demo data" | Expected until Step 6 is built | Use the Dash screen at :8050 |
+| The Orchestra page says "Demo" | The page is not connected to a run | Start the runner with `--orchestra` and open http://127.0.0.1:8060 (not the file) |
 
 ---
 
@@ -204,4 +211,6 @@ Windows 11, Python 3.13.14, fresh virtual environment, `frontEndDash` with `orig
 | Step 5 command, without LeRobot and without arms | Starts, `USB watch: True`, page answers |
 | `hfteama pairs`, `python -m hfteama.arm_check check-config` | Run; check-config reports the expected reach problems with the example poses |
 | `connected_serials()` | `set()`: **no robot was plugged into this laptop**, so detection of the real followers on Windows is **not yet confirmed**. Step 2 is that test |
-| LeRobot on Windows, real-arm motion, Orchestra API | **Not checked**: not installed, not run, not built |
+| Orchestra API (`--orchestra`) | Built 21 Nov 20:30. `tests/test_orchestra.py`: 9 passed (USB plug-ins as nodes, Go to finished, pause, commands, token, stream, page); full suite 158 passed; in Chrome, a scripted plug-in of both follower serials took the page from `0 / 2` to `2 / 2` with both cards running |
+| LeRobot | 0.7.0 installed in `$HOME\venvs\hfteama` (torch 2.15.0, CPU build); `from lerobot.robots.so_follower import SOFollower, SOFollowerRobotConfig` works |
+| Real-arm motion, LeRobot talking to a real arm on Windows | **Not checked** |

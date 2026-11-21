@@ -70,6 +70,9 @@ class ArmWatcher:
         self._joined: set[str] = set()  # arm ids handed to the executor
         self._held_back: set[str] = set()  # removed on purpose; rejoin only after a replug
         self._count: dict[str, int] = {}  # arm id -> consecutive scans in the new state
+        self._present: set[str] = set()  # known arm ids seen in the last successful scan
+        self.scanned = False  # True once a scan has run (else `present()` means nothing yet)
+        self.errors: list[tuple[str, str]] = []  # (arm id, why) for arms that could not start
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -87,6 +90,8 @@ class ArmWatcher:
             with self._lock:
                 self._joined.discard(arm_id)
             log.error("arm %s could not start: %s", arm_id, e)
+            with self._lock:
+                self.errors = [*self.errors[-19:], (arm_id, str(e) or type(e).__name__)]
             if self.on_error:
                 self.on_error(arm_id, e)
             return False
@@ -112,6 +117,11 @@ class ArmWatcher:
         with self._lock:
             return set(self._joined)
 
+    def present(self) -> set[str]:
+        """Known arm ids whose USB serial was seen in the last scan (cable in), joined or not."""
+        with self._lock:
+            return set(self._present)
+
     # ---- polling
 
     def poll_once(self) -> None:
@@ -122,6 +132,8 @@ class ArmWatcher:
             log.warning("serial scan failed: %s", e)
             return
         with self._lock:
+            self._present = set(present)
+            self.scanned = True
             self._held_back &= present  # cable pulled: the arm may join again next time
             joined = set(self._joined)
             held = set(self._held_back)

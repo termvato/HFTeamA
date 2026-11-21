@@ -93,6 +93,9 @@
         };
       });
       const byStep = Object.fromEntries(tasks.map((t) => [t.id, t]));
+      const anyJoined = nodes.some((n) => n.joined);
+      // With USB detection on, an arm joins when its cable goes in; the screen cannot plug it.
+      const canPlug = config.watching ? nodes.some((n) => n.connected && !n.joined) : nodes.some((n) => !n.joined);
       const objects = [];
       const seen = new Set();
       steps.forEach((s) => {
@@ -108,12 +111,12 @@
         else if (place.state === 'running' || place.state === 'verifying') { st = 'placing'; arm = place.arm; }
         else if (pick.state === 'running') { st = 'picking'; arm = pick.arm; }
         else if (pick.state === 'done') { st = 'held'; arm = pick.arm; }
-        else if ((run.blocked || []).includes(pick.id)) st = 'out_of_reach';
+        else if (anyJoined && (run.blocked || []).includes(pick.id)) st = 'out_of_reach';
         objects.push({ id: s.object, label: s.label || s.object.replace(/_/g, ' '), state: st, arm });
       });
       const phase = run.paused ? 'running' : run.phase;
       return {
-        source: 'live', connected, updated, backend: config.backend,
+        source: 'live', connected, updated, backend: config.backend, watching: !!config.watching,
         task: { name: (config.task || {}).name, title: names.title, subtitle: names.subtitle, objects,
           done: run.done || 0, total: run.total || steps.length, blocked: (run.blocked || []).length },
         run: {
@@ -126,7 +129,12 @@
         counts: { known: state.nodes ? state.nodes.known : 0, connected: state.nodes ? state.nodes.connected : 0, joined: state.nodes ? state.nodes.joined : 0 },
         nodes,
         feed: (state.feed || []).map((x) => (typeof x === 'string' ? { t: null, text: x, level: /lost|fail|timeout/i.test(x) ? 'bad' : 'info' } : x)),
-        allowed: Object.assign({ go: run.phase === 'estimate', pause: run.phase === 'running', stop_all: run.phase !== 'finished', plug: true, simulate_unplug: false, inject_failure: false }, config.commands || {}),
+        allowed: Object.assign({ simulate_unplug: false, inject_failure: false }, config.commands || {}, {
+          go: run.phase === 'estimate' && anyJoined,
+          pause: run.phase === 'running',
+          stop_all: run.phase !== 'finished' && anyJoined,
+          plug: canPlug,
+        }),
       };
     }
 

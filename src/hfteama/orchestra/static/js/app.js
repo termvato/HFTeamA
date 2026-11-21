@@ -317,7 +317,13 @@
         slot.innerHTML = '<span></span><button class="btn small" type="button">Plug in next arm</button>';
         slot.querySelector('button').addEventListener('click', plugNext);
       }
-      setText(slot.querySelector('span'), `${plural(waiting.length, 'more arm')} can join this task`);
+      setText(
+        slot.querySelector('span'),
+        m.watching
+          ? `${plural(waiting.length, 'more arm')} can join: plug in ${waiting.length === 1 ? 'its' : 'their'} USB cable (${waiting.map((n) => n.arm_id).join(', ')})`
+          : `${plural(waiting.length, 'more arm')} can join this task`,
+      );
+      slot.querySelector('button').hidden = !!m.watching;
       slot.querySelector('button').disabled = stale(m) || busyCmd || !(m.allowed || {}).plug;
       box.appendChild(slot);
     } else if (slot) slot.remove();

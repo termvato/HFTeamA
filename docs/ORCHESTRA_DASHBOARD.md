@@ -489,6 +489,7 @@ Ordered so the demo gets the most from the first hours. Each ends with something
 | # | Milestone | Done when |
 |---|---|---|
 | UI | 30 / 70 screen with demo mode | **Done 21 Nov**: `static/`, checked in headless Chrome (desktop, light and dark, phone width; full auto demo to 12 / 12 steps; lost arm, slow stop). Not yet run against a live API (M0 does not exist yet) |
+| M0-M2 | API, live screen, controls | **Done 21 Nov 20:30** (`src/hfteama/orchestra/{hub,api,server}.py`, `--orchestra`; G1 pause/resume, G3 snapshot fields, G4 `ArmWatcher.present()`, G5 `Rig.plug`, G6 flags). Not in it yet: joint and IK data (M3, G7), `ik` and `joints` stream events, ports on the cards |
 | M0 | API skeleton | `--orchestra` starts the server; `GET /api/health`, `/api/config`, `/api/state` answer on fake arms; `test_orchestra_api.py` green in CI |
 | M1 | Live read-only dashboard | Header with `n / N joined`, node strip, run panel, Gantt, task table, feed, all live over SSE; reconnect resumes without missing events; plugging an arm in via the Dash test panel shows up within 0.5 s |
 | M2 | Controls | Go, pause/resume, stop all, plug, remove (slow and abort), simulate unplug, inject failure; confirm dialogs; audit file; `409` rules tested for every phase and backend |

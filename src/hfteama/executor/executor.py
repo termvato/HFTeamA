@@ -135,6 +135,7 @@ class Executor:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._finished = threading.Event()
+        self._paused = False
 
     # ------------------------------------------------------------------ public (thread-safe)
 
@@ -168,6 +169,19 @@ class Executor:
             self._thread = threading.Thread(target=self._loop, name="executor", daemon=True)
             self._thread.start()
 
+    def pause(self) -> None:
+        """No new steps start. Running steps finish, and an arm holding a part still places it."""
+        with self._lock:
+            self._paused = True
+
+    def resume(self) -> None:
+        with self._lock:
+            self._paused = False
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
     def stop(self) -> None:
         self._stop.set()
         if self._thread is not None:
@@ -199,6 +213,16 @@ class Executor:
                 "predicted_finish": self._plan.makespan if self._plan else None,
                 "binding": self._plan.binding if self._plan else "",
                 "blocked": list(self._plan.blocked) if self._plan else [],
+                # for dashboards (Orchestra): additive, nothing above changes
+                "started": self._t0 is not None,
+                "paused": self._paused,
+                "runs": {
+                    t: {"arm": r.arm_id, "start": r.start, "estimate": r.estimate}
+                    for t, r in self._runs.items()
+                },
+                "retries": {t: n for t, n in self._retries.items() if n},
+                "locks": dict(self._locks),
+                "rescan_hold": sorted(self._hold),
             }
 
     def now(self) -> float:
@@ -357,6 +381,8 @@ class Executor:
                 tid: str | None = self._held[arm]
             elif arm in self._parking:
                 self._park(arm)
+                continue
+            elif self._paused:
                 continue
             else:
                 tid = next(
