@@ -76,7 +76,12 @@ def _summary(log: EventLog, graph_size: int) -> tuple[int, list[str]]:
 
 def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--backend", choices=("real", "sim"), default="real")
+    ap.add_argument(
+        "--backend",
+        choices=("real", "sim", "sorter"),
+        default="real",
+        help="sorter: real arms through hfteama.sorter (calibrated IK, per-arm aim corrections)",
+    )
     ap.add_argument("--task", default=str(ROOT / "tasks" / "sort" / "sort12.json"))
     ap.add_argument(
         "--poses", default=None, help="default: poses_real.json (real) / poses.json (sim)"
@@ -108,7 +113,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     args = ap.parse_args(argv)
 
-    real = args.backend == "real"
+    real = args.backend in ("real", "sorter")
     if real and args.yes:
         ap.error("--yes is for the simulator only: real arms always need the typed confirmations")
     if real and args.inject:
@@ -157,7 +162,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             if ask("Type 'yes' to connect the arms: ").strip() != "yes":
                 print("not confirmed: nothing was connected.")
                 return 2
-            factory = real_worker_factory(args.config, poses)
+            if args.backend == "sorter":
+                from hfteama.sorter.bridge import sorter_worker_factory
+
+                factory = sorter_worker_factory(poses, pairs_config=args.pairs)
+            else:
+                factory = real_worker_factory(args.config, poses)
         else:
             table = SimTable(poses, arm_ids=arm_ids or None, speed=1.0).__enter__()
             factory = sim_worker_factory(table, poses)
