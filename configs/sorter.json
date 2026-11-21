@@ -1,5 +1,5 @@
 {
-  "note": "Vision-guided IK sorter (hfteama sort ...). Table frame, seen from BEHIND the arms (facing the camera): origin at the centre of tag 1 (back-left), x to the right along the back tags (tag 2 at x = 0.73), y forward towards the camera (tags 3 and 0 at y = 0.335), z up; metres. Tag centres: 73 cm apart along x, 33.5 cm along y. See docs/hardware/sorter.md.",
+  "note": "Vision-guided IK sorter (hfteama sort ...). Table frame, seen from BEHIND the arms (facing the camera): origin at the centre of tag 1 (back-left), x to the right along the back tags (tag 2 at x = 0.734), y forward towards the camera (tags 3 and 0 at y = 0.335), z up; metres. Tag centres: 73.4 cm apart along x, 33.5 cm along y. See docs/hardware/sorter.md.",
   "camera": {
     "name": "C922",
     "width": 1920,
@@ -30,7 +30,7 @@
         0.0
       ],
       "2": [
-        0.73,
+        0.734,
         0.0
       ],
       "3": [
@@ -38,7 +38,7 @@
         0.335
       ],
       "0": [
-        0.73,
+        0.734,
         0.335
       ]
     },
@@ -79,7 +79,7 @@
       "pair": "rakesh",
       "colour": "black",
       "base": [
-        0.567,
+        0.571,
         -0.015
       ],
       "yaw_deg": 90.0,
@@ -89,7 +89,7 @@
       },
       "aim_offset": [
         0.04,
-        0.06
+        0.056
       ],
       "mask_radius": 0.12
     },

@@ -19,7 +19,7 @@ hfteama sort run                # sort, both arms
 |---|---|
 | Overhead camera: Logitech C922, found by name, 1920x1080 MJPG, focus/exposure/white balance pinned | `configs/sorter.json` → `camera` |
 | Camera intrinsics (from group-6 KapplaBuild, 41 ChArUco images, rms 0.54 px) | `configs/camera/overhead_c922_1920x1080.yml` |
-| Reference tags: ArUco `DICT_4X4_50`, ids 0-3, centres on a 73 x 33.5 cm rectangle | `table.tags` |
+| Reference tags: ArUco `DICT_4X4_50`, ids 0-3, centres on a 73.4 x 33.5 cm rectangle | `table.tags` |
 | Box: open cylinder, 18 cm diameter, 5.2 cm high | `box` |
 | Arms, named after their pair: `rakesh` (black), `hacklab` (green); base position and heading | `arms`, then `configs/sorter_placements.json` |
 
@@ -28,16 +28,16 @@ the right and hacklab on the left; seen from the camera it is the other way roun
 
 **Table frame, seen from behind the arms (facing the camera):** origin at the centre of
 tag 1 (back-left), x to the right along the back tags, y forward towards the camera, z up,
-metres. Tag centres are 73 cm apart along x and 33.5 cm along y. The arms' base_link origins
+metres. Tag centres are 73.4 cm apart along x and 33.5 cm along y. The arms' base_link origins
 are 1.5 cm behind the back tags (y = -0.015) and face +y (`yaw_deg` 90).
 
 ```
             hacklab (green)                     rakesh (black)
-            base (0.163, -0.015)                base (0.567, -0.015)
-   tag 1 (0, 0) ---------------------------------------- tag 2 (0.73, 0)
+            base (0.163, -0.015)                base (0.571, -0.015)
+   tag 1 (0, 0) ---------------------------------------- tag 2 (0.734, 0)
         |              pieces ...      ... pieces               |
         |                         (box)                         |
-   tag 3 (0, 0.335) ------------------------------------ tag 0 (0.73, 0.335)
+   tag 3 (0, 0.335) ------------------------------------ tag 0 (0.734, 0.335)
                                  camera
 ```
 
