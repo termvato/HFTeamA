@@ -37,7 +37,7 @@ def test_arm_not_plugged_in_is_refused_not_swapped(monkeypatch) -> None:
 
 
 def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
-    """Jog with a fake arm and camera: move 2 steps forward, 1 left, record, quit."""
+    """Jog with a fake arm and camera: piece 1, 2 steps forward, 1 left, record, quit."""
     import numpy as np
 
     import hfteama.sorter.robot as robot
@@ -79,11 +79,14 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
         def move_q(self, q, speed=None):
             self._q = np.asarray(q, float)
 
+        def go_home(self):
+            pass
+
     monkeypatch.setattr(run, "Eye", FakeEye)
     monkeypatch.setattr(robot, "ArmDriver", FakeDriver)
     answers = iter(["1", "f2", "l", "ok", "q", "n"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
-    assert main(["sort", "jog", "rakesh", "--step", "10"]) == 0
+    assert main(["sort", "jog", "rakesh", "--step", "10", "--no-viewer"]) == 0
     out = capsys.readouterr().out
     # rakesh faces the camera: forward = table -y, its left = table +x
     assert "recorded: real = camera + (+1.0, -2.0) cm" in out

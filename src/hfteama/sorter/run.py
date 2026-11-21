@@ -148,9 +148,16 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
         b = scene.box
         label([b.x, b.y, cfg["box"]["height"]], f"box ({b.x:.3f}, {b.y:.3f})", (255, 0, 255))
     for i, pc in enumerate(scene.pieces, 1):
-        label([pc.x, pc.y, 0], f"{i}: ({pc.x:.3f}, {pc.y:.3f}) {piece_angle(pc):.0f}deg")
+        label([pc.x, pc.y, 0], f"   ({pc.x:.3f}, {pc.y:.3f}) {piece_angle(pc):.0f}deg")
+        # the piece number, big, just beside the piece: what `sort jog` takes
+        u, v = np.round(project([[pc.x, pc.y, 0]], pose, intr)[0]).astype(int)
+        org = (u - int(40 * k), v - int(20 * k))
+        for c, t in (((0, 0, 0), 6), ((255, 255, 0), 3)):
+            cv2.putText(img, str(i), org, cv2.FONT_HERSHEY_SIMPLEX, 1.3 * k, c, int(t * k))
     for pc in scene.pieces:
-        colour = COLOURS.get(side_of.get(id(pc)), (0, 0, 255))
+        # coloured by the arm that takes it; red = nobody can; cyan when there is no plan
+        unplanned = (0, 0, 255) if plan else (255, 255, 0)
+        colour = COLOURS.get(side_of.get(id(pc)), unplanned)
         poly(np.c_[pc.outline, np.zeros(len(pc.outline))], colour)
         d = 0.5 * pc.width + 0.01
         dx, dy = d * np.cos(pc.yaw), d * np.sin(pc.yaw)
@@ -409,16 +416,253 @@ def _lerobot_deg(cfg, side, q) -> dict:
 
 
 JOG_HELP = """Commands (directions as seen from BEHIND the arm, looking where it looks):
+  N       go over piece N (numbers as in the Rerun view)
   f / b   forward (away from the arm) / back      l / r   left / right
   u / d   up / down                                add a number for several steps: f3
   s N     step size in mm (now {step:.0f})          y N     turn the jaws by N deg
-  o / c   open / close the gripper                 g       grasp test here: down, close, up
-  ok      the tip is right over the piece's centre: record this point
-  n       next piece (or `n 3` for piece 3)        q       finish (fit, save) and go home"""
+  o / c   open / close the gripper                 g       grasp here: down, close, up
+  box     over the box and open (drop)             scan    home, look again, renumber
+  ok      the tip is right over the piece's centre: record camera-vs-arm offset
+  h       help                                     q       finish (fit, save) and go home"""
+
+
+class Jog:
+    """Interactive session: the arm hovers over pieces the camera found; the operator nudges
+    it, grasps, drops in the box. A background thread streams the camera to Rerun with the
+    pieces numbered, the aim point (red) and the tool tip by the encoders (yellow)."""
+
+    def __init__(self, cfg, side, arm, drv, eye, z, step):
+        self.cfg, self.side, self.arm, self.drv, self.eye = cfg, side, arm, drv, eye
+        self.pc, self.mc = cfg["pieces"], cfg["motion"]
+        self.z, self.step = z, step
+        self.scene = None
+        self.piece = None  # index of the current piece
+        self.target = None  # table xyz the arm aims at
+        self.yaw = 0.0
+        self.q = drv.q()
+        self.pairs_arm, self.pairs_table = [], []
+
+    # --- vision -------------------------------------------------------------------------------
+
+    def scan(self) -> None:
+        """Back home, look, renumber the pieces."""
+        if self.target is not None:
+            self.drv.go_home()
+            self.q = self.drv.q()
+            self.target = None
+        chain = np.array([self.arm.placement.to_table(p) for p in chain_points(self.q)])
+        with self.lock:
+            _, _, self.scene = self.eye.look([chain])
+        self.piece = None
+        b = self.scene.box
+        print("box:", "not found" if b is None else f"({b.x:.3f}, {b.y:.3f})")
+        for i, p in enumerate(self.scene.pieces, 1):
+            d = np.hypot(*self.arm.placement.to_arm([p.x, p.y])[:2])
+            print(
+                f"  {i}: ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f} cm,"
+                f" {d * 100:.0f} cm from the base"
+            )
+        if not self.scene.pieces:
+            print("  no pieces seen")
+
+    def stream(self, stop) -> None:
+        """Camera -> Rerun, ~5 fps, until stop is set."""
+        import cv2
+        import rerun as rr
+
+        while not stop.is_set():
+            try:
+                with self.lock:
+                    frame = self.eye.cam.frame()
+                if self.eye.pose is None or self.scene is None:
+                    continue
+                img = draw(
+                    frame,
+                    self.eye.pose,
+                    self.eye.intr,
+                    self.scene,
+                    None,
+                    self.cfg,
+                    {self.side: self.arm},
+                )
+                self._marks(cv2, img)
+                rr.log("camera", rr.Image(img[..., ::-1]).compress(jpeg_quality=75))
+            except Exception as e:  # never kill the session for a dropped frame
+                print(f"  [viewer] {e}")
+            stop.wait(0.2)
+
+    def _marks(self, cv2, img) -> None:
+        from hfteama.vision.table import project
+
+        pose, intr = self.eye.pose, self.eye.intr
+        k = img.shape[1] / 1280
+        if self.target is not None:
+            g = np.round(project([[*self.target[:2], 0.0]], pose, intr)[0]).astype(int)
+            cv2.circle(img, tuple(g), int(10 * k), (0, 0, 255), int(2 * k))
+        tip = self.arm.placement.to_table(fk(self.q)[:3, 3])
+        t = np.round(project([[tip[0], tip[1], 0.0]], pose, intr)[0]).astype(int)
+        cv2.drawMarker(img, tuple(t), (0, 255, 255), cv2.MARKER_CROSS, int(24 * k), int(2 * k))
+        txt = f"tip ({tip[0]:.3f}, {tip[1]:.3f}, z {tip[2]:.3f})"
+        if self.piece is not None:
+            txt = f"piece {self.piece + 1}  " + txt
+        cv2.putText(
+            img,
+            txt,
+            (10, img.shape[0] - int(20 * k)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8 * k,
+            (0, 255, 255),
+            int(2 * k),
+        )
+
+    # --- motion -------------------------------------------------------------------------------
+
+    def move(self, target, yaw) -> bool:
+        sol = solve_ik(
+            self.arm.placement.to_arm(target), yaw=yaw, seed=self.q, limits=self.drv.limits
+        )
+        if not sol.ok:
+            print(f"  can't reach ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f})")
+            return False
+        self.drv.move_q(sol.q)
+        self.q, self.target, self.yaw = sol.q, np.asarray(target, float), yaw
+        return True
+
+    def goto_piece(self, i: int) -> None:
+        if not self.scene or not 0 <= i < len(self.scene.pieces):
+            print("  no such piece (scan to renumber)")
+            return
+        p = self.scene.pieces[i]
+        if self.move([p.x, p.y, self.z], self.arm.placement.yaw_to_arm(p.yaw)):
+            self.piece = i
+            print(
+                f"  over piece {i + 1}: camera says ({p.x:.3f}, {p.y:.3f}),"
+                f" {self.z * 100:.0f} cm up"
+            )
+
+    def nudge(self, key: str, n: int) -> None:
+        if self.target is None:
+            print("  pick a piece first (its number)")
+            return
+        fwd = (
+            self.arm.placement.to_table([1.0, 0.0])[:2]
+            - self.arm.placement.to_table([0.0, 0.0])[:2]
+        )
+        left = np.array([-fwd[1], fwd[0]])
+        d = {"f": fwd, "b": -fwd, "l": left, "r": -left}.get(key, np.zeros(2))
+        new = self.target.copy()
+        new[:2] += d * self.step * n
+        new[2] += {"u": 1, "d": -1}.get(key, 0) * self.step * n
+        if new[2] < self.pc.get("grasp_z", 0.015) - 1e-9:
+            print(f"  not lower than grasp_z ({self.pc.get('grasp_z', 0.015) * 100:.1f} cm)")
+            return
+        if self.move(new, self.yaw):
+            self._where()
+
+    def _where(self) -> None:
+        t = self.target
+        msg = f"  aim ({t[0]:.3f}, {t[1]:.3f}, {t[2]:.3f})"
+        if self.piece is not None:
+            p = self.scene.pieces[self.piece]
+            dx, dy = (t[0] - p.x) * 100, (t[1] - p.y) * 100
+            msg += f", {dx:+.1f} / {dy:+.1f} cm from the camera's point (x / y)"
+        print(msg)
+
+    def grasp(self) -> None:
+        if self.target is None:
+            print("  pick a piece first")
+            return
+        self.drv.gripper(self.mc.get("gripper_open", 60.0), wait=0.3)
+        up = self.arm.placement.to_arm(self.target)
+        low = self.arm.placement.to_arm([*self.target[:2], self.pc.get("grasp_z", 0.015)])
+        try:
+            self.q = self.drv.move_line(self.q, low, self.yaw)
+            closed = self.drv.gripper(self.mc.get("gripper_closed", 2.0))
+            held = closed > self.mc.get("gripper_closed", 2.0) + self.mc.get("grasp_min_open", 4.0)
+            print(f"  gripper closed to {closed:.1f}: {'HOLDING something' if held else 'empty'}")
+            self.q = self.drv.move_line(self.drv.q(), up, self.yaw, steps=4)
+        except RuntimeError as e:
+            print(f"  {e}")
+
+    def drop(self) -> None:
+        from hfteama.sorter.plan import plan_drop
+
+        b = self.scene.box if self.scene else None
+        if b is None:
+            print("  box not found (scan)")
+            return
+        bc = self.cfg["box"]
+        sol = plan_drop(
+            self.arm,
+            b,
+            bc["height"],
+            bc.get("drop_above", 0.04),
+            np.radians(self.mc.get("drop_max_tilt_deg", 60.0)),
+        )
+        if sol is None:
+            print("  can't reach over the box")
+            return
+        self.drv.move_q(sol.q)
+        self.q = sol.q
+        self.drv.gripper(self.mc.get("gripper_open", 60.0))
+        self.target = self.arm.placement.to_table(fk(sol.q)[:3, 3])
+        self.piece = None
+        print("  dropped; `scan` to look again")
+
+    def record(self) -> None:
+        if self.piece is None:
+            print("  go over a piece first")
+            return
+        p = self.scene.pieces[self.piece]
+        tip = self.drv.tcp()
+        off = (self.arm.placement.to_table(tip)[:2] - [p.x, p.y]) * 100
+        self.pairs_arm.append(tip[:2])
+        self.pairs_table.append([p.x, p.y])
+        print(
+            f"  recorded: real = camera + ({off[0]:+.1f}, {off[1]:+.1f}) cm"
+            f" ({len(self.pairs_arm)} points)"
+        )
+
+    # --- loop ---------------------------------------------------------------------------------
+
+    def handle(self, cmd: str) -> bool:
+        """One command; False to quit."""
+        key, arg = cmd[:1], cmd[1:].strip()
+        if cmd.isdigit():
+            self.goto_piece(int(cmd) - 1)
+        elif cmd == "ok":
+            self.record()
+        elif cmd == "box":
+            self.drop()
+        elif cmd == "scan":
+            self.scan()
+        elif key == "q":
+            return False
+        elif key == "s" and arg:
+            self.step = float(arg) / 1000
+        elif key == "y" and arg:
+            if self.target is not None and self.move(
+                self.target, self.yaw + np.radians(float(arg))
+            ):
+                self._where()
+        elif cmd == "o":
+            self.drv.gripper(self.mc.get("gripper_open", 60.0))
+        elif cmd == "c":
+            print(f"  gripper at {self.drv.gripper(self.mc.get('gripper_closed', 2.0)):.1f}")
+        elif cmd == "g":
+            self.grasp()
+        elif key in ("f", "b", "l", "r", "u", "d") and (not arg or arg.isdigit()):
+            self.nudge(key, int(arg) if arg else 1)
+        else:
+            print(JOG_HELP.format(step=self.step * 1000))
+        return True
 
 
 def cmd_jog(args) -> int:
-    """Hover over a detected piece, correct by hand, record camera-vs-arm offsets, fit."""
+    """Hover over detected pieces, correct by hand, grasp, drop; fit the arm placement from
+    the corrections."""
+    import threading
+
     from hfteama.sorter.robot import ArmDriver
 
     cfg = load_config(args.sorter_config)
@@ -426,146 +670,41 @@ def cmd_jog(args) -> int:
     if side not in cfg["arms"]:
         raise SystemExit(f"Unknown arm {side!r}; config has {list(cfg['arms'])}")
     arm = arm_models(cfg, [side])[side]
-    pc, mc = cfg["pieces"], cfg["motion"]
-    step = args.step / 1000
-    pairs_arm, pairs_table = [], []
+    stop = threading.Event()
     with Eye(cfg) as eye:
-        drv = ArmDriver(side, cfg["arms"][side], mc, args.config).connect()
+        drv = ArmDriver(side, cfg["arms"][side], cfg["motion"], args.config).connect()
+        jog = Jog(cfg, side, arm, drv, eye, args.z, args.step / 1000)
+        jog.lock = threading.Lock()
+        viewer = None
         try:
-            chain = np.array([arm.placement.to_table(p) for p in chain_points(drv.q())])
-            _, _, scene = eye.look([chain])
-            pieces = scene.pieces
-            if not pieces:
-                print("No pieces seen.")
-                return 1
-            for i, p in enumerate(pieces, 1):
-                d = np.hypot(*arm.placement.to_arm([p.x, p.y])[:2])
-                print(
-                    f"  {i}: ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f} cm,"
-                    f" {d * 100:.0f} cm from the base"
-                )
-            idx = int(input("Piece number to go to: ").strip() or 1) - 1
-            print(JOG_HELP.format(step=step * 1000))
-            while 0 <= idx < len(pieces):
-                p = pieces[idx]
-                cam = np.array([p.x, p.y])
-                target = np.array([p.x, p.y, args.z])  # table frame
-                yaw = arm.placement.yaw_to_arm(p.yaw)
-                q = _jog_move(drv, arm, target, yaw, None)
-                if q is None:
-                    idx += 1
-                    continue
-                print(
-                    f"piece {idx + 1}: camera says ({p.x:.3f}, {p.y:.3f});"
-                    f" hovering {args.z * 100:.0f} cm above"
-                )
-                nxt = None
-                while nxt is None:
-                    cmd = input(f"[{idx + 1}] > ").strip().lower()
-                    if not cmd:
-                        continue
-                    key, arg = cmd[0], cmd[1:].strip()
-                    if cmd == "ok":
-                        tip = drv.tcp()
-                        off = arm.placement.to_table(tip)[:2] - cam
-                        pairs_arm.append(tip[:2])
-                        pairs_table.append(cam)
-                        dx, dy = off * 100
-                        print(
-                            f"  recorded: real = camera + ({dx:+.1f}, {dy:+.1f}) cm"
-                            f" in the table frame ({len(pairs_arm)} points)"
-                        )
-                        continue
-                    if key == "q":
-                        nxt = -1
-                    elif key == "n":
-                        nxt = int(arg) - 1 if arg else idx + 1
-                    elif key == "s" and arg:
-                        step = float(arg) / 1000
-                    elif key == "y" and arg:
-                        yaw += np.radians(float(arg))
-                        q = _jog_move(drv, arm, target, yaw, q) or q
-                    elif key == "o":
-                        drv.gripper(mc.get("gripper_open", 60.0))
-                    elif key == "c":
-                        print(f"  gripper at {drv.gripper(mc.get('gripper_closed', 2.0)):.1f}")
-                    elif key == "g":
-                        _jog_grasp(drv, arm, target, yaw, q, pc, mc)
-                    elif key in "fblrud":
-                        n = int(arg) if arg.isdigit() else 1
-                        fwd = (
-                            arm.placement.to_table([1.0, 0.0])[:2]
-                            - arm.placement.to_table([0.0, 0.0])[:2]
-                        )
-                        left = np.array([-fwd[1], fwd[0]])
-                        move = {
-                            "f": (fwd, 0),
-                            "b": (-fwd, 0),
-                            "l": (left, 0),
-                            "r": (-left, 0),
-                            "u": (np.zeros(2), 1),
-                            "d": (np.zeros(2), -1),
-                        }[key]
-                        new = target.copy()
-                        new[:2] += move[0] * step * n
-                        new[2] += move[1] * step * n
-                        if new[2] < pc.get("grasp_z", 0.015) - 1e-9:
-                            print("  not lower than grasp_z")
-                            continue
-                        q2 = _jog_move(drv, arm, new, yaw, q)
-                        if q2 is not None:
-                            target, q = new, q2
-                    else:
-                        print(JOG_HELP.format(step=step * 1000))
-                    if key in "fblrud" or key == "y":
-                        d = target[:2] - cam
-                        print(
-                            f"  target ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f});"
-                            f" moved ({d[0] * 100:+.1f}, {d[1] * 100:+.1f}) cm"
-                            " from the camera's point"
-                        )
-                idx = nxt
-                if idx >= 0 and idx < len(pieces):
-                    drv.move_q(q)  # stay up before going to the next one
+            jog.scan()
+            if not args.no_viewer:
+                import rerun as rr
+
+                rr.init("hfteama_sort_jog", spawn=True)
+                viewer = threading.Thread(target=jog.stream, args=(stop,), daemon=True)
+                viewer.start()
+            print(JOG_HELP.format(step=jog.step * 1000))
+            while True:
+                cmd = input(f"[{side}] > ").strip().lower()
+                if cmd and not jog.handle(cmd):
+                    break
         finally:
+            stop.set()
+            if viewer:
+                viewer.join(timeout=2)
             drv.disconnect()
-    if pairs_arm:
-        fit, rms = fit_placement(pairs_arm, pairs_table, yaw_guess=arm.placement.yaw)
+    if jog.pairs_arm:
+        fit, rms = fit_placement(jog.pairs_arm, jog.pairs_table, yaw_guess=arm.placement.yaw)
         old = arm.placement
         print(
-            f"fit from {len(pairs_arm)} points: base ({fit.x:.4f}, {fit.y:.4f}), heading"
+            f"fit from {len(jog.pairs_arm)} points: base ({fit.x:.4f}, {fit.y:.4f}), heading"
             f" {np.degrees(fit.yaw):.1f} deg, rms {rms * 1000:.1f} mm"
             f" (was ({old.x:.3f}, {old.y:.3f}), {np.degrees(old.yaw):.1f} deg)"
         )
         if input("Save it as this arm's placement? [y/N] ").strip().lower() == "y":
-            print("saved", save_placement(side, fit, rms, len(pairs_arm)))
+            print("saved", save_placement(side, fit, rms, len(jog.pairs_arm)))
     return 0
-
-
-def _jog_move(drv, arm, target_table, yaw, seed):
-    sol = solve_ik(arm.placement.to_arm(target_table), yaw=yaw, seed=seed, limits=drv.limits)
-    if not sol.ok:
-        print(
-            f"  can't reach ({target_table[0]:.3f}, {target_table[1]:.3f}, {target_table[2]:.3f})"
-        )
-        return None
-    drv.move_q(sol.q)
-    return sol.q
-
-
-def _jog_grasp(drv, arm, target, yaw, q, pc, mc):
-    """Open, straight down to grasp_z, close, back up to where it was."""
-    drv.gripper(mc.get("gripper_open", 60.0), wait=0.3)
-    low = arm.placement.to_arm([target[0], target[1], pc.get("grasp_z", 0.015)])
-    try:
-        drv.move_line(q, low, yaw)
-        closed = drv.gripper(mc.get("gripper_closed", 2.0))
-        held = closed > mc.get("gripper_closed", 2.0) + mc.get("grasp_min_open", 4.0)
-        print(f"  gripper closed to {closed:.1f}: {'HOLDING something' if held else 'empty'}")
-        drv.move_line(drv.q(), arm.placement.to_arm(target), yaw, steps=4)
-    except RuntimeError as e:
-        print(f"  {e}")
-        drv.move_q(q)
 
 
 def cmd_run(args) -> int:
@@ -690,6 +829,7 @@ def add_parser(sub) -> None:
     j.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
     j.add_argument("--z", type=float, default=0.05, help="Hover height above the table (m)")
     j.add_argument("--step", type=float, default=5.0, help="Jog step (mm)")
+    j.add_argument("--no-viewer", action="store_true", help="Don't open the Rerun viewer")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")

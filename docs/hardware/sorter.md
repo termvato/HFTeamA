@@ -67,10 +67,12 @@ file and the servos differ, the command stops instead of letting LeRobot prompt.
    Touch 3 or more tag centres with the tip of the closed gripper: tags 2 and 0 for rakesh,
    plus any extra `DICT_4X4_50` tag (id ≥ 4) you lay on the table, spread over the work
    area. The fit is saved to `configs/sorter_placements.json`.
-   Or, with torque on: `hfteama sort jog rakesh` hovers 5 cm over a piece the camera found;
-   nudge the tip with f/b/l/r/u/d (seen from behind the arm) until it is over the piece's
-   centre, type `ok`, repeat on 2-3 pieces spread out, `q` fits and offers to save. `g` tries
-   a grasp where the tip is.
+   Or, with torque on: `hfteama sort jog rakesh`. Rerun opens with the camera: pieces
+   numbered, the aim point (red circle) and the tool tip from the encoders (yellow cross),
+   both drawn on the table. Type a piece number to hover 5 cm over it; nudge with f/b/l/r/u/d
+   (seen from behind the arm) until the tip is over the piece's centre; `ok` records the
+   camera-vs-arm offset; `g` grasps there, `box` drops it, `scan` goes home and renumbers.
+   `q` fits the placement from the `ok` points (2-3 spread out) and offers to save it.
 4. `hfteama -n sort run` prints the plan from one frame. Then `hfteama sort run --arms rakesh
    --max-picks 1`, then both arms.
 
