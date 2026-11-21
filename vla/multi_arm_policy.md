@@ -1,5 +1,7 @@
 # One trained policy, any number of arms
 
+Team summary of this as an alternate method: [`docs/alternate_method_vla.md`](../docs/alternate_method_vla.md).
+
 **Question.** We trained a policy on one arm ("put the objects in the box"). When a second arm is
 plugged in, can that same model split the work, e.g. 4 objects: arm A does two and arm B the
 other two, without training anything on arm B?
@@ -65,4 +67,4 @@ Even then it learns "these two arms", not "any number of arms".
 
 Training time on the RTX 3070 laptop for the current 20 episodes (23,915 frames):
 - ACT: measured at 0.32 s per step at batch size 8, so about 3-4.5 h for 30-50k steps.
-- SmolVLA: not measured; estimated at about 6-8 h for 20k steps.
+- SmolVLA: measured at 0.36 s per step. The first run stopped early at step 5000 after 37 min (best at step 2000).
