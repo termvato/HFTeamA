@@ -8,11 +8,11 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 14:36)
+## Now (Sat 21 Nov, 15:06)
 
 1. **Architecture locked** (table below). Only the step timeout is still open.
-2. **Core loop on fake arms:** full-schedule planner, executor, countdown screen with the what-if
-   estimate. Target: running by Saturday evening.
+2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
+   live screen. Run: `python -m hfteama.view --fake-arms 1`, open http://127.0.0.1:8050.
 3. **VLM on top of the loop:** decomposer (camera + Go -> categories -> steps), check after each step,
    re-scan when the scene changes.
 
@@ -49,21 +49,26 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #3 | Arm registry | not started |
 | #4 | Worker interface | first version on `main`, pending the contract decision |
 | #5 | Event log | first version on `main` |
-| #6 | Greedy allocator | not started |
-| #7 | CP-SAT | not started |
-| #8 | Shared resources | in the task format and lower bound; not in a planner yet |
+| #6 | Greedy allocator | done: greedy fallback + HEFT full schedule (`scheduler/greedy.py`, `heft.py`) |
+| #7 | CP-SAT | done (`scheduler/cpsat.py`); benchmark in `scripts/bench_planners.py`: matches HEFT, proves optimal < 2 s at 4-8 arms, hits the limit at 2 arms; HEFT stays the live default |
+| #8 | Shared resources | done: in every planner and as runtime locks in the executor |
 | #9 | Two-arm tasks | later extension |
-| #10 | Executor | not started |
-| #11 | Re-split on change | not started |
-| #12 | Finish time and bottleneck | lower bound and named limit done; predicted finish needs the planner |
-| #13 | Duration estimates | not started |
-| #14 | Mock worker | not started |
+| #10 | Executor | done (`executor/executor.py`) |
+| #11 | Re-split on change | done: re-plan on every event, running steps fixed, 10% hysteresis, retries, heartbeat, timeout, held parts, slow-stop removal |
+| #12 | Finish time and bottleneck | done: predicted finish, lower bound, limit in words, steps unblocked by a new arm, what-if |
+| #13 | Duration estimates | done: task file first, then per-arm 80th percentile (`scheduler/durations.py`) |
+| #14 | Mock worker | done: fake arm with failure injection (`arms/fake.py`) |
 | #15 | Scaling benchmark | not started |
-| #16 | Plan validator | not started |
-| #17 | Plan vs actual view | not started |
+| #16 | Plan validator | done (`scheduler/check.py`), run after every re-plan |
+| #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
 | #18 | Re-split policy questions | open |
 
 ## Notes
+
+- 15:06 (Vato): Vato's backlog items are built and tested on fake arms (#6-#8, #10-#14, #16, #17).
+  Step timeout is a setting (`Executor(timeout_factor=...)`), default 3x until we decide.
+  The VLM step check plugs in as `Executor(verifier=...)`: `verifier(task, result) -> (ok, why)`.
+  Real arms join through `Executor.add_arm(worker)` (Hardware's discovery calls it).
 
 - (Vato): Architecture locked with Aravind: the merged proposal as written. Timeout still open.
 
