@@ -295,7 +295,6 @@ class StateHub:
                     "task_elapsed": (snap["now"] - run["start"]) if run else None,
                     "task_estimate": run["estimate"] if run else None,
                     "held": snap["held"].get(arm),
-                    "waiting_for": None,
                     "heartbeat_age_s": hb,
                     "joined_at": info["joined_at"],
                     "left_at": info["left_at"],

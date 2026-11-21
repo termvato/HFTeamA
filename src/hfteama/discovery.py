@@ -132,7 +132,6 @@ class ArmWatcher:
         self._held_back: set[str] = set()  # removed on purpose; rejoin only after a replug
         self._count: dict[str, int] = {}  # arm id -> consecutive scans in the new state
         self._present: set[str] = set()  # known arm ids seen in the last successful scan
-        self.scanned = False  # True once a scan has run (else `present()` means nothing yet)
         self.errors: list[tuple[str, str]] = []  # (arm id, why) for arms that could not start
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -220,7 +219,6 @@ class ArmWatcher:
         with self._lock:
             self._present = set(present)
             self._ghosts = ghosts
-            self.scanned = True
             self._held_back &= present  # cable pulled: the arm may join again next time
             joined = set(self._joined)
             held = set(self._held_back)

@@ -679,6 +679,5 @@
   }
 
   setInterval(() => { if (M && M.source === 'live') render(M); }, 1000); // stale check ticks on
-  O.debug = { command: (name, args) => source && source.command(name, args), model: () => M }; // for tests
   boot();
 })();

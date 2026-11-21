@@ -221,8 +221,6 @@ class Executor:
                     for t, r in self._runs.items()
                 },
                 "retries": {t: n for t, n in self._retries.items() if n},
-                "locks": dict(self._locks),
-                "rescan_hold": sorted(self._hold),
             }
 
     def now(self) -> float:
