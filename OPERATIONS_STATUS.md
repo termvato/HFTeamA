@@ -10,8 +10,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Now (Sat 21 Nov, 14:36)
 
-1. **Agree the arm contract and the five points below.** Action and Hardware build against the
-   contract, so this comes first.
+1. **Architecture locked** (table below). Only the step timeout is still open.
 2. **Core loop on fake arms:** full-schedule planner, executor, countdown screen with the what-if
    estimate. Target: running by Saturday evening.
 3. **VLM on top of the loop:** decomposer (camera + Go -> categories -> steps), check after each step,
@@ -29,18 +28,18 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
-## To agree (Vato and Aravind)
+## Architecture: locked Sat 21 Nov (Vato and Aravind)
 
-| Topic | Proposal | State |
+| Topic | Decision | State |
 |---|---|---|
-| Arm contract | one worker per arm, `execute(task) -> Result`; worker reads only the task's id, skill and args (args carry object id, target bin, table coordinates); outcomes `ok`, `failed` + reason, `timeout`, `arm_down`, with start and end times. `execute(arm_id, skill, params)` can wrap it at the dispatcher | open |
-| Planner | full schedule on every re-plan (needed for the countdown and what-if); greedy as fallback | open |
-| Named limit | keep it on screen (arms, order, shared area), plus steps unblocked by a new arm | open |
-| Task format | the VLM writes the format on `main` (`depends_on` -> `deps`, `object`/`target` -> `args`) | open |
-| Code and interfaces | code in `src/hfteama/`; task format, arm contract and event log change only with all teams | open |
-| Re-plan rule | adopt the 10% hysteresis, except when arms change or something fails | open |
+| Arm contract | one worker per arm, `execute(task) -> Result`; worker reads only the task's id, skill and args (args carry object id, target bin, table coordinates); outcomes `ok`, `failed` + reason, `timeout`, `arm_down`, with start and end times. `execute(arm_id, skill, params)` can wrap it at the dispatcher | locked |
+| Planner | full schedule on every re-plan (needed for the countdown and what-if); greedy as fallback | locked |
+| Named limit | keep it on screen (arms, order, shared area), plus steps unblocked by a new arm | locked |
+| Task format | the VLM writes the format on `main` (`depends_on` -> `deps`, `object`/`target` -> `args`) | locked |
+| Code and interfaces | code in `src/hfteama/`; task format, arm contract and event log change only with all teams | locked |
+| Re-plan rule | adopt the 10% hysteresis, except when arms change or something fails | locked |
 | Step timeout | 1.5x or 3x the estimate | open |
-| `same_arm_as` | keep: the arm holding a part also places it | open |
+| `same_arm_as` | keep: the arm holding a part also places it | locked |
 
 ## Backlog state
 
@@ -65,6 +64,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #18 | Re-split policy questions | open |
 
 ## Notes
+
+- (Vato): Architecture locked with Aravind: the merged proposal as written. Timeout still open.
 
 - 14:36 (Vato): Product decided (see `docs/plan.md`, Product): visual sorting, Go button, VLM decides
   the categories, estimate with what-if before Go, live countdown, camera check after each step,
