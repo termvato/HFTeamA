@@ -26,7 +26,7 @@ Tested with LeRobot 0.7.0. The serial ports need the `dialout` group:
 | Pair | Follower | Leader | Cameras | Status |
 |---|---|---|---|---|
 | `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` | Calibrated, teleop verified 21 Nov |
-| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | none | Follower calibrated (Vato); leader to calibrate |
+| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | none | Calibrated 21 Nov; leader matched to follower |
 
 ```bash
 hfteama pairs            # which arms are connected, and on which port
@@ -61,7 +61,9 @@ can make the follower take the long way around and hit something.
 
 **Already calibrated arms:** don't recalibrate them. If LeRobot says "Press ENTER to use
 provided calibration file", the file does not match the servos: do not press Enter (it
-would write that file into the servos), type `c` and ask the team.
+would write that file into the servos), type `c` and ask the team. Only exception:
+`rakesh_leader`, whose file holds a base adjustment that may not be in its servos yet;
+for it, press Enter.
 
 ## Teleoperate
 
@@ -77,7 +79,10 @@ If one joint is consistently offset, put both arms in the same pose, compare the
 readings, and shift that joint's `range_min`/`range_max` **on the leader** by the
 difference (steps = degrees x 4095 / 360). Shift the leader, not the follower: the
 follower's range is its real hard-stop limit, and moving it past the hard stop makes the
-servo push against it.
+servo push against it. For `wrist_roll` (full turn, range 0-4095) shift the leader's
+`homing_offset` instead, by the same number of steps (Feetech: a larger offset lowers the
+reading). Then write the file into the leader's servos (`bus.write_calibration`), or
+LeRobot will ask to recalibrate on connect.
 
 ## Cameras
 
