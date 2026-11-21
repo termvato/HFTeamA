@@ -31,6 +31,36 @@ run over every object.
 | `teleop.sh single\|dual` | leader drives follower, cameras on screen, nothing recorded |
 | `record.sh single\|dual` | record episodes, push the dataset to the Hub |
 | `studio.sh single\|dual` | the same recording from a local web page: live cameras, buttons, upload |
+| `cameras.sh list\|check` | list the cameras; check the configured ones together before recording |
+
+## Cameras
+
+Three cameras, one line each in `CAMERA_TABLE` (`config.sh`):
+
+| Name | Camera | Single-arm data | Dual-arm data |
+|---|---|---|---|
+| `top` | sees both arms, the objects and the box (C920) | yes | yes |
+| `wrist_a` | on arm A's wrist | yes | yes |
+| `wrist_b` | on arm B's wrist | no | yes |
+
+- **Names are permanent.** Each one becomes `observation.images.<name>` in the dataset. Every
+  camera is a top-level robot camera, also in dual mode, so a camera keeps the same name in single
+  and dual data. LeRobot would otherwise rename per-arm cameras `left_*` / `right_*`.
+- **The camera set is permanent per dataset.** Record only with all of a mode's cameras in place.
+  The studio refuses to add episodes to a dataset recorded with other cameras or sizes. Changing
+  cameras means a new dataset name.
+- **Format:** every camera runs at 640x480, 30 fps (= dataset FPS), MJPG. LeRobot stops if a
+  camera cannot give the size or fps, but it only warns if it falls back from MJPG to raw video.
+  Raw video at 3 cameras overloads USB, so `cameras.sh check` treats that as a failure.
+- **Mounted sideways or upside down:** set `rot` (90, 180, -90). A 90/-90 camera is stored as
+  480x640 portrait; `lib.sh` swaps the size for you.
+- **USB:** use `/dev/v4l/by-id/...-video-index0` paths. `index1` is a metadata node with no
+  video. Spread the cameras over different USB ports; `check` warns when they share one.
+  Make sure every camera gets the full 30 fps in its real lighting: a dim scene slows the
+  exposure, and the frame rate drops with it.
+- **Framing:** `check` saves `vla/camera_check.jpg` with every view. The wrist cameras should
+  see the gripper fingers and the object being grasped. `top` sees the whole workspace,
+  without people or the screen in the background. Keep every mount fixed between sessions.
 
 Arm names: `follower_a` + `leader_a` = robot 1, `follower_b` + `leader_b` = robot 2. In dual
 mode, A is left and B is right.
@@ -90,9 +120,12 @@ hf auth login                        # write token, for pushing datasets
    ./vla/calibrate.sh follower_a
    ./vla/calibrate.sh leader_a
    ```
-6. Camera: one front camera that sees both arms, the objects and the box. Find it, then set
-   `CAM_FRONT` in `config.sh`. Prefer the `/dev/v4l/by-id/...` path so it survives replugging.
-   The same camera and name (`front`) are used for single and dual data, so one policy can read both.
+6. Cameras: see [Cameras](#cameras) below. Plug in `top` and `wrist_a`, put their devices in
+   `CAMERA_TABLE` in `config.sh`, then check that both run together:
+   ```bash
+   ./vla/cameras.sh list            # devices, USB ports, MJPG support, which name uses each
+   ./vla/cameras.sh check single    # opens them together; saves vla/camera_check.jpg
+   ```
    ```bash
    lerobot-find-cameras opencv               # saves a test frame from each camera
    ```
@@ -136,7 +169,9 @@ TASK="Pick up the red cube and put it in the box" ./vla/record.sh dual
 - Both arms work at the same time, each on objects on its own side, into the shared box. This is
   the 2-arm case of the same batch, so the cameras also see the other arm moving.
 - Pushed to `<HF_USER>/so101_sort_dual`. Each frame holds both arms: `left_*` (arm A) and
-  `right_*` (arm B) joints, plus the shared `front` camera.
+  `right_*` (arm B) joints, plus the `top`, `wrist_a` and `wrist_b` cameras.
+- Before the first dual session, plug in `wrist_b`, add it to `CAMERA_TABLE`, and run
+  `./vla/cameras.sh check dual`.
 - Time a few full 2-arm sorts against the Part 2 baseline.
 
 **Decide before recording much (it changes Part 5):**
@@ -161,7 +196,7 @@ lerobot-train \
   --policy.path=lerobot/smolvla_base \
   --dataset.repo_id=<HF_USER>/so101_sort_single \
   --policy.repo_id=<HF_USER>/smolvla_so101_sort \
-  --rename_map='{"observation.images.front": "observation.images.camera1"}' \
+  --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist_a": "observation.images.camera2"}' \
   --batch_size=64 --steps=20000 \
   --output_dir=outputs/train/smolvla_so101_sort --job_name=smolvla_so101_sort
 ```

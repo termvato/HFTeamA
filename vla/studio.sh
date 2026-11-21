@@ -11,4 +11,5 @@ REPO=$([[ $MODE == single ]] && echo "$DATASET_SINGLE" || echo "$DATASET_DUAL")
 robot_args "$MODE"; teleop_args "$MODE"
 exec python "$VLA_DIR/studio.py" --mode "$MODE" --repo-id "$REPO" --task "$TASK" --fps "$FPS" \
     --episode-time-s "$EPISODE_TIME_S" --reset-time-s "$RESET_TIME_S" --private "$PRIVATE" \
+    --views "${CAMERA_VIEWS// /,}" --configured "$(IFS=,; echo "${CAMERA_ARMS[*]}")" \
     --port "${STUDIO_PORT:-8765}" "$@" -- "${ROBOT_ARGS[@]}" "${TELEOP_ARGS[@]}"

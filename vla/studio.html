@@ -30,13 +30,22 @@
   @keyframes blink { 50% { opacity: .55; } }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px 20px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 16px; } }
-  .cams { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-content: start; }
-  .cam { background: #000; border-radius: 10px; overflow: hidden; position: relative; aspect-ratio: 4 / 3; }
+  /* Fixed slots: the first view (top) large on the left, the others stacked on the right. */
+  .cams { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-content: start; }
+  .cam:first-child { grid-row: span 2; }
+  .cam:nth-child(n+4) { grid-column: span 2; }
+  @media (max-width: 700px) { .cams { grid-template-columns: 1fr; } .cam:first-child { grid-row: auto; } }
+  .cam { background: #000; border-radius: 10px; overflow: hidden; position: relative; aspect-ratio: 4 / 3;
+         border: 1px solid var(--line); }
   .cam img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .cam span { position: absolute; left: 8px; top: 6px; color: #fff; font-size: 12px;
-              background: rgba(0,0,0,.55); padding: 1px 8px; border-radius: 6px; }
-  .empty { display: grid; place-items: center; min-height: 300px; color: var(--muted);
-           border: 1px dashed var(--line); border-radius: 10px; text-align: center; padding: 20px; }
+  .cam .label { position: absolute; left: 8px; top: 6px; color: #fff; font-size: 12px; z-index: 1;
+                background: rgba(0,0,0,.55); padding: 1px 8px; border-radius: 6px; }
+  .cam .why { position: absolute; inset: 0; display: none; place-items: center; text-align: center;
+              padding: 28px 16px 16px; color: #9aa1ad; font-size: 13px; word-break: break-word;
+              background: repeating-linear-gradient(45deg, #15171b 0 12px, #1a1d22 12px 24px); }
+  .cam.off img { display: none; }
+  .cam.off .why { display: grid; }
+  .cam.off .label { background: rgba(255,255,255,.08); color: #c9ced6; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   aside { display: flex; flex-direction: column; gap: 12px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
@@ -76,7 +85,6 @@
 <main>
   <section>
     <div class="cams" id="cams"></div>
-    <div class="empty" id="nocam">No camera feed.<br>Click "Cameras only" to retry; any error shows under Status.</div>
   </section>
 
   <aside>
@@ -144,13 +152,7 @@ function render(s) {
   $("hz").textContent = s.hz ? `${s.hz} / ${s.fps} Hz` : "";
   if (!taskTouched && document.activeElement !== $("task")) $("task").value = s.task;
 
-  const keys = s.cameras.join(",");
-  if (keys !== camKeys) {           // rebuild the <img> tags only when the camera set changes
-    camKeys = keys;
-    $("cams").innerHTML = s.cameras.map(c =>
-      `<div class="cam"><img src="/stream/${c}?t=${Date.now()}" alt="${c} camera"><span>${c}</span></div>`).join("");
-  }
-  $("nocam").style.display = s.cameras.length ? "none" : "grid";
+  renderSlots(s.slots);
 
   const rec = s.state === "recording";
   $("elapsed").textContent = rec ? `${s.elapsed} / ${s.episode_time_s} s`
@@ -177,6 +179,26 @@ function render(s) {
   $("joints").innerHTML = j.length
     ? j.map(([k, v]) => `<tr><td>${k.replace(".pos", "")}</td><td>${v.toFixed(1)}</td></tr>`).join("")
     : `<tr><td class="meta">—</td></tr>`;
+}
+
+// One fixed box per camera view, built once. A box switches between its live feed and a
+// placeholder saying why it is empty; the stream is (re)opened only when a view goes live.
+function renderSlots(slots) {
+  const names = slots.map(v => v.name).join(",");
+  if (names !== camKeys) {
+    camKeys = names;
+    $("cams").innerHTML = slots.map(v =>
+      `<div class="cam off" id="cam-${v.name}"><span class="label"></span>` +
+      `<img alt="${v.name} camera"><div class="why"></div></div>`).join("");
+  }
+  for (const v of slots) {
+    const box = $(`cam-${v.name}`), img = box.querySelector("img");
+    box.querySelector(".label").textContent = v.live ? `${v.name} · ${v.size}` : v.name;
+    box.querySelector(".why").textContent = v.live ? "" : v.why;
+    if (v.live && box.classList.contains("off")) img.src = `/stream/${v.name}?t=${Date.now()}`;
+    if (!v.live && !box.classList.contains("off")) img.removeAttribute("src");  // closes the stream
+    box.classList.toggle("off", !v.live);
+  }
 }
 
 $("connect").onclick = () => post("connect");

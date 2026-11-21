@@ -32,6 +32,7 @@ import numpy as np
 # Imported for their side effect: registering the robot, teleop and camera types with draccus.
 from lerobot.cameras import make_cameras_from_configs
 from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
+from lerobot.common.control_utils import sanity_check_dataset_robot_compatibility
 from lerobot.datasets import (
     LeRobotDataset,
     aggregate_pipeline_dataset_features,
@@ -69,8 +70,15 @@ class Studio:
     """
 
     def __init__(self, hw: Hardware, mode: str, repo_id: str, task: str, fps: int,
-                 episode_time_s: float, reset_time_s: float, private: bool, tags: list[str]):
+                 episode_time_s: float, reset_time_s: float, private: bool, tags: list[str],
+                 views: list[str] | None = None, configured: dict[str, str] | None = None):
         self.hw, self.mode, self.repo_id, self.task, self.fps = hw, mode, repo_id, task, fps
+        # Fixed camera slots on the page (config.sh CAMERA_VIEWS), and name -> arms for every camera
+        # in CAMERA_TABLE, so an empty slot can say why it is empty.
+        self.views = list(views or hw.robot.cameras)
+        self.views += [c for c in hw.robot.cameras if c not in self.views]
+        self.configured = configured if configured is not None else {c: "both" for c in hw.robot.cameras}
+        self.cam_errors: dict[str, str] = {}
         self.episode_time_s, self.reset_time_s = episode_time_s, reset_time_s
         self.private, self.tags = private, tags
         self.root = HF_LEROBOT_HOME / repo_id
@@ -93,6 +101,7 @@ class Studio:
         self._thread: threading.Thread | None = None
         self._running = False
         self._shutting_down = False
+        self._jpeg_cache: dict[str, tuple[np.ndarray, bytes]] = {}
 
     # ------------------------------------------------------------ status
 
@@ -102,12 +111,35 @@ class Studio:
         info = self.root / "meta" / "info.json"
         return json.loads(info.read_text()).get("total_episodes", 0) if info.exists() else 0
 
+    def slots(self) -> list[dict]:
+        """One entry per fixed camera slot: live, or why it is empty."""
+        out = []
+        for name in self.views:
+            img = self.frames.get(name)
+            if img is not None:
+                out.append({"name": name, "live": True, "size": f"{img.shape[1]}x{img.shape[0]}"})
+                continue
+            if name not in self.configured:
+                why = "Not set up yet: add its line to CAMERA_TABLE in vla/config.sh"
+            elif name not in self.hw.robot.cameras:
+                why = "Dual-arm only (arm B's wrist)" if self.configured[name] == "b" else "Not used in this mode"
+            elif name in self.cam_errors:
+                why = self.cam_errors[name]
+            elif self.state in ("connecting", "disconnecting"):
+                why = "Connecting…"
+            else:
+                why = "Not connected"
+            out.append({"name": name, "live": False, "why": why})
+        return out
+
     def status(self) -> dict:
         now = time.monotonic()
         with self.lock:
             return {
+                "slots": self.slots(),
                 "state": self.state, "mode": self.mode, "repo_id": self.repo_id, "task": self.task,
                 "fps": self.fps, "hz": round(self.hz, 1), "cameras": sorted(self.frames),
+                "camera_sizes": {k: f"{v.shape[1]}x{v.shape[0]}" for k, v in self.frames.items()},
                 "joints": {k: round(v, 1) for k, v in self.joints.items()},
                 "episodes": self.episodes_on_disk(), "session_saved": self.session_saved,
                 "elapsed": round(now - self.ep_start, 1) if self.state == "recording" else 0,
@@ -119,11 +151,18 @@ class Studio:
             }
 
     def jpeg(self, cam: str) -> bytes | None:
+        """Latest frame as JPEG, encoded once per new frame however many viewers there are."""
         img = self.frames.get(cam)
         if img is None:
             return None
+        cached = self._jpeg_cache.get(cam)
+        if cached and cached[0] is img:
+            return cached[1]
         ok, buf = cv2.imencode(".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 75])
-        return buf.tobytes() if ok else None
+        if not ok:
+            return None
+        self._jpeg_cache[cam] = (img, buf.tobytes())
+        return self._jpeg_cache[cam][1]
 
     def _say(self, msg: str, error: str = "") -> None:
         self.message, self.error = msg, error
@@ -146,11 +185,21 @@ class Studio:
 
     def _connect(self, cameras_only: bool) -> None:
         try:
-            if cameras_only:
-                self.cams = make_cameras_from_configs(self.hw.robot.cameras)
-                for cam in self.cams.values():
-                    cam.connect()
+            self.cam_errors = {}
+            if cameras_only:  # each camera on its own: one bad camera must not hide the others
+                failed = []
+                for name, cam in make_cameras_from_configs(self.hw.robot.cameras).items():
+                    try:
+                        cam.connect()
+                        self.cams[name] = cam
+                    except Exception as e:  # noqa: BLE001
+                        self.cam_errors[name] = f"Did not open: {str(e).strip().splitlines()[0]}"
+                        failed.append(f"{name}: {str(e).strip().splitlines()[0]}")
+                if not self.cams:
+                    raise RuntimeError("no camera opened. " + " | ".join(failed))
                 state, msg = "preview", "Camera preview. Connect the arms to record."
+                if failed:
+                    msg = f"Preview without {len(failed)} camera(s): " + " | ".join(failed)
             else:
                 self.robot = make_robot_from_config(self.hw.robot)
                 self.teleop = make_teleoperator_from_config(self.hw.teleop)
@@ -237,7 +286,13 @@ class Studio:
             t0 = time.perf_counter()
             try:
                 if self.cams:
-                    self.frames = {k: c.read_latest() for k, c in self.cams.items()}
+                    frames = dict(self.frames)
+                    for k, c in self.cams.items():
+                        try:
+                            frames[k] = c.read_latest()
+                        except Exception:  # noqa: BLE001 - keep the other cameras live
+                            frames.pop(k, None)
+                    self.frames = frames
                 else:
                     self._step(cam_keys)
             except Exception as e:  # noqa: BLE001 - a bus or camera error should not kill the page
@@ -280,8 +335,17 @@ class Studio:
             return
         n_cams = len(self.hw.robot.cameras)
         if (self.root / "meta" / "info.json").exists():
-            self.dataset = LeRobotDataset.resume(self.repo_id, root=self.root,
-                                                 image_writer_threads=4 * n_cams)
+            ds = LeRobotDataset.resume(self.repo_id, root=self.root, image_writer_threads=4 * n_cams)
+            try:  # same cameras, sizes, joints and fps as the episodes already recorded
+                sanity_check_dataset_robot_compatibility(ds, self.robot, self.fps, self.features)
+            except ValueError as e:
+                ds.finalize()
+                have = sorted(k.removeprefix("observation.images.") for k in ds.features
+                              if k.startswith("observation.images."))
+                raise RuntimeError(f"{self.repo_id} was recorded with cameras {have} and a different setup "
+                                   f"than now ({e}). Use the same cameras, or record into a new dataset "
+                                   "(DATASET_SINGLE / DATASET_DUAL in config.sh).") from None
+            self.dataset = ds
         else:
             self.dataset = LeRobotDataset.create(self.repo_id, self.fps, root=self.root,
                                                  robot_type=self.robot.robot_type, features=self.features,
@@ -459,6 +523,8 @@ def main() -> None:
     p.add_argument("--reset-time-s", type=float, default=10)
     p.add_argument("--private", default="true")
     p.add_argument("--tags", default="so101,sorting,hfteama")
+    p.add_argument("--views", default="", help="fixed camera slots, comma separated")
+    p.add_argument("--configured", default=None, help="name:arms for every camera in CAMERA_TABLE")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     args, hw_flags = p.parse_known_args()
@@ -466,7 +532,10 @@ def main() -> None:
 
     hw = draccus.parse(Hardware, args=[f for f in hw_flags if f != "--"])
     studio = Studio(hw, args.mode, args.repo_id, args.task, args.fps, args.episode_time_s,
-                    args.reset_time_s, args.private.lower() == "true", args.tags.split(","))
+                    args.reset_time_s, args.private.lower() == "true", args.tags.split(","),
+                    views=[v for v in args.views.split(",") if v] or None,
+                    configured=None if args.configured is None else
+                    dict(e.split(":", 1) for e in args.configured.split(",") if e))
     server = ThreadingHTTPServer((args.host, args.port), make_handler(studio))
     server.daemon_threads = True
     print(f"Recording studio ({args.mode} -> {args.repo_id}): http://localhost:{args.port}", flush=True)
