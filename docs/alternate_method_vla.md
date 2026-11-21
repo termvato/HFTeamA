@@ -103,7 +103,7 @@ not teach that reliably. Safety comes from layers 1, 3 and 4, not from the model
   [`sahilrajpurkar03/so101_stack_single_rakesh`](https://huggingface.co/datasets/sahilrajpurkar03/so101_stack_single_rakesh)
   (public). 20 episodes on the rakesh pair, "Put the objects in the box", `top` and `wrist_a`.
 - **Training time** on the RTX 3070 laptop: ACT measured at 0.32 s per step, about 3-4.5 h for
-  30-50k steps. SmolVLA estimated at about 6-8 h for 20k steps.
+  30-50k steps. SmolVLA measured at 0.36 s per step; with early stopping the first run stopped at step 5000 after 37 min (best at step 2000).
 - **Next:**
   1. Choose split by side or by name.
   2. Record more episodes.
