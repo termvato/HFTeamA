@@ -46,7 +46,8 @@ The per-person branches are kept for now; new work goes on the team branch:
   `timeout`, `arm_down`, with start and end times. A dispatcher-level `execute(arm_id, ...)` may wrap it.
 - **Screen**: live countdown, what-if estimate, the binding limit in words, plus steps unblocked by a new arm.
 - **Code** in `src/hfteama/`. Task format, arm contract and event log change only with all teams.
-- Still open: step timeout (see `OPERATIONS_STATUS.md` on `orchestrator`).
+- **Step timeout**: 3x the estimate while durations are guesses, then 1.5x the arm's measured
+  80th-percentile time.
 
 ## Where teams meet
 
