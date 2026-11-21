@@ -35,3 +35,4 @@ runs/
 
 # Per-rig arm registry for vla/ scripts (USB serials)
 vla/arms.json
+vla/camera_check.jpg

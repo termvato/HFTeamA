@@ -10,7 +10,8 @@ conda activate lerobot
 conda install -y -c conda-forge ffmpeg
 
 [[ -d "$LEROBOT_SRC" ]] || git clone https://github.com/huggingface/lerobot.git "$LEROBOT_SRC"
-pip install -e "$LEROBOT_SRC[feetech,smolvla]"
+# feetech: motors | hardware: recording keys | dataset: record/push | viz: live view | training+smolvla: Part 5
+pip install -e "$LEROBOT_SRC[feetech,hardware,dataset,viz,training,smolvla]"
 python -c "import lerobot, torch; print('lerobot', lerobot.__version__, '| cuda', torch.cuda.is_available())"
 
 hf auth whoami >/dev/null 2>&1 || echo "NEXT: hf auth login   (token with write access, for pushing datasets)"
