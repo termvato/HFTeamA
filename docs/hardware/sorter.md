@@ -104,3 +104,38 @@ file and the servos differ, the command stops instead of letting LeRobot prompt.
 | `hfteama.sorter.plan` | Which arm picks which piece, grasp and drop poses |
 | `hfteama.sorter.robot` | LeRobot follower driven by joint targets, smooth and speed-limited |
 | `hfteama.sorter.run` | The `hfteama sort` commands |
+
+## With main's orchestration (executor, planner, skills)
+
+The sorter can drive the arms for Operations' executor and Action's skills (`pick`, `place`,
+`pick_place`) instead of `arms/real.py`. Nothing in the executor or the skills changes:
+
+| Piece | What it is |
+|---|---|
+| `hfteama.sorter.bridge.SorterArmDriver` | Action's `ArmDriver` primitives (`move_to`, `open_gripper`, `close_gripper`, `reachable`, `stop`/`resume`, `park`, `alive`, ...) over a sorter arm: calibrated numpy IK and joint limits, the per-arm aim corrections from `configs/sorter_placements.json`, closed-loop gripper, one smooth vertical line when only the height changes, stop latched every control tick, home pose before torque off |
+| `MainFrame` | main's table frame (`configs/hacklab_table.json`: origin marker 0, x towards 3, y towards 2) <-> the sorter's; the same four tags, so the conversion is exact |
+| `hfteama sort export` | camera -> `poses_real.json` (boxes by tag, the bowl) in main's frame + `boxes.json`, one `pick_place` per box on the arm of its half of the table, all sharing the `bowl` resource |
+| `python -m hfteama.runner --backend sorter` | main's runner with these drivers (same `yes` / `go` confirmations as `--backend real`) |
+
+```
+env -u PYTHONPATH .venv/bin/hfteama sort export                     # look, write tasks/sorter_boxes/
+env -u PYTHONPATH .venv/bin/python -m hfteama.runner --backend sorter \
+    --arms rakesh_follower,vato_follower \
+    --task tasks/sorter_boxes/boxes.json --poses tasks/sorter_boxes/poses_real.json
+```
+
+`move_to(p)` takes the point where the gripped piece's centre should be; the arm's aim correction
+turns it into the tool command, exactly as `hfteama sort run` does.
+
+Over the bowl: main's `pick_place` goes to the place point + 8 cm, then down to it, opens and goes
+back up. From the arms' bases the bowl centre is too far for the gripper to point down, so:
+
+- `sort export` writes a per-arm `bowl` (`per_arm` in `poses_real.json`) at the sorter's drop
+  point: moved from the bowl centre towards the arm (up to 3 cm inside the rim) until the gripper
+  reaches nearly straight down, `--place-above` (default 3 cm) over the rim. Measured offline with
+  the current calibration: 12 deg tilt for rakesh, 5 deg for hacklab at the place point.
+- With a box in the jaws, a move to a new spot is solved as the sorter's drop
+  (`plan.drop_solve`): gripper down within `max_tilt_deg`, else within `drop_max_tilt_deg`, else
+  any orientation. The approach 8 cm higher tilts 50-60 deg (in the air, above the rim).
+- A straight vertical line is used only between two gripper-down poses; to or from a tilted pose
+  the move is a joint move (the line's IK keeps the gripper down and would fail on the way).

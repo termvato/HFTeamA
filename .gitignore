@@ -37,3 +37,4 @@ runs/
 outputs/
 vla/camera_check.jpg
 MUJOCO_LOG.TXT
+tasks/sorter_boxes/

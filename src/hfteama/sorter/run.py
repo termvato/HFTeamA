@@ -1029,6 +1029,87 @@ def cmd_fit_grasps(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    """Camera -> the boxes and the bowl as main's poses file and a pick_place task graph, in
+    main's table frame, for `python -m hfteama.runner --backend sorter`."""
+    import json
+
+    from hfteama.hardware.pairs import read_config
+    from hfteama.sorter.bridge import MainFrame
+
+    cfg = load_config(args.sorter_config)
+    sides = _sides(args, cfg)
+    arms = arm_models(cfg, sides)
+    pairs = read_config(args.config)["pairs"]
+    catalog = {s: pairs[cfg["arms"][s]["pair"]]["follower"]["id"] for s in sides}
+    pc, bc = cfg["pieces"], cfg["box"]
+    mf = MainFrame.from_config(cfg)
+    with Eye(cfg, args.image) as eye:
+        _, _, scene = eye.look()
+    plan = make_plan(scene, arms, cfg)
+    if scene.box is None:
+        raise SystemExit("Box (bowl) not found by the camera.")
+    b = scene.box
+    place_z = bc["height"] + args.place_above
+    poses = {
+        "note": "Written by `hfteama sort export` from the overhead camera. Table frame = main's "
+        "(configs/hacklab_table.json): origin marker 0, x towards marker 3, y towards marker 2.",
+        "table_z": 0.0,
+        "locations": {"bowl": [round(float(v), 4) for v in mf.to_main([b.x, b.y, place_z])]},
+        "objects": {},
+        "per_arm": {},
+        "radii": {"bowl": b.radius},
+    }
+    # per arm, where its held box goes: as the sorter's drop, moved from the bowl centre
+    # towards the arm until it reaches with the gripper (nearly) down
+    from hfteama.sorter.plan import drop_target
+
+    drop_tilt = np.radians(cfg["motion"].get("drop_max_tilt_deg", 60.0))
+    for s in sides:
+        found = drop_target(arms[s], b, bc["height"], args.place_above, drop_tilt)
+        if found is not None:
+            pt = mf.to_main(found[:3])
+            poses["per_arm"][catalog[s]] = {"bowl": [round(float(v), 4) for v in pt]}
+    tasks = []
+    for pick in plan.picks:
+        if pick.side not in plan.drops:
+            continue
+        p = pick.piece
+        name = f"box_tag{p.tag_id}" if p.tag_id is not None else f"box_{len(tasks) + 1:02d}"
+        poses["objects"][name] = [
+            round(float(v), 4) for v in mf.to_main([p.x, p.y, pc.get("grasp_z", 0.015)])
+        ]
+        tasks.append(
+            {
+                "id": f"sort_{name}",
+                "skill": "pick_place",
+                "args": {"object": name, "to": "bowl"},
+                "deps": [],
+                "allowed_arms": [catalog[pick.side]],
+                "duration": args.duration,
+                "resources": ["bowl"],
+            }
+        )
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "poses_real.json").write_text(json.dumps(poses, indent=2) + "\n")
+    graph = {
+        "name": out.name,
+        "note": "One pick_place per box seen, on the arm whose half of "
+        "the table it is in (hfteama sort export).",
+        "tasks": tasks,
+    }
+    (out / "boxes.json").write_text(json.dumps(graph, indent=2) + "\n")
+    report(scene, plan, arms)
+    print(f"\nwrote {out / 'poses_real.json'} and {out / 'boxes.json'} ({len(tasks)} steps)")
+    print(
+        "run:  env -u PYTHONPATH .venv/bin/python -m hfteama.runner --backend sorter "
+        f"--arms {','.join(catalog[s] for s in sides)} --task {out / 'boxes.json'}"
+        f" --poses {out / 'poses_real.json'}"
+    )
+    return 0
+
+
 def cmd_run(args) -> int:
     """Sort: look, plan, one pick per turn, alternating arms; until the table is clear."""
     from hfteama.sorter.robot import ArmDriver
@@ -1175,6 +1256,13 @@ def add_parser(sub) -> None:
     fg.add_argument("--save", action="store_true", help="Save without asking")
     fg.add_argument("--since", help='Only grasps logged from this time, e.g. "2026-11-21 22:00"')
 
+    e = ss.add_parser("export", help="Camera -> poses + task graph for main's runner")
+    e.add_argument("--arms", help="Arms to plan for (default: all)")
+    e.add_argument("--image", help="Use a saved frame instead of the camera")
+    e.add_argument("--out", default=str(PROJECT_ROOT / "tasks" / "sorter_boxes"))
+    e.add_argument("--place-above", type=float, default=0.03, help="Place height over the rim (m)")
+    e.add_argument("--duration", type=float, default=20.0, help="Expected s per pick_place")
+
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")
     r.add_argument("--max-picks", type=int, help="Stop after this many picks")
@@ -1188,5 +1276,6 @@ def dispatch(args) -> int:
         "goto": cmd_goto,
         "jog": cmd_jog,
         "fit-grasps": cmd_fit_grasps,
+        "export": cmd_export,
         "run": cmd_run,
     }[args.sort_command](args)
