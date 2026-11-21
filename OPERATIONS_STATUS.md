@@ -89,6 +89,15 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 18:27 (Vato): **RTX rehearsal bridge works (#33):** `view/joint_stream.py` streams each simulated
+  arm's joints over UDP; `python -m hfteama.demo --backend sim --isaac HOST:PORT` turns it on.
+  Checked: Isaac Sim (headless, 60 fps, 2.5 GB) followed Action's MuJoCo arms run by our executor
+  for 4179 arm-frames. Still open: the Isaac scene uses its own 3-arm layout (not the table
+  config) and does not show carried cubes. Seen in that run: with sort12 on 3 sim arms under our
+  executor, `pick_11` ended in `stall` on two arms in a row (2 steps done in 25 s); Action's own
+  harness completes 24/24, so the difference (which arm takes which block, or lock timing around
+  the shared bin) needs a look together with Vivek before a sim rehearsal is shown.
+
 - 18:24 (Vato): Three executor / planner changes on `orchestrator`:
   1. **Lost part waits for a re-scan:** `Executor(rescan=fn)` where `fn() -> TaskGraph | None`
      (camera -> re-scan -> resolved graph). After a failed place, or an arm lost while holding a
