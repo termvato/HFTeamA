@@ -56,7 +56,7 @@
     "grasp_z": 0.0,
     "approach_z": 0.05
   },
-  "arms_note": "Arms are named after their pair. Seen from BEHIND the arms (facing the camera): rakesh (black) is on the right, hacklab (green) on the left. Seen from the camera it is the other way round. base = base_link origin in the table frame.",
+  "arms_note": "Arms are named after their pair. Seen from BEHIND the arms (facing the camera): rakesh (black) is on the right, hacklab (green) on the left. Seen from the camera it is the other way round. base = base_link origin in the table frame: y = 1.5 cm behind the centres of the back tags (0.335 + 0.015), measured.",
   "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m).",
   "arms": {
     "rakesh": {

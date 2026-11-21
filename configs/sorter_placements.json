@@ -8,6 +8,6 @@
     "z_offset": -0.015,
     "fit_rms_mm": 0.0,
     "points": 1,
-    "note": "base y set by hand: 2 cm in front of the first estimate (0.37), towards the camera"
+    "note": "y measured: 1.5 cm behind the centres of the back tags (0.335 + 0.015). x from one jog grasp (the measured 16.3 cm would be 0.163)"
   }
 }
