@@ -191,6 +191,90 @@ def test_jog_log_saves_a_grasp_the_gripper_reading_missed(monkeypatch, capsys, t
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     assert main(["sort", "jog", "rakesh", "--no-viewer"]) == 0
     out = capsys.readouterr().out
-    assert "empty" in out and "type `log`" in out
+    assert "empty" in out and "camera checks" in out
     entries = json.loads(log.read_text())["rakesh"]
     assert len(entries) == 1 and entries[0]["camera"] == [0.65, 0.15]
+
+
+def test_jog_camera_confirms_a_grasp_after_box(monkeypatch, capsys, tmp_path) -> None:
+    """The gripper reads empty, but after `box` the camera no longer sees the piece: the
+    grasp is logged without the operator saying anything."""
+    import json
+
+    import numpy as np
+
+    import hfteama.sorter.geometry as geometry
+    import hfteama.sorter.robot as robot
+    import hfteama.sorter.run as run
+    from hfteama.arms.so101_ik import fk
+    from hfteama.vision.detect import Box, Piece, Scene
+
+    class FakeEye:
+        cam = object()  # "live camera"
+        looks = 0
+
+        def __init__(self, cfg, image=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def look(self, arm_chains=()):
+            FakeEye.looks += 1
+            pieces = [Piece(x=0.65, y=0.15, length=0.06, width=0.02, yaw=0.0, area_cm2=8.0)]
+            return None, None, Scene(box=Box(0.6, 0.25, 0.09), pieces=pieces[: FakeEye.looks == 1])
+
+    class FakeDriver:
+        def __init__(self, side, arm_cfg, motion, pairs_config=None):
+            self.limits = None
+            self._q = np.array([0.0, -1.5, 1.5, 1.0, 0.0])
+
+        def connect(self):
+            return self
+
+        def disconnect(self):
+            pass
+
+        def q(self):
+            return self._q
+
+        def tcp(self):
+            return fk(self._q)[:3, 3]
+
+        def move_q(self, q, speed=None):
+            self._q = np.asarray(q, float)
+
+        def move_line(self, q_from, target_to, yaw, steps=8, speed=None):
+            return self._q
+
+        def gripper(self, value, wait=None):
+            return 3.1  # a thin piece: reads like an empty grasp
+
+        def go_upright(self):
+            pass
+
+        def go_home(self):
+            pass
+
+    log = tmp_path / "grasps.json"
+    monkeypatch.setattr(geometry, "GRASPS_FILE", log)
+    monkeypatch.setattr(run, "Eye", FakeEye)
+    monkeypatch.setattr(robot, "ArmDriver", FakeDriver)
+    answers = iter(["1", "g", "box", "q"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert main(["sort", "jog", "rakesh", "--no-viewer"]) == 0
+    out = capsys.readouterr().out
+    assert "piece 1 is gone: it was taken" in out
+    assert len(json.loads(log.read_text())["rakesh"]) == 1
+
+
+def test_piece_still_there() -> None:
+    from hfteama.sorter.run import piece_still_there
+    from hfteama.vision.detect import Piece, Scene
+
+    scene = Scene(box=None, pieces=[Piece(0.6, 0.2, 0.05, 0.02, 0.0, 8.0)])
+    assert piece_still_there(scene, 0.61, 0.21)
+    assert not piece_still_there(scene, 0.65, 0.2)

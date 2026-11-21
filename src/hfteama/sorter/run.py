@@ -659,7 +659,7 @@ class Jog:
                 self._log_grasp(*self.last_grasp)
                 self.last_grasp = None
             elif self.last_grasp:
-                print("  (if it did hold the piece, type `log` to log this grasp)")
+                print("  (looks empty: after `box` the camera checks whether the piece is gone)")
             self.q = self.drv.move_line(self.drv.q(), up, self.yaw, steps=4)
         except RuntimeError as e:
             print(f"  {e}")
@@ -690,7 +690,25 @@ class Jog:
         self.q = self.drv.q()
         self.target = None
         self.piece = None
+        self._check_last_grasp()
         print("  arm upright; `scan` to look again, or a piece number")
+
+    def _check_last_grasp(self) -> None:
+        """With the arm upright, the camera looks where the last grasped piece was: gone
+        means it was taken (logged if the gripper reading said empty)."""
+        if self.last_grasp is None or getattr(self.eye, "cam", None) is None:
+            return  # no live camera (a saved image, or tests)
+        piece, target, q = self.last_grasp
+        p = self.scene.pieces[piece]
+        chain = np.array([self.arm.placement.to_table(c) for c in chain_points(self.q)])
+        with self.lock:
+            _, _, now = self.eye.look([chain])
+        if piece_still_there(now, p.x, p.y):
+            print(f"  camera: piece {piece + 1} is still on the table (missed)")
+        else:
+            print(f"  camera: piece {piece + 1} is gone: it was taken")
+            self._log_grasp(piece, target, q)
+        self.last_grasp = None
 
     def set_height(self, real: float) -> None:
         """The operator measured the tip at `real` m above the table: shift the arm's z."""
@@ -924,12 +942,24 @@ def cmd_run(args) -> int:
                 for s in sides:
                     drivers[s] = ArmDriver(s, cfg["arms"][s], mc, args.config).connect()
             turn = 0
-            while args.max_picks is None or picked < args.max_picks:
+            attempt = None  # (x, y) of the piece the last pick went for
+            while True:
                 chains = [
                     np.array([arms[s].placement.to_table(p) for p in chain_points(d.q())])
                     for s, d in drivers.items()
                 ]
                 frame, pose, scene = eye.look(chains)
+                if attempt is not None:  # did the last pick take its piece? ask the camera
+                    if piece_still_there(scene, *attempt):
+                        x, y = attempt
+                        print(f"  camera: the piece at ({x:.3f}, {y:.3f}) is still there")
+                        failed.append(attempt)
+                    else:
+                        picked += 1
+                        print(f"  camera: piece taken ({picked} so far)")
+                    attempt = None
+                    if args.max_picks is not None and picked >= args.max_picks:
+                        break
                 plan = make_plan(scene, arms, cfg)
                 save_image(draw(frame, pose, eye.intr, scene, plan, cfg, arms), "plan")
                 todo = {
@@ -953,9 +983,8 @@ def cmd_run(args) -> int:
                 if args.dry_run:
                     report(scene, plan, arms)
                     return 0
-                ok = pick_and_drop(drivers[side], pick, plan.drops[side], mc, pc)
-                if ok:
-                    picked += 1
+                if pick_and_drop(drivers[side], pick, plan.drops[side], mc, pc):
+                    attempt = (p.x, p.y)  # judged on the next look
                 else:
                     failed.append((p.x, p.y))
     except KeyboardInterrupt:
@@ -967,27 +996,30 @@ def cmd_run(args) -> int:
     return 0
 
 
+def piece_still_there(scene, x: float, y: float, radius: float = 0.025) -> bool:
+    """Whether the camera still sees a piece within `radius` of where one was picked."""
+    return any(np.hypot(p.x - x, p.y - y) < radius for p in scene.pieces)
+
+
 def _misses(failed, piece, radius=0.02) -> int:
     return sum(np.hypot(x - piece.x, y - piece.y) < radius for x, y in failed)
 
 
 def pick_and_drop(drv, pick, drop, mc: dict, pc: dict) -> bool:
-    """One pick: open, above, down, close, up, over the box, open, home. True if something
-    was in the gripper when it closed."""
+    """One pick: open, above, down, close, up, over the box, open, upright, home.
+
+    Always goes to the box: the gripper's closing position can't tell a thin piece from an
+    empty grasp. Whether the piece was taken is judged by the camera on the next look (the
+    caller). Returns False only if the motion itself failed."""
     yaw = float(np.arctan2(fk(pick.grasp.q)[1, 0], fk(pick.grasp.q)[0, 0]))
     try:
         drv.gripper(mc.get("gripper_open", 60.0), wait=0.0)
         drv.move_q(pick.above.q)
         drv.move_line(pick.above.q, pick.target_arm, yaw)
         closed = drv.gripper(mc.get("gripper_closed", 2.0))
-        holding = closed > mc.get("gripper_closed", 2.0) + mc.get("grasp_min_open", 4.0)
+        print(f"[{drv.side}] gripper closed to {closed:.1f}")
         up = fk(pick.above.q)[:3, 3]
         drv.move_line(drv.q(), up, yaw, steps=4)
-        if not holding:
-            print(f"[{drv.side}] missed (gripper closed to {closed:.1f})")
-            drv.gripper(mc.get("gripper_open", 60.0), wait=0.0)
-            drv.go_home()
-            return False
         drv.move_q(drop.q)
         drv.gripper(mc.get("gripper_open", 60.0))
         drv.go_upright()  # straight up, clear of the box, then home
