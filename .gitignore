@@ -32,3 +32,6 @@ htmlcov/
 CLAUDE.local.md
 configs/arms.json
 runs/
+
+vla/camera_check.jpg
+MUJOCO_LOG.TXT

@@ -1,0 +1,27 @@
+{
+  "note": "Copy to configs/real_arms.json. Key each arm by its catalog id (rakesh_follower, vato_follower): the executor, the reach graph and the planner all use that id. Numbers are placeholders: base pose in the shared table frame (metres), a safe park pose measured by hand, gripper threshold measured per arm.",
+  "arms": {
+    "rakesh_follower": {
+      "pair": "rakesh",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "yaw": 0.0,
+      "table_z": 0.0,
+      "park_q": [
+        -1.85,
+        -1.6,
+        1.6,
+        1.0,
+        0.0
+      ],
+      "grip_holding_min_pct": 15.0,
+      "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
+      "offsets_deg": {}
+    }
+  }
+}
