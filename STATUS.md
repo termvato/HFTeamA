@@ -15,7 +15,7 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 |---|---|---|
 | Live screen running on fake arms | Operations | not started |
 | One real arm does a step (pick and place) | Action + Hardware | not reported yet |
-| All 3 arms calibrated | Hardware | 1 of 3 (Vato's follower, on `hardware`) |
+| All 3 arms calibrated | Hardware | in progress: 1 leader-follower pair working; Vato's arm being set up (reported in person, 14:50) |
 
 States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 
