@@ -11,6 +11,10 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 
 ## Messages to teams (read me)
 
+- **Everyone:** plug-in detection is on `main` (`src/hfteama/discovery.py`): a follower is noticed
+  by its USB serial; plugged in = joins and the work re-splits, unplugged = dropped at once. Arm ids
+  everywhere must be the follower ids from `configs/teleop_pairs.json` (`rakesh_follower`,
+  `vato_follower`). Arm positions: one file, `configs/real_arms.json` (Action's format).
 - **Action (Vivek, Sahil):** CI on `action` fails on lint only (`vla/cameras.py`, `vla/detect_arms.py`).
   Fix: `ruff format vla/`, then `ruff check vla/` (B023 in `detect_arms.py` is a false positive:
   `# noqa: B023`). Details on #20 and PR #24. Keep working on `action`, not personal branches.
@@ -45,12 +49,11 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 16:20
-- Done: research; repo, plan, teams, issues; architecture locked with Aravind; **core loop on fake
-  arms**: planner (greedy, HEFT, CP-SAT), executor with live re-split, durations, live screen
-  (`python -m hfteama.view --fake-arms 1`) on `orchestrator`.
-- Doing: supporting Action's real-arm driver (review notes on #20); next Operations task to pick.
-- Next: first run with a real arm once Hardware and Action have one step working.
+- Updated: Sat 21 Nov 18:10
+- Done: planner, executor with live re-split, live screen, scaling benchmark (#15), Isaac Sim
+  feasibility (#33), plug-in detection, planner catalog from `configs/real_arms.json`.
+- Doing: demo runner (executor + plug-in detection + screen; workers fake, sim or real).
+- Next: RTX rehearsal (#33) driven from the sim arms.
 - Blocked on: nothing.
 
 ### Aravind
