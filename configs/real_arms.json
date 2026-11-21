@@ -1,0 +1,27 @@
+{
+  "note": "Bench test of ONE arm (vato_follower on COM7). Table frame = the arm's own base frame (arm forward = +x, base on the table at z = 0). park_q is the arm's measured resting pose, with shoulder_lift pulled 0.05 rad inside the model limit. grip_holding_min_pct is a placeholder until measured. speed_scale 0.3 = 30 % speed.",
+  "arms": {
+    "vato_follower": {
+      "pair": "hacklab",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "yaw": 0.0,
+      "table_z": 0.0,
+      "park_q": [
+        -0.11,
+        -1.7,
+        1.56,
+        1.337,
+        -1.618
+      ],
+      "grip_holding_min_pct": 15.0,
+      "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
+      "offsets_deg": {}
+    }
+  }
+}

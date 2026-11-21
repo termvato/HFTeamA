@@ -260,3 +260,34 @@ def test_move_to_with_yaw_turns_the_gripper(driver: LeRobotDriver) -> None:
         Kinematics().tool_heading(driver.read_joints()[:5]) - 1.0 + np.pi / 2
     ) % np.pi - np.pi / 2
     assert abs(err) < 0.08
+
+
+def _robot_resting_past_the_lift_limit() -> FakeRobot:
+    robot = FakeRobot()
+    robot.state["shoulder_lift.pos"] = -111.6  # deg: on its physical stop, past the model's -100
+    return robot
+
+
+def test_an_arm_resting_past_a_model_limit_can_still_be_commanded_inside_the_limits() -> None:
+    from hfteama.arms.kinematics import LIMITS_RAD
+
+    robot = _robot_resting_past_the_lift_limit()
+    d = make_driver(robot)
+    assert d.read_joints()[1] < LIMITS_RAD["shoulder_lift"][0]  # really outside, as on the bench
+    d.move_joints(np.array([0.0, -1.2, 1.0, 0.5, 0.0]))
+    lifts = [_as_q(a)[1] for a in robot.actions]
+    assert min(lifts) >= LIMITS_RAD["shoulder_lift"][0] - 1e-9  # never commanded past the limit
+    assert lifts[-1] == pytest.approx(-1.2, abs=1e-6)  # and it gets where it was asked to go
+
+
+def test_a_gripper_command_does_not_trip_over_an_out_of_limit_joint() -> None:
+    robot = _robot_resting_past_the_lift_limit()
+    make_driver(robot).open_gripper()  # must not raise "joint limit: shoulder_lift"
+    assert robot.actions
+
+
+def test_a_goal_outside_the_limits_is_still_refused() -> None:
+    robot = _robot_resting_past_the_lift_limit()
+    with pytest.raises(MotionError, match="joint limit"):
+        make_driver(robot).move_joints(np.array([0.0, -1.9, 1.0, 0.5, 0.0]))
+    assert robot.actions == []

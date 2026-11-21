@@ -21,6 +21,7 @@ Not yet run on hardware: follow `docs/handoff/action-to-hardware.md` before the 
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from pathlib import Path
@@ -29,7 +30,7 @@ from typing import Any
 import numpy as np
 
 from hfteama.arms.ik import ArmBase, Kinematics
-from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, LIMITS_RAD, ArmFrame
+from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, JOINTS, LIMITS_RAD, ArmFrame
 from hfteama.arms.primitives import (
     ArmDown,
     Grasp,
@@ -38,6 +39,8 @@ from hfteama.arms.primitives import (
     check_path,
     check_point,
 )
+
+log = logging.getLogger(__name__)
 
 OPEN_PCT = 70.0  # gripper opening for approach and release, LeRobot 0..100
 SETTLE_TOL_RAD = 0.1  # STS3215 under arm load sits a few degrees off its goal
@@ -108,8 +111,25 @@ class LeRobotDriver:
             self._target = q6.copy()
 
     def _base(self) -> np.ndarray:
-        """The pose commands are built on: the last one sent, else the measured one (first move)."""
-        return self._target.copy() if self._target is not None else self.read_joints()
+        """The pose commands are built on: the last one sent, else the measured one (first move).
+
+        An arm can rest slightly past a model limit (on its physical stop, whose calibrated range
+        is wider than the model's). Commands are never sent past the model's limits, so a measured
+        pose outside them is clipped in: the first command moves that joint inside by the
+        overshoot.
+        """
+        if self._target is not None:
+            return self._target.copy()
+        q = self.read_joints()
+        clipped = np.array([np.clip(v, *LIMITS_RAD[j]) for v, j in zip(q, JOINTS, strict=True)])
+        if np.abs(clipped - q).max() > 1e-6:
+            log.warning(
+                "%s rests outside the model's joint limits by %s rad; its first command will "
+                "move it inside",
+                self.arm_id,
+                np.round(q - clipped, 3).tolist(),
+            )
+        return clipped
 
     def _begin(self) -> None:
         """Start of every motion call. A latched stop stays latched until `resume()`."""
@@ -248,6 +268,21 @@ class LeRobotDriver:
         return self._last_ok
 
 
+def prepare_port(port: str, baud: int = 1_000_000) -> dict[int, int]:
+    """Before LeRobot enables torque: make every servo's goal equal its present position.
+
+    `SOFollower.connect()` turns torque on without this, and a servo drives toward the goal it
+    holds, so an arm could lunge toward a stale goal the moment it is connected. Raises
+    `feetech.ArmNotReady` (having written nothing) if any of the six servos does not answer.
+    """
+    import serial
+
+    from hfteama.arms import feetech
+
+    with serial.Serial(port, baud, timeout=0.05) as bus:
+        return feetech.hold_present_pose(bus)
+
+
 def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver:
     """Build a driver from `configs/real_arms.json` and Hardware's pair config; connects the arm.
 
@@ -260,6 +295,7 @@ def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver
 
     cfg = json.loads(Path(path).read_text())["arms"][arm_id]
     pair = load_pair(pair=cfg["pair"])
+    prepare_port(pair.follower.port)  # goal := present, while torque is still off
     robot = SOFollower(
         SOFollowerRobotConfig(
             port=pair.follower.port,

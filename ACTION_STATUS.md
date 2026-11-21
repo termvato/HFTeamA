@@ -69,3 +69,12 @@ Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_s
   in the shared area when the executor released its lock (now ends at a per-arm `carry` pose), and the sim rest
   pose pointed each arm at its neighbour's bin (mirrored). Handoff rewritten with a status section; real arm
   ids must be catalog ids (`rakesh_follower`, `vato_follower`). 248 tests green. No real arm run yet.
+- 2026-11-21 ~19:35: Wiring done: `hfteama.runner` (Executor + ArmWatcher + our SkillWorker factory, typed `yes`/`go`
+  gates, Ctrl-C = slow stop), `hfteama.arm_check` (check-config, probe, read, joint, point, descend, step, park),
+  grasp yaw (`pick_yaw_deg`), carry-pose staging, IK limit margin, bin markers, `scripts/record_sim_video.py`
+  (runs/sim_sort12.mp4). 322 tests green. Hardware: vato_follower is on COM7 (hacklab pair; leader on COM8).
+  Passive probe: 6/6 servos answer, 12 V, torque OFF, resting folded. Findings: (1) LeRobot's connect() enables
+  torque WITHOUT goal := present, so `from_config` now writes goal := present first (`real.prepare_port`);
+  (2) at rest shoulder_lift reads -1.947 rad, 0.20 past the model limit -1.745 (calibration range wider than the
+  model): commands are clipped into the model limits and the first command moves it inside. Windows side: isolated
+  venv C:\Users\utxowqr\hfteama-win (LeRobot 0.4.4, pyserial), run via hf.ps1. No motion command sent yet.

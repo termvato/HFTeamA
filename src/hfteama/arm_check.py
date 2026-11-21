@@ -1,6 +1,7 @@
 """Staged, supervised checks for a real arm, in this order (docs/handoff/action-to-hardware.md):
 
     python -m hfteama.arm_check check-config                     # no arm: is the config consistent?
+    python -m hfteama.arm_check probe --port COM7                # passive: ping servos, read state
     python -m hfteama.arm_check read    --arm rakesh_follower    # read only (arm holds its pose)
     python -m hfteama.arm_check joint   --arm A --joint shoulder_pan --delta 0.1
     python -m hfteama.arm_check point   --arm A --xyz 0.2 0.0 0.12
@@ -113,6 +114,32 @@ def _reach_problems(arm_id: str, kin: Kinematics, poses: Poses, table_z: float) 
     return out
 
 
+# --------------------------------------------------------------------------- passive probe
+
+from hfteama.arms.feetech import probe  # noqa: E402  (re-exported: the tests and the CLI use it)
+
+
+def _cmd_probe(args: argparse.Namespace) -> int:
+    import serial  # pyserial, imported only here
+
+    with serial.Serial(args.port, args.baud, timeout=0.05) as port:
+        found = probe(port)
+    if not found:
+        print(f"no servo answered on {args.port} at {args.baud} baud (powered? right port?)")
+        return 1
+    names = (*JOINTS,)
+    print(f"{args.port}: {len(found)} servo(s) answered (reads only, nothing was changed)")
+    print(f"{'id':<4}{'joint':<15}{'raw':>6}{'torque':>8}{'volts':>7}{'temp C':>8}")
+    for sid, v in sorted(found.items()):
+        joint = names[sid - 1] if 1 <= sid <= len(names) else "?"
+        torque = {True: "ON", False: "off", None: "?"}[v["torque"]]
+        print(f"{sid:<4}{joint:<15}{v['position']:>6}{torque:>8}{v['volts']:>7}{v['temp_c']:>8}")
+    if len(found) != 6:
+        print("expected 6 servos (5 joints + gripper): check the cable chain and power")
+        return 1
+    return 0
+
+
 # --------------------------------------------------------------------------- staged commands
 
 
@@ -126,7 +153,8 @@ def _cmd_read(d: Any, args: argparse.Namespace) -> int:
     for name, v in zip(JOINTS[:5], q[:5], strict=True):
         lo, hi = LIMITS_RAD[name]
         margin = min(v - lo, hi - v)
-        warn = "  <-- near a limit" if margin < 0.1 else ""
+        warn = "  <-- OUTSIDE the model limit" if margin < 0 else ""
+        warn = warn or ("  <-- near a limit" if margin < 0.1 else "")
         print(
             f"{name:<14}{v:>+8.3f}{math.degrees(v):>+9.1f}"
             f"   [{lo:+.2f}, {hi:+.2f}]{margin:>9.2f}{warn}"
@@ -222,6 +250,9 @@ def main(
     cc.add_argument("--config", default=str(ROOT / "configs" / "real_arms.json"))
     cc.add_argument("--poses", default=str(ROOT / "tasks" / "sort" / "poses_real.json"))
     cc.add_argument("--pairs", default=str(ROOT / "configs" / "teleop_pairs.json"))
+    pr = sub.add_parser("probe", help="passive: ping the servos on a port and read their state")
+    pr.add_argument("--port", required=True, help="e.g. COM7 or /dev/ttyACM0")
+    pr.add_argument("--baud", type=int, default=1_000_000)
     for name in ("read", "joint", "point", "descend", "step", "park"):
         p = sub.add_parser(name)
         p.add_argument("--arm", required=True)
@@ -247,6 +278,9 @@ def main(
             else "\n".join(["problems:", *[f"  - {p}" for p in problems]])
         )
         return 1 if problems else 0
+
+    if args.cmd == "probe":
+        return _cmd_probe(args)
 
     if args.cmd != "read":
         print(WARNING)

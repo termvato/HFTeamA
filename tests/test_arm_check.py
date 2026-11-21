@@ -142,3 +142,111 @@ def test_descend_goes_one_stage_at_a_time_and_stops_when_told() -> None:
         for a in robot.actions
     ]
     assert min(zs) > 0.04  # stopped after the 0.10 and 0.05 stages: never went down to 0.03
+
+
+class FakeServos:
+    """A serial port with Feetech STS3215 servos 1..6: answers pings and reads, ignores writes."""
+
+    def __init__(self, ids: tuple[int, ...] = (1, 2, 3, 4, 5, 6)) -> None:
+        self.regs = {i: {40: 1, 56: 2048 + i * 10, 62: 121, 63: 31} for i in ids}
+        self.sent: list[bytes] = []
+        self.instructions: list[int] = []
+        self.writes: list[tuple[int, int, int]] = []
+        self._out = b""
+        self.timeout = 0.05
+
+    def write(self, data: bytes) -> int:
+        self.sent.append(bytes(data))
+        assert data[:2] == b"\xff\xff"
+        sid, inst = data[2], data[4]
+        assert (~(sum(data[2:-1])) & 0xFF) == data[-1], "bad checksum from the probe"
+        self.instructions.append(inst)
+        if inst == 0x03:  # write: keep it, answer with a status packet
+            addr, value = data[5], data[6] | data[7] << 8
+            self.writes.append((sid, addr, value))
+            self.regs[sid][addr] = value
+            body = bytes([sid, 2, 0])
+            self._out += b"\xff\xff" + body + bytes([~sum(body) & 0xFF])
+            return len(data)
+        if sid not in self.regs:
+            return len(data)
+        if inst == 0x01:
+            payload = b""
+        else:
+            addr, n = data[5], data[6]
+            raw = bytes(self.regs[sid].get(addr + k, 0) if n == 1 else 0 for k in range(n))
+            if n == 2:
+                v = self.regs[sid][addr]
+                raw = bytes([v & 0xFF, v >> 8])
+            payload = raw
+        body = bytes([sid, len(payload) + 2, 0]) + payload
+        self._out += b"\xff\xff" + body + bytes([~sum(body) & 0xFF])
+        return len(data)
+
+    def read(self, n: int) -> bytes:
+        out, self._out = self._out[:n], self._out[n:]
+        return out
+
+    def reset_input_buffer(self) -> None:
+        self._out = b""
+
+    def __enter__(self) -> FakeServos:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def test_probe_reads_every_servo_without_ever_writing() -> None:
+    port = FakeServos()
+    found = arm_check.probe(port, ids=range(1, 7))
+    assert sorted(found) == [1, 2, 3, 4, 5, 6]
+    assert found[3]["position"] == 2048 + 30 and found[3]["torque"] is True
+    assert found[1]["volts"] == pytest.approx(12.1) and found[1]["temp_c"] == 31
+    assert all(p[4] in (0x01, 0x02) for p in port.sent)  # pings and reads only
+    assert port.writes == []
+
+
+def test_probe_reports_a_missing_servo_as_absent() -> None:
+    found = arm_check.probe(FakeServos(ids=(1, 2, 3)), ids=range(1, 7))
+    assert sorted(found) == [1, 2, 3]
+
+
+def test_hold_present_pose_writes_only_goal_equals_present_for_every_servo() -> None:
+    from hfteama.arms import feetech
+
+    port = FakeServos()
+    for servo in port.regs.values():
+        servo[40] = 0  # torque off: the dangerous moment
+        servo[42] = 4000  # a stale goal from an earlier session
+    feetech.hold_present_pose(port, ids=range(1, 7))
+    assert sorted(port.writes) == [(i, 42, 2048 + i * 10) for i in range(1, 7)]
+    assert all(servo[42] == servo[56] for servo in port.regs.values())
+
+
+def test_hold_present_pose_refuses_when_a_servo_does_not_answer() -> None:
+    from hfteama.arms import feetech
+
+    port = FakeServos(ids=(1, 2, 3))
+    with pytest.raises(feetech.ArmNotReady, match="4"):
+        feetech.hold_present_pose(port, ids=range(1, 7))
+    assert port.writes == []  # a half-answering arm is never partially written
+
+
+def test_connecting_an_arm_first_holds_its_present_pose(monkeypatch: pytest.MonkeyPatch) -> None:
+    serial = pytest.importorskip(
+        "serial"
+    )  # pyserial: comes with LeRobot, not with the base install
+    from hfteama.arms import real
+
+    port = FakeServos()
+    for servo in port.regs.values():
+        servo[42] = 4000  # stale goal: torque-on would lunge toward it
+    opened: list[tuple] = []
+    monkeypatch.setattr(serial, "Serial", lambda *a, **k: (opened.append(a), port)[1])
+    real.prepare_port("COM7")
+    assert opened and opened[0][0] == "COM7"
+    assert all(servo[42] == servo[56] for servo in port.regs.values())
