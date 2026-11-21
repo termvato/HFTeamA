@@ -65,11 +65,15 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #16 | Plan validator | done (`scheduler/check.py`), run after every re-plan |
 | #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
 | #18 | Re-split policy questions | open |
-| new | VLM decomposer, step check, re-scan | code done and tested on a scripted VLM (`perception/`); step check wired as `Executor(verifier=...)`; Qwen3-VL-4B on the RTX 4060 with safeguards: first real-GPU run (`scripts/vlm_smoke.py`) pending, model still downloading; no accuracy or latency numbers yet |
-| new | Object detection (camera -> table positions) | code done, tested on a scripted VLM: Qwen points at objects, pixel ray meets the table plane (`perception/pointing.py`); position only, no yaw. OnePose dropped (per-object iOS scans, CUDA 10.2, Linux only); pointing accuracy on the real model not measured yet |
+| new | VLM decomposer, step check, re-scan | done; step check wired as `Executor(verifier=...)`. Real run on the RTX 4060 (Qwen3-VL-4B, 4-bit, synthetic table image, `scripts/vlm_smoke.py`): sorting by colour right on the first try, 12 s (once at Go); step check correct, 2.8 s per call; peak VRAM 3.1 GB. Not yet on a real camera photo |
+| new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
 
+- 21 Nov (Aravind): First real Qwen run on the RTX 4060 passed (numbers in the backlog). Watch
+  the step check: one GPU, one call at a time, 2.8 s each. With 3 arms finishing a step every
+  ~5 s, checking every pick and place asks ~1.7 s of GPU per second and the checks queue up.
+  Checking only places (or only when the camera sees a change) halves that.
 - 21 Nov (Aravind): Built and on `orchestrator`: `src/hfteama/registry/` (#3) and
   `src/hfteama/perception/` (VLM). Objects: Qwen points at each one (0..1000 coords), the camera
   ray through that pixel meets the table plane at the objects' top height. Needs from Hardware's
