@@ -67,16 +67,62 @@ class Eye:
         if frame is None:
             raise SystemExit(f"Cannot read {self.image}")
         found = detect_tags(frame, self.cfg["table"].get("dictionary", "DICT_4X4_50"))
+        seen = sorted(i for i in found if i in self.tags)
         pose = fit_pose({i: centre_pixel(c) for i, c in found.items()}, self.tags, self.intr)
         limit = self.cfg["table"].get("max_pose_rms_px", 3.0)
-        if pose is not None and pose.rms_px <= limit:
+        if pose is not None and len(seen) >= 4 and pose.rms_px <= limit:
+            # all 4 tags: a checked pose; keep it for frames where a tag is hidden
             self.pose = pose
-        elif self.pose is None:
-            seen = sorted(i for i in found if i in self.tags)
+            save_pose(pose)
+        elif (cached := self.pose or load_pose()) is not None:
+            # fewer than 4 tags: 3 coplanar points have two solutions and the solver may
+            # pick the wrong one; the camera doesn't move, so use the last 4-tag pose
+            self.pose = cached
+        elif pose is not None and pose.rms_px <= limit:
+            print(
+                f"[camera] only tags {seen} and no saved 4-tag pose: the camera pose may be"
+                " wrong. Uncover all 4 tags once."
+            )
+            self.pose = pose
+        else:
             raise SystemExit(f"Need 3+ reference tags (seen {seen}) to place the camera.")
         self.found = found
         scene = detect_scene(frame, self.pose, self.intr, self.cfg, arm_chains)
         return frame, self.pose, scene
+
+
+POSE_FILE = OUT_DIR / "camera_pose.json"  # the last pose fitted on all 4 tags
+
+
+def save_pose(pose, path=None) -> None:
+    import json
+
+    path = path or POSE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "R": pose.R.tolist(),
+                "t": pose.t.tolist(),
+                "rms_px": pose.rms_px,
+                "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    )
+
+
+def load_pose(path=None):
+    import json
+
+    from hfteama.vision.table import CameraPose
+
+    path = path or POSE_FILE
+    if not path.exists():
+        return None
+    d = json.loads(path.read_text())
+    return CameraPose(
+        R=np.array(d["R"]), t=np.array(d["t"]), rms_px=d["rms_px"], tags_used=(0, 1, 2, 3)
+    )
 
 
 def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:

@@ -51,7 +51,7 @@
     "drop_above": 0.08
   },
   "pieces": {
-    "min_area_cm2": 10.0,
+    "min_area_cm2": 25.0,
     "max_area_cm2": 80.0,
     "max_length": 0.17,
     "colour_threshold": 25.0,

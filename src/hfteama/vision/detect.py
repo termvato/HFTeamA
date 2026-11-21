@@ -227,8 +227,9 @@ def find_pieces(
 
 
 def _ignored(top, lab, ig: dict):
-    """Mask of large dark grey/black or green regions (the black and the green arm, the
-    wrist cameras, cables), grown by ig["grow"] m so their edges and servo wires go too.
+    """Mask of large dark grey/black or green regions reaching the back edge (the black and
+    the green arm, the wrist cameras, cables), grown by ig["grow"] m so their edges and servo
+    wires go too.
     Small dark or green spots (a cap, a logo) stay: pieces are never removed for a detail."""
     import cv2
 
@@ -242,9 +243,14 @@ def _ignored(top, lab, ig: dict):
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
     n, lab_cc, stats, _ = cv2.connectedComponentsWithStats(m)
     min_px = ig.get("min_area_cm2", 15.0) / (MM_PER_PX / 10) ** 2
+    # the arms come in from the back of the table (the image's last rows): a dark or green
+    # region that doesn't reach that edge is a piece's print, not an arm
+    band = int(ig.get("back_band", 0.03) * 1000 / MM_PER_PX)
+    rows = m.shape[0]
     big = np.zeros_like(m)
     for i in range(1, n):
-        if stats[i, cv2.CC_STAT_AREA] >= min_px:
+        reaches_back = stats[i, cv2.CC_STAT_TOP] + stats[i, cv2.CC_STAT_HEIGHT] >= rows - band
+        if stats[i, cv2.CC_STAT_AREA] >= min_px and (reaches_back or not ig.get("from_back", True)):
             big[lab_cc == i] = 255
     g = max(1, int(ig.get("grow", 0.02) * 1000 / MM_PER_PX))
     return cv2.dilate(big, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * g + 1, 2 * g + 1)))
