@@ -7,5 +7,25 @@
     "yaw_deg": 90.0,
     "z_offset": -0.015,
     "note": "base measured: 16.3 cm from the back tag on its side (tag 2), 1.5 cm behind the back tags"
+  },
+  "hacklab": {
+    "aim_offset": [
+      0.0048,
+      0.0066
+    ],
+    "jaw_offset": [
+      0.0059,
+      -0.0031
+    ],
+    "aim_gain": [
+      [
+        -0.0119,
+        -0.0886
+      ],
+      [
+        0.0756,
+        -0.054
+      ]
+    ]
   }
 }
