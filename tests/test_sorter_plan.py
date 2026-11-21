@@ -123,3 +123,12 @@ def test_grasp_aim_turns_with_the_jaws() -> None:
     a90 = np.subtract(arm.aim(0.2, 0.2, np.pi / 2), (0.2, 0.2))
     assert a0 == pytest.approx([0.02, 0.0])
     assert a90 == pytest.approx([0.0, 0.02])
+
+
+def test_aim_table_interpolates_by_bearing_and_holds_at_the_ends() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, aim_table=((-20.0, 0.02, 0.06, 0.0), (60.0, -0.02, -0.04, -0.004)))
+    ahead = p.to_table([0.2, 0.0])  # bearing 0: a quarter of the way
+    assert arm.correction(*ahead) == pytest.approx((0.01, 0.035, -0.001))
+    far_right = p.to_table([0.1, -0.2])  # beyond -20 deg: held at the first knot
+    assert arm.correction(*far_right) == pytest.approx((0.02, 0.06, 0.0))

@@ -103,6 +103,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             limits,
             tuple(a.get("aim_offset", (0.0, 0.0))),
             tuple(a.get("jaw_offset", (0.0, 0.0))),
+            tuple(tuple(r) for r in sorted(a.get("aim_table", []))),
         )
     return out
 
@@ -479,6 +480,7 @@ class Jog:
         self.pairs_arm, self.pairs_table = [], []
         self.z_changed = False
         self.last_grasp = None  # (piece, aim, q) of the last `g` not logged yet, for `log`
+        self.dz = 0.0  # height correction of the current piece (ArmModel.aim_table)
 
     # --- vision -------------------------------------------------------------------------------
 
@@ -576,8 +578,9 @@ class Jog:
             print("  no such piece (scan to renumber)")
             return
         p = self.scene.pieces[i]
-        ax, ay, yaw, _ = self.arm.grasp_aim(p, self.z)
-        if self.move([ax, ay, self.z], yaw):
+        ax, ay, yaw, _, dz = self.arm.grasp_aim(p, self.z)
+        if self.move([ax, ay, self.z + dz], yaw):
+            self.dz = dz
             self.piece = i
             print(
                 f"  over piece {i + 1}: camera says ({p.x:.3f}, {p.y:.3f}),"
@@ -617,8 +620,9 @@ class Jog:
         if self.target is None:
             print("  pick a piece first")
             return
-        z = self.pc.get("grasp_z", 0.005) if depth is None else self.target[2] - depth
-        if z < -0.002:
+        dz = self.dz if self.piece is not None else 0.0
+        z = self.pc.get("grasp_z", 0.005) + dz if depth is None else self.target[2] - depth
+        if z < dz - 0.002:
             print(f"  that would go {-z * 100:.1f} cm into the table")
             return
         self.drv.gripper(self.mc.get("gripper_open", 60.0), wait=0.3)

@@ -32,26 +32,42 @@ class ArmModel:
     # axis, across it): the open jaws are not centred on the tool point. See fit_aim.
     aim_offset: tuple[float, float] = (0.0, 0.0)
     jaw_offset: tuple[float, float] = (0.0, 0.0)
+    # optional: the fixed part as a function of where the piece is, seen from the arm:
+    # [(bearing_deg, forward, left, dz), ...] sorted by bearing (0 = straight ahead, + = to
+    # the arm's left), linearly interpolated, held at the ends. Overrides aim_offset; dz (m)
+    # is added to every height over that piece.
+    aim_table: tuple = ()
+
+    def correction(self, x: float, y: float) -> tuple[float, float, float]:
+        """(forward, left, dz) to apply for a piece seen at table (x, y)."""
+        if not self.aim_table:
+            return (*self.aim_offset, 0.0)
+        a = self.placement.to_arm([x, y])
+        b = np.degrees(np.arctan2(a[1], a[0]))
+        k = np.array(self.aim_table, float)
+        return tuple(float(np.interp(b, k[:, 0], k[:, i])) for i in (1, 2, 3))
 
     def aim(self, x: float, y: float, heading: float = 0.0) -> tuple[float, float]:
         """Table xy to aim the tool at to grasp a piece seen at (x, y), with the jaws'
         closing axis heading along `heading` (rad, table frame)."""
         c, s = np.cos(heading), np.sin(heading)
         j = np.asarray(self.jaw_offset)
-        a = self.placement.to_arm([x, y]) + np.asarray(self.aim_offset)
+        fwd, left, _ = self.correction(x, y)
+        a = self.placement.to_arm([x, y]) + np.array([fwd, left])
         t = self.placement.to_table(a) + [c * j[0] - s * j[1], s * j[0] + c * j[1]]
         return float(t[0]), float(t[1])
 
     def grasp_aim(self, piece: Piece, z: float):
-        """(x, y, yaw_arm, heading): where to put the tool to grasp `piece` at height z, the
-        wrist yaw for the IK, and the jaws' table heading the IK picks (yaw or yaw + pi)."""
+        """(x, y, yaw_arm, heading, dz): where to put the tool to grasp `piece` at height z,
+        the wrist yaw for the IK, the jaws' table heading the IK picks (yaw or yaw + pi), and
+        the height correction for this piece (add it to every z over it)."""
         from hfteama.arms.so101_ik import fk, jaw_yaw
 
         yaw = self.placement.yaw_to_arm(piece.yaw)
         sol = solve_ik(self.placement.to_arm([piece.x, piece.y, z]), yaw=yaw, limits=self.limits)
         heading = jaw_yaw(fk(sol.q)) + self.placement.yaw
         ax, ay = self.aim(piece.x, piece.y, heading)
-        return ax, ay, yaw, heading
+        return ax, ay, yaw, heading, self.correction(piece.x, piece.y)[2]
 
 
 @dataclass
@@ -76,9 +92,9 @@ class Plan:
 
 def plan_pick(arm: ArmModel, piece: Piece, mc: dict, pc: dict) -> PickPlan | None:
     max_tilt = np.radians(mc.get("max_tilt_deg", 30.0))
-    ax, ay, yaw, _ = arm.grasp_aim(piece, pc.get("approach_z", 0.05))
-    g = arm.placement.to_arm([ax, ay, pc.get("grasp_z", 0.005)])
-    a = arm.placement.to_arm([ax, ay, pc.get("approach_z", 0.05)])
+    ax, ay, yaw, _, dz = arm.grasp_aim(piece, pc.get("approach_z", 0.05))
+    g = arm.placement.to_arm([ax, ay, pc.get("grasp_z", 0.005) + dz])
+    a = arm.placement.to_arm([ax, ay, pc.get("approach_z", 0.05) + dz])
     above = solve_ik(a, yaw=yaw, limits=arm.limits)
     if not above.ok or above.tilt > max_tilt:
         return None
