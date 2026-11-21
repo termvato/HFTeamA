@@ -201,7 +201,7 @@ Tested on 21 Nov: `hfteama bimanual record` gave 1 episode, 240 frames at 29.9 H
 | `hfteama --pair P calibrate follower\|leader` | Calibrate an arm (new arms only) |
 | `hfteama --pair P setup-motors follower\|leader` | Set motor IDs on a new arm |
 | `hfteama find-port`, `hfteama find-cameras` | Find a new arm's port, list cameras |
-| `hfteama sort preview|goto|touch|run` | Vision-guided IK sorter: pieces into the box ([docs/hardware/sorter.md](docs/hardware/sorter.md)) |
+| `hfteama sort preview\|goto\|touch\|run` | Vision-guided IK sorter: pieces into the box ([docs/hardware/sorter.md](docs/hardware/sorter.md)) |
 | `hfteama -n ...` | Print the LeRobot command without running it |
 
 Adding a new arm or pair, cameras and troubleshooting:
