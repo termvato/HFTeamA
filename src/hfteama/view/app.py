@@ -75,12 +75,12 @@ def create_app(log: EventLog, controls: Any | None = None, clock: Clock | None =
         test_panel = html.Details(
             className="panel test",
             children=[
-                html.Summary("Test controls (fake arms, development only)"),
+                html.Summary("Arm controls (manual plug-in, stage fallback and tests)"),
                 html.Div(
                     className="row",
                     style={"marginTop": "10px"},
                     children=[
-                        html.Button("Add fake arm", id="t-add"),
+                        html.Button("Plug in next arm", id="t-add"),
                         dcc.Dropdown(id="t-arm", placeholder="arm", style={"width": "160px"}),
                         html.Button("Remove (slow stop)", id="t-remove"),
                         html.Button("Fail its next step", id="t-fail"),

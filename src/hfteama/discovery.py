@@ -68,6 +68,7 @@ class ArmWatcher:
         self.debounce = max(1, debounce)
         self.on_error = on_error
         self._joined: set[str] = set()  # arm ids handed to the executor
+        self._held_back: set[str] = set()  # removed on purpose; rejoin only after a replug
         self._count: dict[str, int] = {}  # arm id -> consecutive scans in the new state
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -100,6 +101,13 @@ class ArmWatcher:
         self.executor.arm_lost(arm_id, reason)
         return True
 
+    def forget(self, arm_id: str) -> None:
+        """The arm was removed on purpose (slow stop): do not report it as lost when its cable is
+        pulled, and let it join again when plugged back in."""
+        with self._lock:
+            self._joined.discard(arm_id)
+            self._held_back.add(arm_id)
+
     def joined(self) -> set[str]:
         with self._lock:
             return set(self._joined)
@@ -114,8 +122,10 @@ class ArmWatcher:
             log.warning("serial scan failed: %s", e)
             return
         with self._lock:
+            self._held_back &= present  # cable pulled: the arm may join again next time
             joined = set(self._joined)
-        changed = (present - joined) | (joined - present)
+            held = set(self._held_back)
+        changed = (present - joined - held) | (joined - present)
         for arm in list(self._count):
             if arm not in changed:
                 del self._count[arm]

@@ -8,7 +8,8 @@ Owners:
   or out.
 - Action (#20): the skills, the skill worker and the arm drivers (sim and real), on real and
   simulated arms. Scripted, learned or both is their call.
-- Operations (#21): the contract in base.py and a fake arm for testing (backlog #4, #14).
+- Operations (#21): the contract in base.py and a fake arm for testing (backlog #4, #14). Arms
+  join and leave a run through hfteama.discovery; hfteama.demo picks the backend.
 
 Every backend implements arms.base.ArmWorker: state(), execute(task) -> Result, heartbeat(),
 cancel(task_id), park().

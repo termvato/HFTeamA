@@ -115,16 +115,32 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | `src/hfteama/scheduler/` | planning, lower bound and bottleneck |
 | `src/hfteama/executor/` | running the plan, re-splitting |
 | `src/hfteama/arms/` | arm contract, skill registry, arm backends (real, sim, fake) |
+| `src/hfteama/registry/` | arm catalog and reach: which arm can reach which step |
+| `src/hfteama/perception/` | camera calibration, VLM object positions, sorting plan, step check, re-scan |
+| `src/hfteama/discovery.py` | plug-in detection: arms join and leave by USB serial |
+| `src/hfteama/demo.py` | the demo runner: `python -m hfteama.demo` |
 | `src/hfteama/events.py` | event log |
 | `src/hfteama/view/` | live screen |
 | `tasks/` | one folder per task |
-| `configs/` | arm registry template (`arms.json` is git-ignored) |
+| `configs/` | pairs and calibrations (Hardware), table layout, arm positions (`real_arms.json`, Action's format) |
 | `scripts/` | benchmarks and tools |
 | `research/` | background report and notes |
+
+## State (Sat 21 Nov, 18:05)
+
+| Piece | State |
+|---|---|
+| Planner, executor with live re-split, live screen, plug-in detection, demo runner | done, tested on fake arms |
+| Camera to plan (calibration, VLM positions, sorting, reach) | done as a dry run on the real top camera |
+| Scaling benchmark | done: about 2.2x with 3 arms, then a shared area or step order limits it |
+| Real-arm skills and driver | written and tested in MuJoCo (branch `action-arm-skills`); not yet run on a real arm |
+| Real run (camera + VLM + executor + real arms) | waiting for the first real arm motion |
+| RTX rehearsal in Isaac Sim (#33) | feasibility done; bridge from the plan still to build |
 
 ## Run
 
 ```bash
-pip install -e ".[dev,sched,view]"   # add sim for MuJoCo; LeRobot from source for real arms
+pip install -e ".[dev,sched,view,arms]"   # add sim for MuJoCo, vlm and camera for the VLM
 pytest
+python -m hfteama.demo --backend fake --plugged rakesh_follower   # then http://127.0.0.1:8050
 ```
