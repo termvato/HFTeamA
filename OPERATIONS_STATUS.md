@@ -10,7 +10,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Now (Sat 21 Nov, 16:30)
 
-1. **Architecture locked** (table below). Only the step timeout is still open.
+1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
    live screen. Run: `python -m hfteama.view --fake-arms 1`, open http://127.0.0.1:8050.
 3. **VLM on top of the loop: first version done** (Aravind): decomposer (camera + Go -> categories
@@ -41,7 +41,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Task format | the VLM writes the format on `main` (`depends_on` -> `deps`, `object`/`target` -> `args`) | locked |
 | Code and interfaces | code in `src/hfteama/`; task format, arm contract and event log change only with all teams | locked |
 | Re-plan rule | adopt the 10% hysteresis, except when arms change or something fails | locked |
-| Step timeout | 1.5x or 3x the estimate | open |
+| Step timeout | adaptive: 3x the estimate while durations are guesses, 1.5x the arm's measured 80th percentile once measured (Vato, 21 Nov) | locked |
 | `same_arm_as` | keep: the arm holding a part also places it | locked |
 
 ## Backlog state

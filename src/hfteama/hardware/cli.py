@@ -74,6 +74,10 @@ def record_overrides(args: argparse.Namespace) -> dict:
         overrides["single_task"] = args.task
     if args.repo_id:
         overrides["repo_id"] = args.repo_id
+    if args.episode_time is not None:
+        overrides["episode_time_s"] = args.episode_time
+    if args.reset_time is not None:
+        overrides["reset_time_s"] = args.reset_time
     return overrides
 
 
@@ -189,6 +193,8 @@ def _record_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--episodes", type=int)
     p.add_argument("--task")
     p.add_argument("--repo-id")
+    p.add_argument("--episode-time", type=float, help="Seconds per episode")
+    p.add_argument("--reset-time", type=float, help="Seconds to reset the scene between episodes")
     p.add_argument("--resume", action="store_true", help="Append to an existing dataset")
 
 

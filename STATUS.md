@@ -9,6 +9,17 @@ code still goes through your team branch. Only edit your own block, so edits don
 
 Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 
+## Messages to teams (read me)
+
+- **Action (Vivek, Sahil):** CI on `action` fails on lint only (`vla/cameras.py`, `vla/detect_arms.py`).
+  Fix: `ruff format vla/`, then `ruff check vla/` (B023 in `detect_arms.py` is a false positive:
+  `# noqa: B023`). Details on #20 and PR #24. Keep working on `action`, not personal branches.
+- **Hardware (Diego, Om) and Action:** Operations is building the real-arm adapter
+  (`src/hfteama/arms/real.py`). It opens followers from `configs/teleop_pairs.json`, checks state and
+  limits before any motion, moves and parks slowly, and runs Action's skills by name. Needed from
+  Hardware: park and home pose per follower, table limit, grasp thresholds. Proposed skill interface
+  for Action on #20. Reply on #19 / #20.
+
 ## Next checkpoint: Saturday evening
 
 | Target | Team | State |
@@ -25,7 +36,6 @@ States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 |---|---|---|
 | Who owns arm detection (`vla/detect_arms.py` on `action` overlaps Hardware's scope) | Hardware, Action | #19, #20 |
 | Top-down camera: mounting and calibration to the table | Hardware, Operations | #19 |
-| Step timeout (1.5x, 2x or 3x the estimate) | Vato, Aravind | #21 |
 
 Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-locked-sat-21-nov-vato-and-aravind).
 
@@ -36,12 +46,12 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 15:08
+- Updated: Sat 21 Nov 15:35
 - Done: research; repo, plan, teams, issues; architecture locked with Aravind; **core loop on fake
   arms**: planner (greedy, HEFT, CP-SAT), executor with live re-split, durations, live screen
   (`python -m hfteama.view --fake-arms 1`) on `orchestrator`.
-- Doing: wiring for real arms and the VLM (`add_arm` for Hardware's discovery, `verifier` for the
-  VLM step check).
+- Doing: real-arm adapter (`arms/real.py`): a real follower as an arm worker the executor can plan
+  with.
 - Next: first run with a real arm once Hardware and Action have one step working.
 - Blocked on: nothing.
 

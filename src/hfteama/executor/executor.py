@@ -10,9 +10,11 @@ Runs a plan as a partial order and re-plans the remaining work whenever somethin
   it finishes more than 10% sooner, unless the arm set changed or something failed (hysteresis).
 - An arm holding a part (its `same_arm_as` partner just finished) places it before anything else.
   If that arm is lost, the part's pick is redone.
-- Failures: a failed step is retried (same or another arm) up to `max_retries`; a step past
-  `timeout_factor` x its estimate is cancelled and counted as a timeout; an arm whose heartbeat
-  goes stale is dropped and its running step goes back to the pool.
+- Failures: a failed step is retried (same or another arm) up to `max_retries`; an arm whose
+  heartbeat goes stale is dropped and its running step goes back to the pool.
+- Timeout (decided 21 Nov, adaptive): a step is cancelled and counted as a timeout after
+  `timeout_guess` x its estimate while durations are still guesses (default 3x), or
+  `timeout_measured` x the arm's measured 80th-percentile time once it has one (default 1.5x).
 - Removing an arm is a slow stop: it finishes its step (and places a held part), then parks.
 - Step check: an optional `verifier(task, result)` (e.g. the VLM looking at the camera) confirms
   each successful step before it counts as done.
@@ -57,6 +59,7 @@ class _Run:
     token: int
     start: float  # run seconds
     estimate: float
+    limit: float = 0.0  # seconds after start before the step counts as a timeout
     timed_out: bool = False
     overrun: bool = False
     aborted: bool = False
@@ -70,7 +73,8 @@ class Executor:
         clock: Clock | None = None,
         method: str = "heft",
         time_limit: float = 1.0,
-        timeout_factor: float = 3.0,  # open decision (#21): 1.5x, 2x or 3x
+        timeout_guess: float = 3.0,  # x estimate while durations are guesses
+        timeout_measured: float = 1.5,  # x measured 80th percentile once measured
         hysteresis: float = 0.10,
         max_retries: int = 2,
         heartbeat_timeout: float = 1.5,
@@ -85,7 +89,8 @@ class Executor:
         self.clock = clock or Clock()
         self.method = method
         self.time_limit = time_limit
-        self.timeout_factor = timeout_factor
+        self.timeout_guess = timeout_guess
+        self.timeout_measured = timeout_measured
         self.hysteresis = hysteresis
         self.max_retries = max_retries
         self.heartbeat_timeout = heartbeat_timeout
@@ -304,7 +309,9 @@ class Executor:
             self._locks[r] = tid
         token = next(self._tokens)
         est = self.durations.estimate(task, arm)
-        self._runs[tid] = _Run(tid, arm, token, self.now(), est)
+        measured = self.durations.measured(arm, task.skill) is not None
+        factor = self.timeout_measured if measured else self.timeout_guess
+        self._runs[tid] = _Run(tid, arm, token, self.now(), est, limit=factor * max(est, 1e-3))
         self._busy[arm] = tid
         self._status[tid] = TaskState.RUNNING
         planned = self._planned(tid)
@@ -467,8 +474,7 @@ class Executor:
                 self._lose_arm(arm, "heartbeat lost")
         now = self.now()
         for run in list(self._runs.values()):
-            limit = run.start + self.timeout_factor * max(run.estimate, 1e-3)
-            if not run.timed_out and now > limit:
+            if not run.timed_out and now > run.start + run.limit:
                 run.timed_out = True
                 self._workers[run.arm_id].cancel(run.task_id)
             elif not run.overrun and now > run.start + run.estimate * 1.5 + 1.0:
