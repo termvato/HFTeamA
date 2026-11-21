@@ -1,13 +1,13 @@
 {
   "rakesh": {
     "base": [
-      0.138,
-      0.35
+      0.592,
+      -0.015
     ],
-    "yaw_deg": -90.0,
+    "yaw_deg": 90.0,
     "z_offset": -0.015,
     "fit_rms_mm": 0.0,
     "points": 1,
-    "note": "y measured: 1.5 cm behind the centres of the back tags (0.335 + 0.015). x from one jog grasp (the measured 16.3 cm would be 0.163)"
+    "note": "Table frame: origin tag 1 (back-left from behind the arms). y measured (-0.015, 1.5 cm behind the back tags); x from one jog grasp (measured 16.3 cm in from the side tag would be 0.567)"
   }
 }

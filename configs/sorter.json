@@ -1,5 +1,5 @@
 {
-  "note": "Vision-guided IK sorter (hfteama sort ...). Table frame: origin at the centre of tag 0 (front-left, seen from the overhead camera), x to the right towards tag 3, y away from the camera towards tag 2, z up; metres. See docs/hardware/sorter.md.",
+  "note": "Vision-guided IK sorter (hfteama sort ...). Table frame, seen from BEHIND the arms (facing the camera): origin at the centre of tag 1 (back-left), x to the right along the back tags (tag 2 at x = 0.73), y forward towards the camera (tags 3 and 0 at y = 0.335), z up; metres. Tag centres: 73 cm apart along x, 33.5 cm along y. See docs/hardware/sorter.md.",
   "camera": {
     "name": "C922",
     "width": 1920,
@@ -25,10 +25,22 @@
   "table": {
     "dictionary": "DICT_4X4_50",
     "tags": {
-      "0": [0.0, 0.0],
-      "3": [0.73, 0.0],
-      "2": [0.0, 0.335],
-      "1": [0.73, 0.335]
+      "1": [
+        0.0,
+        0.0
+      ],
+      "2": [
+        0.73,
+        0.0
+      ],
+      "3": [
+        0.0,
+        0.335
+      ],
+      "0": [
+        0.73,
+        0.335
+      ]
     },
     "tag_mask": 0.11,
     "max_pose_rms_px": 3.0
@@ -48,7 +60,10 @@
       "note": "Never pieces: large dark colourless regions (black arm, wrist cameras, cables; Lab chroma < dark_chroma_max, so a dark blue piece still counts) and green ones (green arm), grown by 'grow' m. OpenCV hue 0..180, Lab L 0..255.",
       "dark_l_max": 75,
       "dark_chroma_max": 20,
-      "green_hue": [30, 75],
+      "green_hue": [
+        30,
+        75
+      ],
       "green_s_min": 50,
       "min_area_cm2": 15.0,
       "grow": 0.02
@@ -56,24 +71,35 @@
     "grasp_z": 0.0,
     "approach_z": 0.05
   },
-  "arms_note": "Arms are named after their pair. Seen from BEHIND the arms (facing the camera): rakesh (black) is on the right, hacklab (green) on the left. Seen from the camera it is the other way round. base = base_link origin in the table frame: y = 1.5 cm behind the centres of the back tags (0.335 + 0.015), measured.",
+  "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.3 cm in from the side tags (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
   "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m).",
   "arms": {
     "rakesh": {
       "pair": "rakesh",
       "colour": "black",
-      "base": [0.163, 0.35],
-      "yaw_deg": -90.0,
+      "base": [
+        0.567,
+        -0.015
+      ],
+      "yaw_deg": 90.0,
       "z_offset": -0.015,
-      "offsets_deg": {"wrist_roll": 90.0},
-      "aim_offset": [0.04, 0.035],
+      "offsets_deg": {
+        "wrist_roll": 90.0
+      },
+      "aim_offset": [
+        0.04,
+        0.035
+      ],
       "mask_radius": 0.12
     },
     "hacklab": {
       "pair": "hacklab",
       "colour": "green",
-      "base": [0.567, 0.35],
-      "yaw_deg": -90.0,
+      "base": [
+        0.163,
+        -0.015
+      ],
+      "yaw_deg": 90.0,
       "mask_radius": 0.12
     }
   },

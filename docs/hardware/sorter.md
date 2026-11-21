@@ -6,7 +6,7 @@ the box. The arms take turns, so they never meet over the box.
 
 ```
 hfteama sort preview            # camera only: what it sees and what it would do
-hfteama sort goto rakesh --tag 2  # hover rakesh's tool tip 3 cm over tag 2's centre
+hfteama sort goto rakesh --tag 2  # hover rakesh's tool tip 3 cm over tag 2's centre (its back-right tag)
 hfteama sort goto rakesh --box    # hover over the box (the drop pose)
 hfteama sort jog rakesh           # hover over a piece, correct by hand, fit where rakesh stands
 hfteama sort touch rakesh         # fit where rakesh stands (torque off, touch tags)
@@ -26,16 +26,19 @@ hfteama sort run                # sort, both arms
 **Arm names, not left/right:** seen from behind the arms (facing the camera) rakesh is on
 the right and hacklab on the left; seen from the camera it is the other way round.
 
-**Table frame:** origin at the centre of tag 0 (front-left as seen by the camera), x towards
-tag 3 (right), y towards tag 2 (away from the camera), z up, metres.
+**Table frame, seen from behind the arms (facing the camera):** origin at the centre of
+tag 1 (back-left), x to the right along the back tags, y forward towards the camera, z up,
+metres. Tag centres are 73 cm apart along x and 33.5 cm along y. The arms' base_link origins
+are 1.5 cm behind the back tags (y = -0.015) and face +y (`yaw_deg` 90).
 
 ```
-   tag 2 (0, 0.335)  [rakesh, black]    [hacklab, green]  tag 1 (0.73, 0.335)
-                       base x ~ 0.163      base x ~ 0.567
-                    pieces ...           ... pieces
-                                 (box)
-   tag 0 (0, 0)                                           tag 3 (0.73, 0)
-                              camera
+            hacklab (green)                     rakesh (black)
+            base (0.163, -0.015)                base (0.567, -0.015)
+   tag 1 (0, 0) ---------------------------------------- tag 2 (0.73, 0)
+        |              pieces ...      ... pieces               |
+        |                         (box)                         |
+   tag 3 (0, 0.335) ------------------------------------ tag 0 (0.73, 0.335)
+                                 camera
 ```
 
 The camera pose comes from the tag centres (3 visible tags are enough; with 4 the residual is a
@@ -48,7 +51,7 @@ higher up it shrinks (the wrist joint runs out at about ±100°). So:
 
 - Pieces up to about 30 cm from a base are picked with the gripper vertical.
 - The drop is made with the gripper tilted. With the box centred between the arms
-  (x ≈ 0.365), both arms reach it when its centre is at **y ≥ 0.10 m**, about 27 cm in front
+  (x ≈ 0.365), both arms reach it when its centre is at **y ≤ 0.24 m**, about 25 cm in front
   of the arms. `hfteama sort preview` prints whether each arm can reach it.
 
 ## First time on the real arms
@@ -62,9 +65,9 @@ file and the servos differ, the command stops instead of letting LeRobot prompt.
    that the white jaw lines cross each piece's short side. The image is saved in
    `outputs/sorter/`.
 2. `hfteama -n sort goto rakesh --tag 2` plans only. Then without `-n`: the tip should hover
-   3 cm over the centre of tag 2. Measure the offset. Do the same with `hacklab --tag 1`.
+   3 cm over the centre of tag 2. Measure the offset. Do the same with `hacklab --tag 1` (back-left).
 3. If it is off by more than ~1 cm: `hfteama sort touch rakesh`. Torque goes off (hold the arm).
-   Touch 3 or more tag centres with the tip of the closed gripper: tags 2 and 0 for rakesh,
+   Touch 3 or more tag centres with the tip of the closed gripper: tags 2 and 0 for rakesh (on its side),
    plus any extra `DICT_4X4_50` tag (id ≥ 4) you lay on the table, spread over the work
    area. The fit is saved to `configs/sorter_placements.json`.
    Or, with torque on: `hfteama sort jog rakesh`. Rerun opens with the camera: pieces

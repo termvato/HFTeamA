@@ -56,7 +56,7 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
             pass
 
         def look(self, arm_chains=()):
-            p = Piece(x=0.30, y=0.22, length=0.06, width=0.02, yaw=0.0, area_cm2=12.0)
+            p = Piece(x=0.50, y=0.15, length=0.06, width=0.02, yaw=0.0, area_cm2=12.0)
             return None, None, Scene(box=None, pieces=[p])
 
     class FakeDriver:
@@ -91,8 +91,8 @@ def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
     monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
     assert main(["sort", "jog", "rakesh", "--step", "10", "--no-viewer"]) == 0
     out = capsys.readouterr().out
-    # rakesh faces the camera: forward = table -y, its left = table +x
-    assert "recorded: real = planned aim + (+1.0, -2.0) cm" in out
+    # rakesh faces the camera (+y): forward = table +y, its left = table -x
+    assert "recorded: real = planned aim + (-1.0, +2.0) cm" in out
     assert "placement from 1 points" in out
 
 

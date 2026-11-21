@@ -198,7 +198,10 @@ def piece_angle(p) -> float:
 
 def report(scene, plan: Plan, arms) -> None:
     """Arm centres, box and every piece (pose in the table frame, metres / degrees)."""
-    print("Table frame: origin tag 0, x -> tag 3, y -> tag 2 (away from the camera), metres.")
+    print(
+        "Table frame (seen from behind the arms): origin tag 1 (back-left), x -> right (tag 2),"
+        " y -> forward to the camera (tags 3, 0), metres."
+    )
     print("\nArm centres (base_link origin):")
     for side, arm in arms.items():
         p = arm.placement
