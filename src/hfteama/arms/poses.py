@@ -6,9 +6,11 @@ A task folder keeps them in `tasks/<name>/poses.json`, so the core stays task-ag
      "locations": {"input_bin": [0.30, 0.20, 0.02]},
      "per_arm": {"arm_a": {"own_output_bin": [0.10, -0.15, 0.02]}},
      "objects": {"block_01": [0.31, 0.21, 0.015]},
-     "arms": {"arm_a": {"base": [0.0, 0.26, 0.0], "yaw": 1.57}}}
+     "arms": {"arm_a": {"base": [0.0, 0.26, 0.0], "yaw": 1.57, "rest": [0, -1.7, 1.5, 1.2, -1.6]}},
+     "radii": {"bowl": 0.12}}
 
-`arms` (base poses) is only read by the simulator. Real arms get theirs from Hardware's config.
+`arms` (base poses, optional `rest` joint pose) and `radii` are only read by the simulator. Real
+arms get their base poses from Hardware's config.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ class Poses:
     objects: dict[str, Xyz] = field(default_factory=dict)
     arms: dict[str, dict[str, Any]] = field(default_factory=dict)
     table_z: float = 0.0
+    radii: dict[str, float] = field(default_factory=dict)  # drawn size of a named location (m)
 
     @classmethod
     def load(cls, path: str | Path) -> Poses:
@@ -42,6 +45,7 @@ class Poses:
             objects=raw.get("objects", {}),
             arms=raw.get("arms", {}),
             table_z=float(raw.get("table_z", 0.0)),
+            radii={k: float(v) for k, v in raw.get("radii", {}).items()},
         )
 
     @classmethod

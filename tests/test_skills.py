@@ -315,3 +315,31 @@ def test_retreat_lifts_straight_up_before_swinging_to_the_carry_pose() -> None:
         with pytest.raises((SkillFailed, MotionError)):
             REGISTRY["pick"](d, _task("pick", object="block_01"), CARRY_POSES)
         assert _targets(d)[-2:] == [(x, y, z + gs.APPROACH_DZ), (0.05, 0.2, 0.12)]
+
+
+BOWL_POSES = Poses(
+    locations={"bowl": [0.3, 0.1, 0.10]},
+    per_arm={"arm_a": {"carry": [0.05, 0.2, 0.12]}},
+    objects={"block_01": [0.21, 0.01, 0.015]},
+)
+
+
+def test_place_leaves_the_shared_area_before_it_returns() -> None:
+    # The executor frees the area's lock when place returns: the arm must already be clear of it.
+    d = FakeDriver()
+    REGISTRY["place"](d, _task("place", to="bowl"), BOWL_POSES)
+    assert _targets(d)[-1] == (0.05, 0.2, 0.12)
+    assert _names(d)[-3:] == ["open_gripper", "move_to", "move_to"]  # release, lift, then carry
+
+
+def test_a_failed_place_retreats_to_the_carry_pose_not_over_the_bowl() -> None:
+    d = FakeDriver(stall_at_move=2)  # stalls on the descent into the bowl
+    with pytest.raises(MotionError, match="stall"):
+        REGISTRY["place"](d, _task("place", to="bowl"), BOWL_POSES)
+    assert _targets(d)[-1] == (0.05, 0.2, 0.12)
+
+
+def test_pick_place_ends_clear_of_the_shared_area_too() -> None:
+    d = FakeDriver()
+    REGISTRY["pick_place"](d, _task("pick_place", object="block_01", target="bowl"), BOWL_POSES)
+    assert _targets(d)[-1] == (0.05, 0.2, 0.12)

@@ -137,3 +137,53 @@ def test_sim_can_inject_a_failure_and_the_executor_retries(tmp_path: Path) -> No
 def test_inject_is_for_the_simulator_only(tmp_path: Path) -> None:
     with pytest.raises(SystemExit):
         runner.main(["--backend", "real", "--arms", "rakesh_follower", "--inject", "arm_a:grasp"])
+
+
+def test_the_timeout_factor_reaches_the_executor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict = {}
+    real_executor = runner.Executor
+
+    def spy(*args: object, **kwargs: object) -> object:
+        seen.update(kwargs)
+        return real_executor(*args, **kwargs)
+
+    monkeypatch.setattr(runner, "Executor", spy)
+    argv = ["--backend", "sim", "--task", str(_small_graph(tmp_path, pairs=1)), "--yes"]
+    argv += ["--poses", str(SORT / "poses.json"), "--arms", "arm_a", "--log", str(tmp_path / "e")]
+    argv += ["--timeout-factor", "4"]
+    assert runner.main(argv) == 0
+    assert seen["timeout_measured"] == 4.0
+
+
+def test_hacklab_two_adjacent_arms_share_the_bowl_without_colliding(tmp_path: Path) -> None:
+    hack = ROOT / "tasks" / "hacklab"
+    full = json.loads((hack / "hacklab12.json").read_text())
+    keep = {f"{k}_{i:02d}" for i in (1, 2, 7, 8) for k in ("pick", "place")}  # two blocks per arm
+    graph = tmp_path / "hacklab4.json"
+    graph.write_text(json.dumps({**full, "tasks": [t for t in full["tasks"] if t["id"] in keep]}))
+    log = tmp_path / "events.jsonl"
+    argv = ["--backend", "sim", "--task", str(graph), "--poses", str(hack / "poses.json")]
+    argv += ["--arms", "rakesh_follower,vato_follower", "--yes", "--log", str(log)]
+    assert runner.main(argv) == 0
+    ends = _ends(log)
+    assert {e.arm for e in ends} == {"rakesh_follower", "vato_follower"}
+    assert all(e.outcome == "ok" for e in ends)  # no stall, no timeout: nobody hit the other arm
+
+
+def test_reusing_a_log_path_does_not_mix_runs(tmp_path: Path) -> None:
+    log = tmp_path / "events.jsonl"
+    argv = ["--backend", "sim", "--task", str(_small_graph(tmp_path, pairs=1)), "--yes"]
+    argv += ["--poses", str(SORT / "poses.json"), "--arms", "arm_a", "--log", str(log)]
+    assert runner.main(argv) == 0
+    assert runner.main(argv) == 0  # same path again
+    assert len([e for e in _ends(log) if e.outcome == "ok"]) == 2  # this run's, not 4
+
+
+def test_real_runs_default_to_poses_real_and_fall_back_to_poses(tmp_path: Path) -> None:
+    (tmp_path / "poses.json").write_text("{}")
+    assert runner.default_poses(tmp_path, real=True) == str(tmp_path / "poses.json")
+    (tmp_path / "poses_real.json").write_text("{}")
+    assert runner.default_poses(tmp_path, real=True) == str(tmp_path / "poses_real.json")
+    assert runner.default_poses(tmp_path, real=False) == str(tmp_path / "poses.json")

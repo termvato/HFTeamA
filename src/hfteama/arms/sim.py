@@ -86,6 +86,9 @@ class SimTable:
         self._thread: threading.Thread | None = None
         self._last_step_wall = time.time()
         self._attached: dict[str, str] = {}  # arm_id -> object name
+        self._rest = {
+            a: np.asarray(poses.arms.get(a, {}).get("rest", REST_Q), float) for a in self.arm_ids
+        }
         self._build()
         self._drivers = {
             a: MujocoDriver(self, a, self._base(a, i)) for i, a in enumerate(self.arm_ids)
@@ -161,11 +164,15 @@ class SimTable:
                             [0.2, 0.7, 0.3, 1.0],
                         )
                     )
+        drawn: list[tuple[float, float]] = []
         for name, xyz, rgba in spots:
+            if any(abs(xyz[0] - x) < 1e-3 and abs(xyz[1] - y) < 1e-3 for x, y in drawn):
+                continue  # an alias of a place already drawn: two discs would z-fight
+            drawn.append((xyz[0], xyz[1]))
             world.add_geom(
                 name=name,
                 type=mujoco.mjtGeom.mjGEOM_CYLINDER,
-                size=[0.07, 0.0005, 0],
+                size=[self.poses.radii.get(name.removeprefix("marker_"), 0.07), 0.0005, 0],
                 pos=[xyz[0], xyz[1], self.poses.table_z + 0.0006],
                 rgba=rgba,
                 contype=0,
@@ -180,7 +187,7 @@ class SimTable:
         with self._lock:
             m, d = self._model, self._data
             for arm_id in self.arm_ids:
-                for j, v in zip(JOINTS, (*REST_Q, GRIPPER_CLOSED), strict=True):
+                for j, v in zip(JOINTS, (*self._rest[arm_id], GRIPPER_CLOSED), strict=True):
                     d.qpos[m.jnt_qposadr[self._jnt(f"{arm_id}/{j}")]] = v
             for name, xyz in self.poses.objects.items():
                 jid = m.body(name).jntadr[0]
@@ -447,7 +454,7 @@ class MujocoDriver:
 
     def park(self) -> None:
         self._begin()
-        self.move_joints(PARK_Q, speed=0.3)
+        self.move_joints(self._table._rest[self.arm_id], speed=0.3)
 
     def alive(self) -> float:
         return self._down_at if self._down else self._table.last_step_wall()

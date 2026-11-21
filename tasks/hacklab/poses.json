@@ -1,0 +1,134 @@
+{
+ "note": "The hacklab table in the table frame of configs/hacklab_table.json (marker 0 at the origin, x right, y toward the arms, metres). Two SO-101 side by side, both facing -y, 0.40 m centre to centre (30 cm gap + ~10 cm base). One shared bowl between them. 12 blocks: 6 in front of each arm. 'carry' = where pick leaves an arm (20 cm in front of its base, 12 cm up: outside the bowl area). 'rest' = the real arm's resting pose (folded forward).",
+ "table_z": 0.0,
+ "locations": {
+  "bowl": [
+   0.317,
+   0.126,
+   0.1
+  ]
+ },
+ "radii": {
+  "bowl": 0.12
+ },
+ "per_arm": {
+  "rakesh_follower": {
+   "own_output_bin": [
+    0.317,
+    0.126,
+    0.1
+   ],
+   "carry": [
+    0.089,
+    0.21999999999999997,
+    0.12
+   ]
+  },
+  "vato_follower": {
+   "own_output_bin": [
+    0.317,
+    0.126,
+    0.1
+   ],
+   "carry": [
+    0.488,
+    0.24,
+    0.12
+   ]
+  }
+ },
+ "objects": {
+  "block_01": [
+   0.04,
+   0.16,
+   0.015
+  ],
+  "block_02": [
+   0.08,
+   0.16,
+   0.015
+  ],
+  "block_03": [
+   0.12,
+   0.16,
+   0.015
+  ],
+  "block_04": [
+   0.04,
+   0.2,
+   0.015
+  ],
+  "block_05": [
+   0.08,
+   0.2,
+   0.015
+  ],
+  "block_06": [
+   0.12,
+   0.2,
+   0.015
+  ],
+  "block_07": [
+   0.48,
+   0.16,
+   0.015
+  ],
+  "block_08": [
+   0.52,
+   0.16,
+   0.015
+  ],
+  "block_09": [
+   0.56,
+   0.16,
+   0.015
+  ],
+  "block_10": [
+   0.48,
+   0.2,
+   0.015
+  ],
+  "block_11": [
+   0.52,
+   0.2,
+   0.015
+  ],
+  "block_12": [
+   0.56,
+   0.2,
+   0.015
+  ]
+ },
+ "arms": {
+  "rakesh_follower": {
+   "base": [
+    0.089,
+    0.42,
+    0.0
+   ],
+   "yaw": -1.5708,
+   "rest": [
+    -0.11,
+    -1.7,
+    1.56,
+    1.337,
+    -1.618
+   ]
+  },
+  "vato_follower": {
+   "base": [
+    0.488,
+    0.44,
+    0.0
+   ],
+   "yaw": -1.5708,
+   "rest": [
+    -0.11,
+    -1.7,
+    1.56,
+    1.337,
+    -1.618
+   ]
+  }
+ }
+}

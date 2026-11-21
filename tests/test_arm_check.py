@@ -260,3 +260,23 @@ def test_joint_works_on_an_arm_that_rests_past_a_model_limit() -> None:
     assert _run(["joint", "--arm", ARM, "--joint", "wrist_roll", "--delta", "0.1"], robot) == 0
     lifts = [ArmFrame().to_kinematic(a)[1] for a in robot.actions]
     assert min(lifts) >= LIMITS_RAD["shoulder_lift"][0] - 1e-9  # never commanded past the limit
+
+
+def test_the_hacklab_table_config_is_consistent() -> None:
+    problems = arm_check.check_config(
+        ROOT / "configs" / "real_arms.hacklab.json",
+        ROOT / "tasks" / "hacklab" / "poses.json",
+        ROOT / "configs" / "teleop_pairs.json",
+    )
+    assert problems == []  # each object only has to be reachable by one arm
+
+
+def test_an_object_that_no_arm_can_reach_is_named(tmp_path: Path) -> None:
+    poses = json.loads((ROOT / "tasks" / "hacklab" / "poses.json").read_text())
+    poses["objects"]["block_01"] = [2.0, 2.0, 0.015]  # off the table
+    path = tmp_path / "poses.json"
+    path.write_text(json.dumps(poses))
+    problems = arm_check.check_config(
+        ROOT / "configs" / "real_arms.hacklab.json", path, ROOT / "configs" / "teleop_pairs.json"
+    )
+    assert any("block_01" in p and "no arm" in p for p in problems), problems
