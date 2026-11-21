@@ -56,9 +56,12 @@ class ArmModel:
         a = self.placement.to_arm([x, y])
         return float(np.degrees(np.arctan2(a[1], a[0])))
 
+    # pieces this arm takes: table x range (m), e.g. its half of the table
+    x_range: tuple[float, float] = (-np.inf, np.inf)
+
     def takes(self, x: float, y: float) -> bool:
         lo, hi = self.bearing_range
-        return lo <= self.bearing(x, y) <= hi
+        return lo <= self.bearing(x, y) <= hi and self.x_range[0] <= x <= self.x_range[1]
 
     def correction(self, x: float, y: float) -> tuple[float, float, float]:
         """(forward, left, dz) to apply for a piece seen at table (x, y)."""

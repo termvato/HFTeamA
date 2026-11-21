@@ -115,6 +115,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             jaw_ref_width=a.get("jaw_ref_width", 0.025),
             jaw_width_gain=a.get("jaw_width_gain", 0.0),
             object_width=cfg["pieces"].get("object_width"),
+            x_range=tuple(a.get("x_range", (-np.inf, np.inf))),
         )
     return out
 
@@ -136,6 +137,16 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
         poly([[tx - 0.01, ty, 0], [tx + 0.01, ty, 0]], (0, 255, 255), False)
         poly([[tx, ty - 0.01, 0], [tx, ty + 0.01, 0]], (0, 255, 255), False)
     a = np.linspace(0, 2 * np.pi, 60)
+    ty = [v[1] for v in cfg["table"]["tags"].values()]
+    for side, arm in arms.items():
+        for xb in arm.x_range:  # the edge of the arm's half of the table
+            if np.isfinite(xb) and -0.1 < xb < 1.0:
+                poly(
+                    [[xb, min(ty) - 0.035, 0], [xb, max(ty) + 0.035, 0]],
+                    COLOURS.get(side),
+                    False,
+                    2,
+                )
     for side, arm in arms.items():
         p = arm.placement
         circ = [[p.x + 0.30 * np.cos(t), p.y + 0.30 * np.sin(t), 0] for t in a]
@@ -592,11 +603,11 @@ class Jog:
         p = self.scene.pieces[i]
         if not self.arm.takes(p.x, p.y):
             lo, hi = self.arm.bearing_range
-            side = "left" if self.arm.bearing(p.x, p.y) > hi else "right"
+            x0, x1 = self.arm.x_range
             print(
-                f"  piece {i + 1} is {abs(self.arm.bearing(p.x, p.y)):.0f} deg to the arm's {side}:"
-                f" {self.side} only takes pieces between {lo:+.0f} and {hi:+.0f} deg"
-                " (config bearing_range_deg)"
+                f"  piece {i + 1} is outside {self.side}'s range: bearing"
+                f" {self.arm.bearing(p.x, p.y):+.0f} deg (takes {lo:+.0f}..{hi:+.0f}),"
+                f" x {p.x:.3f} (takes {x0:.3f}..{x1:.3f}); config bearing_range_deg / x_range"
             )
             return
         ax, ay, yaw, _, dz = self.arm.grasp_aim(p, self.z)

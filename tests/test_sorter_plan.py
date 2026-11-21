@@ -172,3 +172,10 @@ def test_z_by_distance_lowers_close_pieces() -> None:
     assert arm.correction(*near)[2] == pytest.approx(-0.005)
     assert arm.correction(*mid)[2] == pytest.approx(-0.0025)
     assert arm.correction(*far)[2] == pytest.approx(0.0)
+
+
+def test_arm_only_takes_pieces_on_its_half_of_the_table() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, x_range=(0.367, 1.0))
+    assert arm.takes(0.45, 0.2)
+    assert not arm.takes(0.30, 0.2)  # reachable, but hacklab's half
