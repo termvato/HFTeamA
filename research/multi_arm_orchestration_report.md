@@ -4,6 +4,23 @@ A 48-hour team should build a **classical scheduler wrapped in a thin LLM front 
 
 Throughout, "(inference, not checked)" marks reasoning that no source or local run backs. LeRobot facts were checked against a local clone of LeRobot 0.6.2 (commit `d3793b7`, 23 Oct 2026).
 
+## Problem we are solving (team, 21 Nov)
+Finish a batch of work faster by plugging in more arms: "plug and produce". When an arm is added, removed or fails, the
+orchestrator re-splits the remaining work automatically and shows the new predicted finish time, plus what limits
+further speed-up (arm count, task order, or a shared zone).
+
+Team hardware: **3 real SO-101 followers, 2 leaders** (teleop and demos possible on two arms at a time).
+
+Demo flow:
+1. One arm works through a batch (e.g. 12 parts to sort or kit); predicted finish time on screen.
+2. Plug in a second real arm mid-run: it is detected, the remaining work is re-split, the finish time drops live.
+3. Plug in the third real arm: a smaller drop, with the binding limit named on screen.
+4. Unplug or fail an arm: its work flows back to the others.
+5. Simulated arms (MuJoCo) extend the curve past 3 to show where it flattens.
+
+Expected speed-up: about 1.6-1.8x with 2 arms and 2-2.5x with 3 (inference, from the published 1.5-3x range); the task
+must have many independent units (sorting, kitting), or the order of steps caps it.
+
 ## What Vato brings to the team
 - **Arm:** one SO-101 follower with 12 V STS3215 servos, run at LeRobot's register settings (P 16, D 32), plus its 12 V supply and USB servo board. No leader arm (teleop needs a teammate's leader).
 - **Compute:** a Linux laptop with an RTX 4070 Laptop GPU (8 GB), with LeRobot (0.6.x from source), MuJoCo 3.17 and Menagerie's SO-101 model installed; a MacBook (M4) for development.
