@@ -8,6 +8,26 @@ The speed-up story stays the orchestrator's: one arm builds the stacks in a few 
 split the stacks and finish sooner. The policy only has to do **one step, one arm, on request**.
 Nothing else changes when an arm is added.
 
+## Datasets recorded
+
+| Dataset (Hugging Face, public) | Arms | Episodes | Frames | Task text | Cameras |
+|---|---|---|---|---|---|
+| [`sahilrajpurkar03/so101_stack_single_rakesh`](https://huggingface.co/datasets/sahilrajpurkar03/so101_stack_single_rakesh) | single: rakesh pair | 20 | 23,915 (13.3 min at 30 fps) | "Put the objects in the box" | `top`, `wrist_a` |
+
+- **Recorded:** 21 Nov 2026 with the studio. The leader drove the follower, with
+  `max_relative_target` 10 deg per step. LeRobot dataset format v3.0, 640x480 at 30 fps, AV1 video.
+- **Episodes:** each one puts the objects in the box, 24-64 s long.
+- **Cleaned before upload:**
+  - The recording had 21 episodes. Episode 0 (101 s, a warm-up) was deleted with
+    `lerobot-edit-dataset --operation.type=delete_episodes`.
+  - The next episode, recorded before the text box was changed, was relabelled from "Stack the
+    box on top of the other box" with `--operation.type=modify_tasks`.
+  - The untouched 21-episode recording is kept locally as `so101_stack_single_rakesh_raw21_backup`.
+- **Name vs content:** the repo name says `stack` because that was the planned task. The episodes
+  are pick-and-place into the box. Stacking data should go to a new dataset name.
+- **Load it:** `LeRobotDataset("sahilrajpurkar03/so101_stack_single_rakesh")`, or view an
+  episode with `lerobot-dataset-viz --repo-id sahilrajpurkar03/so101_stack_single_rakesh --episode-index 0`.
+
 ## Episodes: one stacking step each
 
 Record each episode as **one box picked up and placed on another**, not a whole session in one
