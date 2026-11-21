@@ -5,10 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "hfteama"
 version = "0.1.0"
-description = "HFTeamA project."
+description = "HFTeamA: SO-101 leader/follower setup and tooling on top of LeRobot."
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.12"
+dependencies = [
+    # Pinned to a minor version: the lerobot-* CLI flags change between releases.
+    "lerobot[feetech,core-scripts]>=0.7,<0.8",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -29,7 +32,7 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 src = ["src", "tests"]
 
 [tool.ruff.lint]

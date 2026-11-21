@@ -1,0 +1,55 @@
+# SO-101 leader/follower pairs for HFTeamA.
+#
+# Each pair is one leader + one follower. Pick a pair with `hfteama --pair <name> ...`
+# or HFTEAM_PAIR=<name>; without it, `default_pair` is used.
+#
+# Ports: each arm's USB `serial` is matched against connected devices, so the right
+# /dev/ttyACM* is found automatically on any computer. `port` is only the fallback
+# when no device with that serial is connected. HFTEAM_FOLLOWER_PORT /
+# HFTEAM_LEADER_PORT override both.
+#
+# IDs name the calibration files in ./calibration. One ID per physical arm; if you
+# swap an arm, give it a new ID and recalibrate.
+
+default_pair = "rakesh"
+
+[pairs.rakesh.follower]
+type = "so101_follower"
+id = "rakesh_follower"
+serial = "5B79014975"
+port = "/dev/ttyACM1"
+# Optional safety limit (degrees per step) on how far the follower may move at once.
+# max_relative_target = 10
+
+[pairs.rakesh.leader]
+type = "so101_leader"
+id = "rakesh_leader"
+serial = "5B8E115290"
+port = "/dev/ttyACM0"
+
+# Cameras attached to the follower. Find indices with `hfteama find-cameras`.
+# Indices depend on the computer: check them on the recording machine.
+# Remove or comment out a block to disable that camera.
+[cameras.front]
+type = "opencv"
+index_or_path = 0
+width = 640
+height = 480
+fps = 30
+
+# [cameras.wrist]
+# type = "opencv"
+# index_or_path = 2
+# width = 640
+# height = 480
+# fps = 30
+
+[record]
+# Hugging Face dataset repo, e.g. "<hf_user_or_org>/<dataset_name>".
+repo_id = "CHANGE_ME/hfteam_so101_dataset"
+single_task = "Pick up the object and place it in the box"
+num_episodes = 10
+episode_time_s = 60
+reset_time_s = 30
+fps = 30
+push_to_hub = false
