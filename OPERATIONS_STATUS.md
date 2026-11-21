@@ -89,6 +89,26 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 18:09 (Vato): **VLM -> reach -> executor -> IK validated in MuJoCo** on the hacklab layout, with
+  `orchestrator` + `action-arm-skills` merged locally (scripts in `scripts/validation/`; they need
+  Action's arm code). Results:
+  1. Interfaces fit with no glue code: `sort_steps` tasks (`pick_xyz` at z = 0.02, `place_xyz` =
+     bowl) run unchanged through `resolve` -> `Executor` -> `SkillWorker` -> IK. 4 of 5 objects
+     sorted by two arms; each alone sorts the 5th too. Bowl placement: IK error 0.4 mm, both arms.
+  2. **Reach is too generous (for Aravind):** `SO101_REACH` says 0 to 0.44 m; the pick skill's IK
+     (tool down, hover + grasp + 10 cm lift) solves only from about 0.14 m to 0.42 m from the pan
+     axis. On a 4 cm grid, 33 of 171 points the planner calls reachable fail in IK (36 of 173 for
+     the other arm); none the other way round. Proposed: `r_min=0.14, r_max=0.42`. I tried it:
+     `test_so101_reach_sector` and `test_vlm_plan_runs_on_executor_with_step_check` encode the old
+     numbers and need their points moved, so the change is left to you.
+  3. **Arms can block each other outside the bowl (likely, not confirmed by contact inspection):**
+     with both arms working, an object between them (0.30, 0.30) ended in `stall` twice, while
+     either arm alone sorts it. Only the bowl is a shared resource today. Proposed: `resolve` marks
+     every pick point both arms can reach as a shared resource (the overlap zone of the design doc).
+  4. **After a failed place the part is not where it was:** the executor re-queues the pick at the
+     old `pick_xyz`, which then fails. With the camera this needs a re-scan + `update_graph` before
+     the retry (Operations, mine).
+
 - 18:05 (Vato): **Demo runner built** (`python -m hfteama.demo`, `src/hfteama/demo.py`): executor +
   plug-in detection + live screen; `--backend fake|sim|real` (sim and real load Action's
   `SkillWorker` when that code is in the checkout); manual plug / remove / pull-cable controls on
