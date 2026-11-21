@@ -3,8 +3,8 @@
 Pure geometry (no hardware): a Scene from the camera in, PickPlans out.
 
 Rules:
-- A piece goes to the arm on its side of the table (left of the midpoint between the two
-  bases goes to the left arm); if that arm can't reach it but the other can, the other arm.
+- A piece goes to the arm on its side of the table (the arm whose base is nearest along the
+  table's x axis); if that arm can't reach it but another can, that one.
 - Grasp: gripper straight down (within max_tilt) at approach_z above the piece, then down to
   grasp_z, jaws closing across the piece's short side.
 - Drop: over the box at rim height + drop_above. The point is moved from the box centre
@@ -96,10 +96,8 @@ def make_plan(scene, arms: dict[str, ArmModel], cfg: dict) -> Plan:
     # picks are planned even for an arm that can't reach the box, so the preview shows them;
     # the runner skips arms without a drop
     usable = arms
-    mid = np.mean([a.placement.x for a in arms.values()]) if arms else 0.0
     for piece in scene.pieces:
-        home = "left" if piece.x < mid else "right"
-        order = sorted(usable, key=lambda s: s != home)
+        order = sorted(usable, key=lambda s: abs(usable[s].placement.x - piece.x))
         for side in order:
             pick = plan_pick(usable[side], piece, mc, pc)
             if pick is not None:

@@ -6,8 +6,9 @@ the box. The arms take turns, so they never meet over the box.
 
 ```
 hfteama sort preview            # camera only: what it sees and what it would do
-hfteama sort goto left --tag 2  # hover the left arm's tool tip 3 cm over tag 2's centre
-hfteama sort touch left         # fit where the left arm stands (torque off, touch tags)
+hfteama sort goto rakesh --tag 2  # hover rakesh's tool tip 3 cm over tag 2's centre
+hfteama sort goto rakesh --box    # hover over the box (the drop pose)
+hfteama sort touch rakesh         # fit where rakesh stands (torque off, touch tags)
 hfteama sort run                # sort, both arms
 ```
 
@@ -19,13 +20,16 @@ hfteama sort run                # sort, both arms
 | Camera intrinsics (from group-6 KapplaBuild, 41 ChArUco images, rms 0.54 px) | `configs/camera/overhead_c922_1920x1080.yml` |
 | Reference tags: ArUco `DICT_4X4_50`, ids 0-3, centres on a 73 x 33.5 cm rectangle | `table.tags` |
 | Box: open cylinder, 18 cm diameter, 5.2 cm high | `box` |
-| Arms: left = pair `rakesh`, right = pair `hacklab`; base position and heading | `arms`, then `configs/sorter_placements.json` |
+| Arms, named after their pair: `rakesh` (black), `hacklab` (green); base position and heading | `arms`, then `configs/sorter_placements.json` |
+
+**Arm names, not left/right:** seen from behind the arms (facing the camera) rakesh is on
+the right and hacklab on the left; seen from the camera it is the other way round.
 
 **Table frame:** origin at the centre of tag 0 (front-left as seen by the camera), x towards
 tag 3 (right), y towards tag 2 (away from the camera), z up, metres.
 
 ```
-   tag 2 (0, 0.335)    [left arm]          [right arm]    tag 1 (0.73, 0.335)
+   tag 2 (0, 0.335)  [rakesh, black]    [hacklab, green]  tag 1 (0.73, 0.335)
                        base x ~ 0.163      base x ~ 0.567
                     pieces ...           ... pieces
                                  (box)
@@ -53,16 +57,16 @@ back to it before torque is released. The calibration is never touched. If the c
 file and the servos differ, the command stops instead of letting LeRobot prompt.
 
 1. `hfteama sort preview` (or `--live`, which streams to Rerun: camera, top-down view, piece mask and the pose table). Check that the box circle sits on the rim, that every
-   piece is outlined and coloured by arm (blue = left, green = right, red = unreachable), and
+   piece is outlined and coloured by arm (blue = rakesh, green = hacklab, red = unreachable), and
    that the white jaw lines cross each piece's short side. The image is saved in
    `outputs/sorter/`.
-2. `hfteama -n sort goto left --tag 2` plans only. Then without `-n`: the tip should hover
-   3 cm over the centre of tag 2. Measure the offset. Do the same with `right --tag 1`.
-3. If it is off by more than ~1 cm: `hfteama sort touch left`. Torque goes off (hold the arm).
-   Touch 3 or more tag centres with the tip of the closed gripper: tags 2 and 0 for the left
-   arm, plus any extra `DICT_4X4_50` tag (id ≥ 4) you lay on the table, spread over the work
+2. `hfteama -n sort goto rakesh --tag 2` plans only. Then without `-n`: the tip should hover
+   3 cm over the centre of tag 2. Measure the offset. Do the same with `hacklab --tag 1`.
+3. If it is off by more than ~1 cm: `hfteama sort touch rakesh`. Torque goes off (hold the arm).
+   Touch 3 or more tag centres with the tip of the closed gripper: tags 2 and 0 for rakesh,
+   plus any extra `DICT_4X4_50` tag (id ≥ 4) you lay on the table, spread over the work
    area. The fit is saved to `configs/sorter_placements.json`.
-4. `hfteama -n sort run` prints the plan from one frame. Then `hfteama sort run --arms left
+4. `hfteama -n sort run` prints the plan from one frame. Then `hfteama sort run --arms rakesh
    --max-picks 1`, then both arms.
 
 ## Tuning (`configs/sorter.json`)

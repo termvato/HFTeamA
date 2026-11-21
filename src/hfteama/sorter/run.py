@@ -23,7 +23,9 @@ from hfteama.sorter.geometry import (
 from hfteama.sorter.plan import ArmModel, Plan, make_plan
 
 OUT_DIR = PROJECT_ROOT / "outputs" / "sorter"
-COLOURS = {"left": (255, 160, 0), "right": (0, 200, 0)}  # BGR
+# overlay colour per arm, from the arm's "colour" in the config (BGR)
+PALETTE = {"black": (255, 160, 0), "green": (0, 200, 0)}
+COLOURS: dict[str, tuple[int, int, int]] = {}
 
 
 # --- vision -----------------------------------------------------------------------------------
@@ -78,6 +80,8 @@ class Eye:
 
 
 def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
+    for side in sides:
+        COLOURS[side] = PALETTE.get(cfg["arms"][side].get("colour"), (200, 200, 200))
     import json
 
     from hfteama.arms.kinematics import ArmFrame
@@ -503,15 +507,15 @@ def add_parser(sub) -> None:
     ss = s.add_subparsers(dest="sort_command", required=True)
 
     p = ss.add_parser("preview", help="Camera only: detect pieces and box, show the plan")
-    p.add_argument("--arms", help="Arms to plan for, e.g. left,right (default: all)")
+    p.add_argument("--arms", help="Arms to plan for, e.g. rakesh,hacklab (default: all)")
     p.add_argument("--image", help="Use a saved frame instead of the camera")
     p.add_argument("--live", action="store_true", help="Stream to Rerun instead of one saved image")
 
     t = ss.add_parser("touch", help="Fit an arm's placement by touching tags (torque off)")
-    t.add_argument("arm", help="left or right")
+    t.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
 
     g = ss.add_parser("goto", help="Hover the tool tip over a table point, then go home")
-    g.add_argument("arm", help="left or right")
+    g.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
     g.add_argument("--tag", type=int, help="Reference tag id")
     g.add_argument("--xy", type=float, nargs=2, metavar=("X", "Y"), help="Table point (m)")
     g.add_argument("--box", action="store_true", help="Over the box, found by the camera")
@@ -523,7 +527,7 @@ def add_parser(sub) -> None:
     g.add_argument("--image", help="With -n and --box: find the box in a saved frame")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
-    r.add_argument("--arms", help="Arms to use, e.g. left or left,right (default: all)")
+    r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")
     r.add_argument("--max-picks", type=int, help="Stop after this many picks")
     r.add_argument("--image", help="With --dry-run: plan from a saved frame")
 

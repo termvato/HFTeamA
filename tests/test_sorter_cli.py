@@ -8,14 +8,14 @@ from hfteama.__main__ import main  # noqa: E402
 
 
 def test_goto_dry_run_plans_without_hardware(capsys) -> None:
-    assert main(["-n", "sort", "goto", "left", "--tag", "2", "--z", "0.05"]) == 0
+    assert main(["-n", "sort", "goto", "rakesh", "--tag", "2", "--z", "0.05"]) == 0
     out = capsys.readouterr().out
     assert "IK ok=True" in out
 
 
 def test_goto_needs_a_target() -> None:
     with pytest.raises(SystemExit):
-        main(["-n", "sort", "goto", "left"])
+        main(["-n", "sort", "goto", "rakesh"])
 
 
 def test_run_refuses_saved_image_on_real_arms() -> None:
@@ -31,6 +31,6 @@ def test_arm_not_plugged_in_is_refused_not_swapped(monkeypatch) -> None:
 
     monkeypatch.setattr(pairs, "find_port_by_serial", lambda serial: None)
     cfg = load_config()
-    drv = ArmDriver("right", cfg["arms"]["right"], cfg["motion"])
+    drv = ArmDriver("hacklab", cfg["arms"]["hacklab"], cfg["motion"])
     with pytest.raises(SystemExit, match="not connected"):
         drv.connect()

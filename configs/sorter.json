@@ -55,15 +55,18 @@
     "grasp_z": 0.015,
     "approach_z": 0.06
   },
+  "arms_note": "Arms are named after their pair. Seen from BEHIND the arms (facing the camera): rakesh (black) is on the right, hacklab (green) on the left. Seen from the camera it is the other way round. base = base_link origin in the table frame.",
   "arms": {
-    "left": {
+    "rakesh": {
       "pair": "rakesh",
+      "colour": "black",
       "base": [0.163, 0.37],
       "yaw_deg": -90.0,
       "mask_radius": 0.12
     },
-    "right": {
+    "hacklab": {
       "pair": "hacklab",
+      "colour": "green",
       "base": [0.567, 0.37],
       "yaw_deg": -90.0,
       "mask_radius": 0.12
