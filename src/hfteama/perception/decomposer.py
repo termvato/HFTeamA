@@ -181,6 +181,7 @@ def sort_steps(
             args={
                 "object": obj.id,
                 "model": obj.model,
+                "label": obj.label,
                 "category": category,
                 "pick_xyz": list(obj.xyz),
                 "pick_quat_wxyz": list(obj.quat_wxyz),
@@ -241,7 +242,10 @@ class Decomposer:
         if not object_ids:
             return Sorting(dict(fixed or {}), {}), 0
         img = label_objects(image, scene, object_ids) if self.annotate else image
-        objs = [(o, scene.objects[o].model, scene.objects[o].pixel) for o in object_ids]
+        objs = [
+            (o, scene.objects[o].label or scene.objects[o].model, scene.objects[o].pixel)
+            for o in object_ids
+        ]
         bins = [(b.id, b.label) for b in self.bins]
         fixed_txt = {n: (c.rule, c.bin) for n, c in (fixed or {}).items()}
         errors: list[str] = []

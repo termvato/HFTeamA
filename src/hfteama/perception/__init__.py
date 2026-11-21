@@ -3,8 +3,9 @@
 Camera + Go -> categories -> steps; a camera check after each step; a re-scan when the scene
 changes. Zero-shot (no training): fixed answer format, validator, retry.
 
-- frames.py      camera frame -> table frame (camera-to-base extrinsic from calibration)
-- scene.py       SAM-6D detections -> objects with stable ids in the table frame; scene diff
+- frames.py      camera frame -> table frame (camera pose in the base frame, intrinsics K)
+- pointing.py    VLMPointDetector: the VLM points at objects, pixels projected onto the table
+- scene.py       detections -> objects with stable ids in the table frame; scene diff
 - vlm.py         VLM interface; QwenVLM (Hugging Face transformers); FakeVLM for tests
 - prompts.py     decomposer and step-check prompts
 - annotate.py    draw object ids on the image for the VLM
@@ -27,6 +28,7 @@ from hfteama.perception.decomposer import (
     load_bins,
 )
 from hfteama.perception.frames import Calibration
+from hfteama.perception.pointing import DetectionError, VLMPointDetector
 from hfteama.perception.rescan import Rescan, rescan
 from hfteama.perception.scene import (
     Detection,
@@ -48,6 +50,7 @@ __all__ = [
     "Decomposer",
     "Decomposition",
     "DecompositionError",
+    "DetectionError",
     "Detection",
     "FakeVLM",
     "ObjectDetector",
@@ -58,6 +61,7 @@ __all__ = [
     "SceneObject",
     "Sorting",
     "StepChecker",
+    "VLMPointDetector",
     "VLMError",
     "build_scene",
     "diff_scenes",

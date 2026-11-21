@@ -61,11 +61,15 @@ def test_camera_example_maps_to_table_frame() -> None:
     cal = Calibration.load(
         CONFIGS / "camera.example.json", load_catalog(CONFIGS / "arms.example.json")
     )
+    # camera 1 m above (0.45, 0.20), looking down, image x along table +x (arm_a at yaw 90 deg)
     T = np.eye(4)
-    T[:3, 3] = (0.05, 0.10, 0.78)  # 78 cm in front of a camera looking straight down
-    p = cal.to_table(T)[:3, 3]
-    # (0.45, 0.10, 0.02) in arm_a's base frame; arm_a is mounted at yaw 90 deg
-    assert p == pytest.approx([-0.10, 0.45, 0.02])
+    T[:3, 3] = (0.05, 0.10, 0.96)  # 96 cm in front of the camera
+    assert cal.to_table(T)[:3, 3] == pytest.approx([0.50, 0.10, 0.04])
+    assert cal.pixel_to_table(320, 240, 0.0) == pytest.approx((0.45, 0.20, 0.0))
+    # 60 px right = 0.1 m along +x at 1 m; 60 px down = 0.1 m along -y; K follows image size
+    assert cal.pixel_to_table(380, 300, 0.0) == pytest.approx((0.55, 0.10, 0.0))
+    assert cal.pixel_to_table(760, 600, 0.0, (1280, 960)) == pytest.approx((0.55, 0.10, 0.0))
+    assert cal.on_table((0.5, 0.2)) and not cal.on_table((1.5, 0.2))
 
 
 def test_base_yaw_rotates_camera_frame() -> None:
@@ -280,3 +284,115 @@ def test_vlm_failure_is_safe() -> None:
     assert not r.done and "GPU at 90 C" in r.reason
     with pytest.raises(DecompositionError, match="VLM unavailable"):
         Decomposer(FakeVLM([VLMError("oom")]), BINS, annotate=False).decompose(None, two_objects())
+
+
+# --- end to end with the executor on orchestrator --------------------------------------------
+
+
+def test_vlm_plan_runs_on_executor_with_step_check(tmp_path: Path) -> None:
+    from hfteama.arms.fake import FakeArm
+    from hfteama.clock import Clock
+    from hfteama.events import EventLog
+    from hfteama.executor import Executor
+    from hfteama.registry.arms import SO101_REACH
+
+    # two SO-101s facing +y; obj_01 near arm a and bin_1, obj_02 near arm b and bin_2
+    a = ArmNode("a", (0.0, 0.0, 0.0), base_yaw_deg=90.0, reach=SO101_REACH)
+    b = ArmNode("b", (0.80, 0.0, 0.0), base_yaw_deg=90.0, reach=SO101_REACH)
+    scene = build_scene([det(0.05, 0.15), det(0.75, 0.15)], IDENTITY)
+    d = Decomposer(FakeVLM([GOOD]), BINS, annotate=False).decompose(None, scene)
+    graph = resolve(d.graph, [a, b]).graph
+    assert graph.tasks["pick_obj_01"].allowed_arms == ("a",)
+
+    vlm = FakeVLM(lambda prompt: '{"done": true, "confidence": 0.95}')
+    frames = []
+    verifier = StepChecker(vlm, BINS).as_verifier(lambda: frames.append(1) or "frame")
+    clock = Clock(scale=100.0)
+    ex = Executor(graph, EventLog(tmp_path / "events.jsonl"), clock=clock, verifier=verifier)
+    for arm_id in ("a", "b"):
+        ex.add_arm(FakeArm(arm_id, clock=clock, duration_fn=lambda t, i=arm_id: t.duration_on(i)))
+    ex.start()
+    assert ex.wait(10)
+    assert set(ex.snapshot()["status"].values()) == {"done"}
+    assert len(frames) == 4, "one camera check per step"
+    assert any("inside the left bin" in p for p in vlm.calls)
+
+
+def test_verifier_camera_error_is_not_confirmed() -> None:
+    def broken():
+        raise OSError("camera unplugged")
+
+    verify = StepChecker(FakeVLM([]), BINS).as_verifier(broken)
+    assert verify(_place_task(), None) == (False, "camera error: camera unplugged")
+
+
+# --- detection by VLM pointing --------------------------------------------------------------
+
+
+def _example_cal() -> Calibration:
+    return Calibration.load(
+        CONFIGS / "camera.example.json", load_catalog(CONFIGS / "arms.example.json")
+    )
+
+
+def test_pointing_projects_onto_the_table() -> None:
+    from hfteama.perception import VLMPointDetector
+
+    pts = {
+        "objects": [
+            {"label": "red cube", "point_2d": [500, 500]},  # image centre -> (0.45, 0.20)
+            {"label": "blue cube", "point_2d": [593.75, 625]},  # (380, 300) px -> (0.55, 0.10)
+            {"label": "red cube", "point_2d": [501, 501]},  # duplicate of the first
+            {"label": "marker", "point_2d": [1200, 10]},  # outside the image
+        ]
+    }
+    vlm = FakeVLM([json.dumps(pts)])
+    det = VLMPointDetector(vlm, _example_cal(), object_height_m=0.04)
+    dets = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
+    assert [d.label for d in dets] == ["red cube", "blue cube"]
+    assert [why for _, why in det.dropped] == ["duplicate point", "point 1200,10 outside the image"]
+    scene = build_scene(dets, _example_cal())
+    o1, o2 = scene.objects["obj_01"], scene.objects["obj_02"]
+    # the point is on the object's top (4 cm): x, y of the top face; z = object centre
+    assert o1.xyz == pytest.approx((0.45, 0.20, 0.02), abs=1e-9)
+    assert o2.xyz == pytest.approx((0.45 + 0.1 * 0.96, 0.20 - 0.1 * 0.96, 0.02), abs=1e-9)
+    assert o1.label == "red cube" and o1.pixel == pytest.approx((320.0, 240.0))
+    assert "point_2d" in vlm.calls[0] and "0 to 1000" in vlm.calls[0]
+
+
+def test_pointing_accepts_a_bare_list_and_retries_garbage() -> None:
+    from hfteama.perception import DetectionError, VLMPointDetector
+
+    vlm = FakeVLM(["I see cubes", '```json\n[{"point_2d": [500, 500], "label": "cube"}]\n```'])
+    dets = VLMPointDetector(vlm, _example_cal()).detect(np.zeros((480, 640, 3), dtype=np.uint8))
+    assert len(dets) == 1 and "rejected" in vlm.calls[1]
+    with pytest.raises(DetectionError):
+        VLMPointDetector(FakeVLM(['{"objects": [{"x": 1}]}'] * 3), _example_cal()).detect(
+            np.zeros((48, 64, 3), dtype=np.uint8)
+        )
+
+
+def test_off_table_points_are_dropped() -> None:
+    from hfteama.perception import VLMPointDetector
+
+    vlm = FakeVLM(['{"objects": [{"label": "cup", "point_2d": [0, 0]}]}'])  # -> (-0.083, 0.40)
+    det = VLMPointDetector(vlm, _example_cal())
+    assert det.detect(np.zeros((480, 640, 3), dtype=np.uint8)) == []
+    assert det.dropped == [("cup", "not on the table")]
+
+
+def test_labels_reach_the_sorting_prompt() -> None:
+    from hfteama.perception import VLMPointDetector
+
+    vlm = FakeVLM(
+        [
+            '{"objects": [{"label": "red cube", "point_2d": [400, 400]}, '
+            '{"label": "blue ball", "point_2d": [700, 600]}]}',
+            answer({"red": "bin_1", "blue": "bin_2"}, {"obj_01": "red", "obj_02": "blue"}),
+        ]
+    )
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    scene = build_scene(VLMPointDetector(vlm, _example_cal()).detect(img), _example_cal())
+    d = Decomposer(vlm, BINS, annotate=False).decompose(img, scene)
+    assert "obj_02 (blue ball)" in vlm.calls[1]
+    assert d.graph.tasks["pick_obj_02"].args["label"] == "blue ball"

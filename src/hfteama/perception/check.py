@@ -7,6 +7,7 @@ The executor decides what happens next (retry, re-split); this module only answe
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,3 +69,20 @@ class StepChecker:
                 reason = f"not sure ({conf:.2f}): {reason}".rstrip(": ")
             return CheckResult(done, conf, reason)
         return CheckResult(False, 0.0, "check_unparsed: " + "; ".join(errors))
+
+    def as_verifier(self, grab: Callable[[], Any]) -> Callable[[Task, Any], tuple[bool, str]]:
+        """The executor's step-check hook: Executor(verifier=checker.as_verifier(camera.grab)).
+
+        Grabs a fresh frame after each successful step and asks the VLM. A camera error counts
+        as not confirmed.
+        """
+
+        def verify(task: Task, result: Any) -> tuple[bool, str]:
+            try:
+                image = grab()
+            except Exception as e:  # camera unplugged, driver error, ...
+                return False, f"camera error: {e}"
+            r = self.check(task, image)
+            return r.done, r.reason or f"confidence {r.confidence:.2f}"
+
+        return verify

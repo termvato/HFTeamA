@@ -70,12 +70,12 @@ def sort_prompt(
     fixed: dict[str, tuple[str, str]] | None = None,
     errors: list[str] | None = None,
 ) -> str:
-    """objects: (id, model, pixel); bins: (id, label); fixed: category -> (rule, bin)."""
+    """objects: (id, description, pixel); bins: (id, label); fixed: category -> (rule, bin)."""
     bins = list(bins)
     lines = ["Objects on the table (each one is labelled with its id in the image):"]
     for oid, model, pixel in objects:
         where = f", at pixel ({pixel[0]:.0f}, {pixel[1]:.0f})" if pixel else ""
-        kind = f" (detected as '{model}')" if model else ""
+        kind = f" ({model})" if model else ""
         lines.append(f"- {oid}{kind}{where}")
     lines.append("")
     lines.append("Bins:")
@@ -114,6 +114,27 @@ def check_prompt(question: str, errors: list[str] | None = None) -> str:
         f"Question: {question}",
         'Answer with JSON exactly in this form: {"done": true or false, '
         '"confidence": <number from 0 to 1>, "reason": "<a few words>"}',
+    ]
+    if errors:
+        lines.append("Your previous answer was rejected: " + "; ".join(errors))
+    return "\n".join(lines)
+
+
+POINT_SYSTEM = (
+    "You are the vision module of a robot sorting cell. You look at a top-down photo of a table "
+    "and point at objects precisely. Answer with one JSON object only, no other text."
+)
+
+
+def point_prompt(errors: list[str] | None = None) -> str:
+    lines = [
+        "Point to every separate object lying on the table that a robot arm could pick up and "
+        "sort. Do not point at bins, trays, boxes used as containers, robot arms, cables, "
+        "markers or the table itself. Give exactly one point per object, at its centre.",
+        'Answer with JSON exactly in this form: {"objects": [{"label": "<short description, '
+        'e.g. red cube>", "point_2d": [x, y]}]}',
+        "x and y are relative coordinates from 0 to 1000: [0, 0] is the top-left corner of the "
+        "image and [1000, 1000] the bottom-right corner.",
     ]
     if errors:
         lines.append("Your previous answer was rejected: " + "; ".join(errors))

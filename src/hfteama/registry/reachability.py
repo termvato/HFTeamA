@@ -66,11 +66,15 @@ class ReachResult:
 
 
 def resolve(graph: TaskGraph, arms: Iterable[ArmNode]) -> ReachResult:
-    """Fill allowed_arms for the connected arms and find the blocked steps.
+    """Fill allowed_arms from reach, and find the steps none of `arms` can do.
 
-    Call again whenever an arm joins or leaves (fast: tasks x arms radius checks). Always pass
-    the source graph (as decomposed), not a previous result's graph: a result's allowed_arms
-    lists only the arms connected at that time, so a new arm would be filtered out.
+    With the planner on orchestrator, pass the whole catalog (every arm we own, plugged in or
+    not): allowed_arms then lists every arm that could reach a step, and the planner's own
+    blocked_tasks / unblocked_by work out what the connected arms can do and what a newly
+    plugged-in arm unblocks. Passing only the connected arms gives the same `blocked` here, but
+    then a new arm would be missing from allowed_arms until resolve is run again.
+
+    Always pass the source graph (as decomposed), not a previous result's graph.
     """
     arms = list(arms)
     allowed = {tid: arms_reaching(t, arms) for tid, t in graph.tasks.items()}

@@ -13,7 +13,7 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 
 | Target | Team | State |
 |---|---|---|
-| Live screen running on fake arms | Operations | not started |
+| Live screen running on fake arms | Operations | done (on `orchestrator`) |
 | One real arm does a step (pick and place) | Action + Hardware | not reported yet |
 | All 3 arms calibrated | Hardware | in progress: 1 leader-follower pair working; Vato's arm being set up (reported in person, ~14:35) |
 
@@ -23,10 +23,11 @@ States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 
 | Decision | Who | Where |
 |---|---|---|
-| Arm contract: `execute(task)` vs `execute(arm_id, skill, params)`; distinct failure types | Vato, Aravind (then Action, Hardware agree) | #21, #4 |
 | Who owns arm detection (`vla/detect_arms.py` on `action` overlaps Hardware's scope) | Hardware, Action | #19, #20 |
 | Top-down camera: mounting and calibration to the table | Hardware, Operations | #19 |
-| Step timeout: 1.5x or 3x the estimate | Vato, Aravind | #21 |
+| Step timeout (1.5x, 2x or 3x the estimate) | Vato, Aravind | #21 |
+
+Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-locked-sat-21-nov-vato-and-aravind).
 
 ---
 
@@ -35,12 +36,13 @@ States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 14:35
-- Done: research; repo structure; task format, arm contract, event log; lower bound with named limit;
-  product spec (visual sorting, Go button, VLM brain); team branches and issues.
-- Doing: team setup and product spec (this file, issues, branches).
-- Next: core loop on fake arms (full-schedule planner, executor, countdown screen with what-if),
-  then the VLM decomposer on top.
+- Updated: Sat 21 Nov 15:08
+- Done: research; repo, plan, teams, issues; architecture locked with Aravind; **core loop on fake
+  arms**: planner (greedy, HEFT, CP-SAT), executor with live re-split, durations, live screen
+  (`python -m hfteama.view --fake-arms 1`) on `orchestrator`.
+- Doing: wiring for real arms and the VLM (`add_arm` for Hardware's discovery, `verifier` for the
+  VLM step check).
+- Next: first run with a real arm once Hardware and Action have one step working.
 - Blocked on: nothing.
 
 ### Aravind
@@ -76,9 +78,13 @@ Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/o
 - Blocked on:
 
 ### Sahil
-- Updated: Sat 21 Nov 14:03 (from the repo)
-- Done: VLA data-collection setup in `vla/` on `action` (arm detection by USB serial, calibration,
-  teleop, recording single- and dual-arm datasets).
-- Doing: not reported yet
-- Next: not reported yet
-- Blocked on: CI lint fails on `vla/detect_arms.py` (see #20).
+- Updated: Sat 21 Nov 14:40
+- Goal: replace the scripted IK pick-and-place step with a learned policy (SmolVLA first), trained
+  on teleop data for the sort task, behind the same step interface.
+- Done: data collection in `vla/` on `action` (arm detection, calibration, teleop, recording to the
+  HF Hub). Local recording web page (live cameras, start/save/discard, upload), tested without
+  arms, not pushed yet.
+- Doing: connecting one arm and the cameras to record the single-arm dataset (~50 episodes).
+- Next: second arm, dual-arm dataset, train SmolVLA, plug it in as an arm worker. Fix CI lint on
+  `vla/detect_arms.py`.
+- Blocked on: nothing.

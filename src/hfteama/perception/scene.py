@@ -1,7 +1,8 @@
-"""What is on the table: SAM-6D detections turned into objects with stable ids in the table frame.
+"""What is on the table: detections turned into objects with stable ids in the table frame.
 
-SAM-6D gives a 6D pose per detected instance in the camera frame, but no identity across frames
-(two red cubes look the same). Ids are kept stable by matching each new detection to the nearest
+A detector (perception.pointing: the VLM points, the pixel is projected onto the table) gives a
+pose per detected instance in the camera frame, but no identity across frames (two red cubes
+look the same). Ids are kept stable by matching each new detection to the nearest
 known object of the same model within `match_radius`.
 """
 
@@ -19,16 +20,17 @@ from hfteama.perception.frames import Calibration, quat_wxyz
 
 @dataclass
 class Detection:
-    """One SAM-6D instance."""
+    """One detected object instance."""
 
     T_cam_obj: np.ndarray  # 4x4 pose in the camera frame, metres
-    model: str = ""  # SAM-6D object model (CAD) name
+    model: str = ""  # kind of object, used to match ids across frames
     score: float = 1.0
     pixel: tuple[float, float] | None = None  # centre in the image, for labelling it to the VLM
+    label: str = ""  # free description from the detector, e.g. "red cube" (shown to the VLM)
 
 
 class ObjectDetector(Protocol):
-    """SAM-6D (or any 6D pose estimator) behind one call."""
+    """Any object detector / pose estimator behind one call."""
 
     def detect(self, rgb: Any, depth: Any = None) -> list[Detection]: ...
 
@@ -41,6 +43,7 @@ class SceneObject:
     quat_wxyz: tuple[float, float, float, float]
     pixel: tuple[float, float] | None = None
     score: float = 1.0
+    label: str = ""
 
 
 @dataclass
@@ -95,7 +98,7 @@ def build_scene(
         if oid is None:
             oid = f"obj_{index:02d}"
             index += 1
-        objects[oid] = SceneObject(oid, d.model, xyz, q, d.pixel, d.score)
+        objects[oid] = SceneObject(oid, d.model, xyz, q, d.pixel, d.score, d.label)
     return Scene(objects=objects, next_index=index)
 
 
