@@ -79,7 +79,7 @@ def load_config(path: Path | str | None = None, pair: str | None = None) -> Proj
         pair=name,
         follower=_arm(pairs[name]["follower"], FOLLOWER_CALIBRATION_DIR, "HFTEAM_FOLLOWER"),
         leader=_arm(pairs[name]["leader"], LEADER_CALIBRATION_DIR, "HFTEAM_LEADER"),
-        cameras=data.get("cameras", {}),
+        cameras=pairs[name].get("cameras", {}),
         record=data.get("record", {}),
     )
 

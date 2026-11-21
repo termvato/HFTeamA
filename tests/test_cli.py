@@ -49,7 +49,8 @@ def test_record_overrides() -> None:
     assert "--dataset.num_episodes=3" in c
     assert "--dataset.single_task=Stack the cubes" in c
     assert "--dataset.push_to_hub=false" in c
-    assert any(a.startswith("--robot.cameras=") for a in c)
+    cams = next(a for a in c if a.startswith("--robot.cameras="))
+    assert "wrist: {" in cams and "/dev/v4l/by-id/" in cams
 
 
 def test_port_env_override(monkeypatch: pytest.MonkeyPatch) -> None:

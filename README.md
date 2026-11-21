@@ -27,6 +27,9 @@ This installs `lerobot[feetech,core-scripts]` (pinned to 0.7.x).
 | `rakesh` (default) | follower | `rakesh_follower` | `5B79014975` | 2026-11-21 |
 | `rakesh` (default) | leader | `rakesh_leader` | `5B8E115290` | 2026-11-21 |
 
+Rakesh cameras: `wrist` (Sonix USB2.0_CAM1, by-id path). Datasets go to
+`diegoloayza789/hfteam_rakesh_so101`.
+
 Ports are found from the USB serial, so a pair works on any computer without
 mapping `/dev/ttyACM*`. Check with `hfteama pairs`. Select another pair with
 `hfteama --pair <name> ...`.
@@ -35,6 +38,7 @@ mapping `/dev/ttyACM*`. Check with `hfteama pairs`. Select another pair with
 
 ```bash
 hfteama pairs                    # check both arms are detected
+hfteama camera                   # view the pair's cameras live in Rerun
 hfteama teleop                   # move the leader, the follower follows
 hfteama record --episodes 5      # record a dataset with cameras
 hfteama calibrate follower       # only for new arms (or to redo a calibration)
@@ -49,6 +53,7 @@ Full walkthrough: [docs/so101_setup.md](docs/so101_setup.md).
 |---|---|---|
 | `hfteama find-port` | `lerobot-find-port` | Find which `/dev/ttyACM*` an arm uses |
 | `hfteama pairs` | — | List arm pairs and the port each connected arm is on |
+| `hfteama camera [names...]` | — | View the pair's cameras live in Rerun |
 | `hfteama find-cameras` | `lerobot-find-cameras opencv` | List camera indices |
 | `hfteama setup-motors {leader,follower}` | `lerobot-setup-motors` | Assign motor IDs on a new arm |
 | `hfteama calibrate {leader,follower}` | `lerobot-calibrate` | Calibrate an arm |

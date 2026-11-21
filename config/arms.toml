@@ -27,26 +27,30 @@ id = "rakesh_leader"
 serial = "5B8E115290"
 port = "/dev/ttyACM0"
 
-# Cameras attached to the follower. Find indices with `hfteama find-cameras`.
-# Indices depend on the computer: check them on the recording machine.
-# Remove or comment out a block to disable that camera.
-[cameras.front]
+# Cameras of this pair, recorded with the follower. `index_or_path` can be an index
+# (changes between computers) or a stable /dev/v4l/by-id/ path (preferred).
+# List them with `hfteama find-cameras` or `ls -l /dev/v4l/by-id/`; view with `hfteama camera`.
+[pairs.rakesh.cameras.wrist]
 type = "opencv"
-index_or_path = 0
+index_or_path = "/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB2.0_CAM1_USB2.0_CAM1-video-index0"
 width = 640
 height = 480
 fps = 30
+fourcc = "MJPG"
+warmup_s = 3
 
-# [cameras.wrist]
+# Uncomment once the fixed front camera is connected, and set its path.
+# [pairs.rakesh.cameras.front]
 # type = "opencv"
-# index_or_path = 2
+# index_or_path = "/dev/v4l/by-id/<front-camera>-video-index0"
 # width = 640
 # height = 480
 # fps = 30
+# fourcc = "MJPG"
 
 [record]
 # Hugging Face dataset repo, e.g. "<hf_user_or_org>/<dataset_name>".
-repo_id = "CHANGE_ME/hfteam_so101_dataset"
+repo_id = "diegoloayza789/hfteam_rakesh_so101"
 single_task = "Pick up the object and place it in the box"
 num_episodes = 10
 episode_time_s = 60

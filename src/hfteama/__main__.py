@@ -100,6 +100,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_parser("find-port", help="Identify which USB port each arm uses")
     sub.add_parser("find-cameras", help="List OpenCV camera indices")
     sub.add_parser("pairs", help="List arm pairs and whether each arm is connected")
+    c = sub.add_parser("camera", help="View the pair's cameras live in Rerun")
+    c.add_argument("names", nargs="*", help="Camera names (default: all of the pair)")
     for name, help_ in (
         ("setup-motors", "Assign IDs/baudrate to new motors (one at a time)"),
         ("calibrate", "Calibrate an arm and save it under ./calibration"),
@@ -122,6 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if args.command == "pairs":
         return list_pairs(args.config)
+    if args.command == "camera":
+        from hfteama.camera_view import view
+
+        return view(load_config(args.config, args.pair), args.names)
     return run(build_command(args), args.dry_run)
 
 

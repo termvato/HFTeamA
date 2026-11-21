@@ -12,6 +12,12 @@ Run every command from the repo root with the virtual environment active.
 | Follower | `rakesh_follower` | `5B79014975` | `calibration/robots/so_follower/rakesh_follower.json` |
 | Leader | `rakesh_leader` | `5B8E115290` | `calibration/teleoperators/so_leader/rakesh_leader.json` |
 
+| Camera | Device (`index_or_path`) | Settings |
+|---|---|---|
+| `wrist` | `/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB2.0_CAM1_USB2.0_CAM1-video-index0` | 640x480, 30 fps, MJPG, 3 s warmup |
+
+Dataset: `diegoloayza789/hfteam_rakesh_so101`.
+
 Calibrated and verified with teleoperation on 2026-11-21. Notes:
 
 - The leader's `shoulder_pan` range was shifted by +176 steps (from `805–3367` to
@@ -34,7 +40,7 @@ uv venv --python 3.13 .venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 
 hfteama pairs          # both arms must show "connected at /dev/ttyACM*"
-hfteama find-cameras   # camera indices differ per computer: update [cameras.*]
+hfteama camera         # check the wrist camera image
 hfteama teleop         # quick check before recording
 hfteama record --episodes 5 --task "..."
 ```
@@ -109,12 +115,24 @@ follower section of the config.
 
 ## 4. Cameras
 
+Cameras belong to a pair: `[pairs.<name>.cameras.<camera>]` in `config/arms.toml`.
+Each section becomes one camera stream (`front`, `wrist`, ...) in the dataset.
+
+Prefer a stable `/dev/v4l/by-id/...-video-index0` path over a numeric index: indices
+change between computers and reboots, by-id paths follow the camera. List them with
+`ls -l /dev/v4l/by-id/` (use `-index0`; `-index1` is a metadata node, not video) or
+`hfteama find-cameras`.
+
+Check the image before recording:
+
 ```bash
-hfteama find-cameras
+hfteama camera           # all cameras of the pair
+hfteama camera wrist     # just one
 ```
 
-Put the indices you want in the `[cameras.*]` sections of `config/arms.toml`. Each
-section becomes one camera stream (`front`, `wrist`, ...) in the dataset.
+This opens Rerun with the same settings recording uses, plus a brightness plot. A
+black image (brightness near 0) means the lens is covered or the camera faces
+something dark.
 
 ## 5. Record a dataset
 
