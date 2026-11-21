@@ -1,0 +1,354 @@
+{
+  "name": "sort12",
+  "note": "Placeholder durations (s) until measured on the real arms.",
+  "tasks": [
+    {
+      "id": "pick_01",
+      "skill": "pick",
+      "args": {
+        "object": "block_01",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_01",
+      "skill": "place",
+      "args": {
+        "object": "block_01",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_01"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_01"
+    },
+    {
+      "id": "pick_02",
+      "skill": "pick",
+      "args": {
+        "object": "block_02",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_02",
+      "skill": "place",
+      "args": {
+        "object": "block_02",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_02"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_02"
+    },
+    {
+      "id": "pick_03",
+      "skill": "pick",
+      "args": {
+        "object": "block_03",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_03",
+      "skill": "place",
+      "args": {
+        "object": "block_03",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_03"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_03"
+    },
+    {
+      "id": "pick_04",
+      "skill": "pick",
+      "args": {
+        "object": "block_04",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_04",
+      "skill": "place",
+      "args": {
+        "object": "block_04",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_04"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_04"
+    },
+    {
+      "id": "pick_05",
+      "skill": "pick",
+      "args": {
+        "object": "block_05",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_05",
+      "skill": "place",
+      "args": {
+        "object": "block_05",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_05"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_05"
+    },
+    {
+      "id": "pick_06",
+      "skill": "pick",
+      "args": {
+        "object": "block_06",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_06",
+      "skill": "place",
+      "args": {
+        "object": "block_06",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_06"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_06"
+    },
+    {
+      "id": "pick_07",
+      "skill": "pick",
+      "args": {
+        "object": "block_07",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_07",
+      "skill": "place",
+      "args": {
+        "object": "block_07",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_07"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_07"
+    },
+    {
+      "id": "pick_08",
+      "skill": "pick",
+      "args": {
+        "object": "block_08",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_08",
+      "skill": "place",
+      "args": {
+        "object": "block_08",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_08"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_08"
+    },
+    {
+      "id": "pick_09",
+      "skill": "pick",
+      "args": {
+        "object": "block_09",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_09",
+      "skill": "place",
+      "args": {
+        "object": "block_09",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_09"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_09"
+    },
+    {
+      "id": "pick_10",
+      "skill": "pick",
+      "args": {
+        "object": "block_10",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_10",
+      "skill": "place",
+      "args": {
+        "object": "block_10",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_10"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_10"
+    },
+    {
+      "id": "pick_11",
+      "skill": "pick",
+      "args": {
+        "object": "block_11",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_11",
+      "skill": "place",
+      "args": {
+        "object": "block_11",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_11"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_11"
+    },
+    {
+      "id": "pick_12",
+      "skill": "pick",
+      "args": {
+        "object": "block_12",
+        "from": "input_bin"
+      },
+      "deps": [],
+      "zones": [
+        "input_bin"
+      ],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "place_12",
+      "skill": "place",
+      "args": {
+        "object": "block_12",
+        "to": "own_output_bin"
+      },
+      "deps": [
+        "pick_12"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0,
+      "same_arm_as": "pick_12"
+    }
+  ]
+}

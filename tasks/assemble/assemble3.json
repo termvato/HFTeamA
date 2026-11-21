@@ -1,0 +1,216 @@
+{
+  "name": "assemble3",
+  "note": "Placeholder durations (s). Each product is an ordered 5-step chain, so step order caps the speed-up.",
+  "tasks": [
+    {
+      "id": "p1_base",
+      "skill": "pick_place",
+      "args": {
+        "product": "p1",
+        "step": "base"
+      },
+      "deps": [],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0
+    },
+    {
+      "id": "p1_peg1",
+      "skill": "pick_place",
+      "args": {
+        "product": "p1",
+        "step": "peg1"
+      },
+      "deps": [
+        "p1_base"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 8.0
+    },
+    {
+      "id": "p1_peg2",
+      "skill": "pick_place",
+      "args": {
+        "product": "p1",
+        "step": "peg2"
+      },
+      "deps": [
+        "p1_peg1"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 8.0
+    },
+    {
+      "id": "p1_inspect",
+      "skill": "inspect",
+      "args": {
+        "product": "p1",
+        "step": "inspect"
+      },
+      "deps": [
+        "p1_peg2"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "p1_out",
+      "skill": "pick_place",
+      "args": {
+        "product": "p1",
+        "step": "out"
+      },
+      "deps": [
+        "p1_inspect"
+      ],
+      "zones": [
+        "output_tray"
+      ],
+      "allowed_arms": "*",
+      "duration": 5.0
+    },
+    {
+      "id": "p2_base",
+      "skill": "pick_place",
+      "args": {
+        "product": "p2",
+        "step": "base"
+      },
+      "deps": [],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0
+    },
+    {
+      "id": "p2_peg1",
+      "skill": "pick_place",
+      "args": {
+        "product": "p2",
+        "step": "peg1"
+      },
+      "deps": [
+        "p2_base"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 8.0
+    },
+    {
+      "id": "p2_peg2",
+      "skill": "pick_place",
+      "args": {
+        "product": "p2",
+        "step": "peg2"
+      },
+      "deps": [
+        "p2_peg1"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 8.0
+    },
+    {
+      "id": "p2_inspect",
+      "skill": "inspect",
+      "args": {
+        "product": "p2",
+        "step": "inspect"
+      },
+      "deps": [
+        "p2_peg2"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "p2_out",
+      "skill": "pick_place",
+      "args": {
+        "product": "p2",
+        "step": "out"
+      },
+      "deps": [
+        "p2_inspect"
+      ],
+      "zones": [
+        "output_tray"
+      ],
+      "allowed_arms": "*",
+      "duration": 5.0
+    },
+    {
+      "id": "p3_base",
+      "skill": "pick_place",
+      "args": {
+        "product": "p3",
+        "step": "base"
+      },
+      "deps": [],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 6.0
+    },
+    {
+      "id": "p3_peg1",
+      "skill": "pick_place",
+      "args": {
+        "product": "p3",
+        "step": "peg1"
+      },
+      "deps": [
+        "p3_base"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 8.0
+    },
+    {
+      "id": "p3_peg2",
+      "skill": "pick_place",
+      "args": {
+        "product": "p3",
+        "step": "peg2"
+      },
+      "deps": [
+        "p3_peg1"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 8.0
+    },
+    {
+      "id": "p3_inspect",
+      "skill": "inspect",
+      "args": {
+        "product": "p3",
+        "step": "inspect"
+      },
+      "deps": [
+        "p3_peg2"
+      ],
+      "zones": [],
+      "allowed_arms": "*",
+      "duration": 4.0
+    },
+    {
+      "id": "p3_out",
+      "skill": "pick_place",
+      "args": {
+        "product": "p3",
+        "step": "out"
+      },
+      "deps": [
+        "p3_inspect"
+      ],
+      "zones": [
+        "output_tray"
+      ],
+      "allowed_arms": "*",
+      "duration": 5.0
+    }
+  ]
+}

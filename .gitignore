@@ -27,3 +27,8 @@ htmlcov/
 .vscode/
 .idea/
 .DS_Store
+
+# Local-only files
+CLAUDE.local.md
+configs/arms.json
+runs/

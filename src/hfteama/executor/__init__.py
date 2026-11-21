@@ -1,0 +1,15 @@
+"""Executor: runs the plan and re-splits the remaining work when something changes.
+
+Owner: executor and glue (E).
+
+- Keeps the solver's decisions (which arm, per-arm order, per-zone order), not its timestamps.
+- Starts a task the moment its deps are done, its arm is free and its zones are free.
+- Zone locks are taken again at runtime, right before motion: two arms never enter one zone at once.
+- Re-plan triggers: arm_added, arm_removed, arm_failed, task failed (retry on same or other arm),
+  large overrun. Running tasks stay fixed; solver gets 1-2 s, HEFT on timeout.
+- Writes every plan, start, end and arm event to events.EventLog.
+- Removal is a slow stop: "remove arm N" -> arm finishes or aborts its skill -> parks -> unplug.
+
+Done when: a batch on 3 fake arms survives "add arm" and "remove arm" mid-run, every plan passes
+scheduler/check.py, and the event log replays into the view.
+"""

@@ -1,0 +1,41 @@
+{
+  "note": "Copy to configs/arms.json (git-ignored) and fill in. Serial from: ls -l /dev/serial/by-id/",
+  "arms": [
+    {
+      "id": "arm_a",
+      "serial": "FILL_ME",
+      "owner": "",
+      "calibration_id": "arm_a",
+      "base_pose_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "reach": "*"
+    },
+    {
+      "id": "arm_b",
+      "serial": "FILL_ME",
+      "owner": "",
+      "calibration_id": "arm_b",
+      "base_pose_m": [
+        0.45,
+        0.0,
+        0.0
+      ],
+      "reach": "*"
+    },
+    {
+      "id": "arm_c",
+      "serial": "FILL_ME",
+      "owner": "",
+      "calibration_id": "arm_c",
+      "base_pose_m": [
+        0.9,
+        0.0,
+        0.0
+      ],
+      "reach": "*"
+    }
+  ]
+}
