@@ -13,7 +13,7 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 sched = ["ortools>=9.10"]
 view = ["dash>=2.17", "plotly>=5.22"]
-sim = ["mujoco>=3.2"]
+sim = ["mujoco>=4.0.1"]
 # Real arms: LeRobot installed from source (see docs/plan.md), not pinned here.
 dev = [
     "pytest>=8.0",
@@ -30,6 +30,7 @@ packages = ["src/hfteama"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["sim: needs MuJoCo (pip install -e \".[sim]\")"]
 
 [tool.ruff]
 line-length = 100

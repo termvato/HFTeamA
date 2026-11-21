@@ -97,7 +97,7 @@ test on the rig with a written checklist.
     critical path. Overkill for a 5-joint arm in 48 h.
   - LeRobot `RobotKinematics` (placo): fine on the real arm but adds placo and a URDF path, and
     does not help the sim.
-- **MuJoCo version: try 4.0.1 first, fall back to 3.17.** MuJoCo 4.0.1 is on PyPI (released
+- **MuJoCo version: 4.0.1 (checked 21 Nov: the vendored model loads, joint limits match `kinematics.LIMITS_RAD`, Python 3.14; fallback 3.17 not needed).** Originally: try 4.0.1 first, fall back to 3.17. MuJoCo 4.0.1 is on PyPI (released
   11 Nov 2026; MuJoCo now ships as `mujoco` + `mujoco-core` + `mujoco-studio`). It is 10 days
   old and the vendored model was tuned on 3.17, so the first plan task loads the model and runs
   the sim tests on 4.0.1; if anything breaks, pin `mujoco>=3.17,<4`. Code uses only stable APIs
