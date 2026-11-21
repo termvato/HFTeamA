@@ -8,7 +8,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 17:40)
+## Now (Sat 21 Nov, 17:55)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
@@ -28,9 +28,10 @@ Update it when you start, finish or decide something. Notes for each other go un
 |---|---|---|---|
 | 1 | Real-arm worker (skills, IK, driver behind `execute(task)`) | Action | being built separately; integrated later through `Executor.add_arm(worker)`. Not an Operations blocker |
 | 2 | Arm base poses in the table frame (marker 0). Nobody knows where the markers sit relative to the arms, so the arms measure it themselves: jog the gripper tip onto two marker centres, read the joints, FK (`arms/kinematics.py`) gives base x, y, yaw. ~2 min per arm. Until then: estimated from the image (+-3-5 cm; spacing checked against the measured 30 cm gap) | Aravind (tool), Hardware (jogging) | open |
-| 3 | Machines: camera on Hardware's machines, Qwen on Aravind's laptop (RTX 4060). Frames must reach Qwen and answers come back: Qwen as an HTTP service on the laptop, the orchestrator sends frames (JPEG ~200 KB; Go ~20 s, place check ~3 s). Both machines on one network | Aravind | open: service to build |
+| 3 | Machines: decided (Aravind, 17:55): once everything is merged on `main` and verified, the real run happens on Aravind's laptop (RTX 4060): arms, cameras, Qwen and the executor in one process, so no network service is needed. Catch: the laptop is Windows, and Hardware's and Sahil's code assumes Linux (`/dev/ttyACM*`, `/dev/v4l/by-id/...`, `/sys`, `/proc`). Needs Windows entries (COM ports, camera names; the C920 already works through ffmpeg/DirectShow) or WSL with USB passthrough | Hardware, Aravind | open: settle before integration |
 | 4 | Grasp angle: pointing gives position only. IK cannot know the angle (it needs one as input). Cheap fix: Qwen gives two points along each object's long axis -> yaw in task args (`pick_yaw_deg`). A VLA can learn it from the wrist camera if its data has varied orientations (Sahil) | Aravind (yaw), Action (uses it) | open |
 | 5 | Arg names: `object`, `target`, `pick_xyz`, `place_xyz` (metres, table frame) | Action, Operations | agreed in both designs; to confirm on #20 |
+| 6 | Third robot for the plug-in test (an arm joins mid-run, work re-splits): needs its catalog id (its follower calibration id) and base pose (same touch tool as #2). Placed where it reaches objects the other two cannot, it also unblocks steps | Hardware, Aravind | open |
 
 ## Who does what (proposed, to confirm)
 
@@ -167,6 +168,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 17:55 (Aravind): real run on Aravind's laptop after the merge to `main` (no Qwen service needed); Windows paths flagged; third robot for the plug-in test.
 - 17:20 (Aravind): real camera end to end (markers, Qwen positions, reach, executor split); blockers table for the real arms.
 - 16:41 (Aravind): status tidied (#15 done by Vato, asks answered); Aravind takes the VLM -> live screen wiring.
 - 21 Nov (Aravind): registry + reachability (#3), VLM decomposer / step check / re-scan, Qwen GPU safeguards, executor verifier hook.
@@ -175,6 +177,12 @@ Update it when you start, finish or decide something. Notes for each other go un
 - 13:56 Names in the code aligned with the backlog (#2, #4, #5, #12).
 
 ## Aravind's side: for Vato to verify (21 Nov, 17:40)
+
+Rig for the real run (17:55): 2 follower arms (`rakesh_follower` black/left, `vato_follower`
+green/right) as arm workers; 2 leader arms (teleop and recording only, not used by the
+orchestrator); 2 wrist cameras (for the grasping skill / VLA); 1 top camera (C920: calibration,
+objects, step check); a third robot to plug in mid-run. All on Aravind's laptop after the merge to
+`main`.
 
 All on `orchestrator`. Verified on Aravind's laptop: `ruff check .` clean, `pytest` 125 passed
 (2 skipped: no ortools / dash locally). Please run the checks below and tick them.
@@ -224,7 +232,7 @@ match (flagged on #20). The camera run (last item) needs your laptop.
 
 ### Open on Aravind's side
 
-1. Arm base poses by touching two markers with each gripper (Blockers #2).
-2. Qwen as an HTTP service on the laptop for the camera on Hardware's machine (Blockers #3).
+1. Arm base poses by touching two markers with each gripper, all three arms (Blockers #2, #6).
+2. Windows on the laptop: camera and arm access without Linux paths (Blockers #3, with Hardware).
 3. Grasp yaw from two points along each object (Blockers #4).
 4. VLM pipeline into the live screen (Go -> camera -> Qwen -> executor; periodic re-scan).
