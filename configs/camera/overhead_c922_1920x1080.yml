@@ -1,0 +1,21 @@
+%YAML:1.0
+---
+K: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 1416.4295603664941, 0., 991.53267300016057, 0.,
+       1415.2208680335023, 490.81535603644863, 0., 0., 1. ]
+D: !!opencv-matrix
+   rows: 1
+   cols: 5
+   dt: d
+   data: [ 0.029164321832065975, -0.15072385855039963,
+       -0.0067825104562368056, 0.0013413032807203695,
+       0.086964657828575001 ]
+image_width: 1920
+image_height: 1080
+rms: 0.54122736919098147
+n_images: 41
+camera_controls: "{\"focus_automatic_continuous\": 0, \"focus_absolute\": 0, \"white_balance_automatic\": 0, \"white_balance_temperature\": 3803, \"auto_exposure\": 1, \"exposure_dynamic_framerate\": 0, \"exposure_time_absolute\": 253, \"gain\": 0, \"power_line_frequency\": 1, \"backlight_compensation\": 0, \"brightness\": 128, \"contrast\": 128, \"saturation\": 128, \"sharpness\": 128, \"zoom_absolute\": 100, \"pan_absolute\": 0, \"tilt_absolute\": 0}"
+board: charuco 10x7 square 25mm marker 18mm
