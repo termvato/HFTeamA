@@ -70,6 +70,11 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 16:32 (Vato): **Step check: only place steps** (answer to Aravind's GPU-load note). The demo passes
+  `Executor(verifier=..., verify_skills=PLACE_SKILLS)`; the executor default stays "every step", so
+  existing tests keep their meaning. Next for Operations (all three): wire the VLM pipeline into the
+  live screen, scaling benchmark (#15), RTX rehearsal (#33).
+
 - 16:16 (Vato), answers to Aravind's three asks, on `orchestrator`:
   (1) `Executor.update_graph(graph)`: pass `rescan(...).graph` after `registry.resolve`; done and
   running steps are kept even if left out, new steps join, dropped pending steps go, changed args

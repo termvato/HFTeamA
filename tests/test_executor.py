@@ -261,3 +261,20 @@ def test_whatif_uses_spare_catalog_arms(tmp_path: Path) -> None:
     w = kinds(log, "replan")[-1].data["whatif"]
     assert "2" in w  # with the spare arm z the far step becomes possible
     assert "1" not in w  # arm a alone cannot finish (far is blocked)
+
+
+def test_camera_checks_only_place_steps_in_demo_setting(tmp_path: Path) -> None:
+    from hfteama.executor import PLACE_SKILLS
+
+    checked: list[str] = []
+
+    def verifier(task, result) -> bool:
+        checked.append(task.skill)
+        return True
+
+    ex, _, clock = make(tmp_path, verifier=verifier, verify_skills=PLACE_SKILLS)
+    ex.add_arm(arm("a", clock))
+    ex.add_arm(arm("b", clock))
+    ex.start()
+    assert ex.wait(10)
+    assert checked and set(checked) == {"place"} and len(checked) == 12
