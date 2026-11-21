@@ -8,21 +8,24 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 16:30)
+## Now (Sat 21 Nov, 16:41)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
    live screen. Run: `python -m hfteama.view --fake-arms 1`, open http://127.0.0.1:8050.
-3. **VLM on top of the loop: first version done** (Aravind): decomposer (camera + Go -> categories
-   -> steps), step check plugged into `Executor(verifier=...)`, re-scan. Reachability fills
-   `allowed_arms` (SO-101 reach). Objects found by Qwen pointing + camera calibration (no extra
-   model). Open: feeding re-scan results into a running executor (Vato, see Notes).
+3. **VLM on top of the loop: done** (Aravind): object detection by Qwen pointing, decomposer
+   (camera + Go -> categories -> steps), step check (`Executor(verifier=...)`, place steps only),
+   re-scan (`Executor.update_graph`). Reachability fills `allowed_arms` (SO-101 reach). Real Qwen
+   run on the RTX 4060 passed on a synthetic image; a real camera photo is still to test.
+4. **Next: VLM pipeline into the live screen** (Aravind): Go -> camera frame -> detect -> sort ->
+   reachability -> executor, plus a periodic re-scan. Then the RTX rehearsal (#33, Vato).
 
 ## Who does what (proposed, to confirm)
 
 | Area | Owner | Backlog |
 |---|---|---|
 | VLM: object detection (pointing), decomposer, step check, re-scan | Aravind | new (to add) |
+| VLM pipeline into the live screen: Go -> camera -> detect -> sort -> reachability -> executor; periodic re-scan via `update_graph` | Aravind | new (to add) |
 | Reachability graph and arm registry | Aravind | #3 |
 | Planner: greedy fallback, full schedule (HEFT, then CP-SAT), plan checker | Vato | #6, #7, #8, #16 |
 | Executor and re-split | Vato | #10, #11 |
@@ -61,14 +64,22 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #12 | Finish time and bottleneck | done: predicted finish, lower bound, limit in words, steps unblocked by a new arm, what-if |
 | #13 | Duration estimates | done: task file first, then per-arm 80th percentile (`scheduler/durations.py`) |
 | #14 | Mock worker | done: fake arm with failure injection (`arms/fake.py`) |
-| #15 | Scaling benchmark | not started |
+| #15 | Scaling benchmark | done (Vato): `scripts/scaling_benchmark.py`, sort12 and assemble3 on 1-8 arms: planned (HEFT), lower bound and binding term, ideal 1/N, measured on fake arms (1-4); CSV + interactive chart under `runs/scaling/` |
 | #16 | Plan validator | done (`scheduler/check.py`), run after every re-plan |
 | #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
 | #18 | Re-split policy questions | open |
 | new | VLM decomposer, step check, re-scan | done; step check wired as `Executor(verifier=...)`. Real run on the RTX 4060 (Qwen3-VL-4B, 4-bit, synthetic table image, `scripts/vlm_smoke.py`): sorting by colour right on the first try, 12 s (once at Go); step check correct, 2.8 s per call; peak VRAM 3.1 GB. Not yet on a real camera photo |
+| new | VLM pipeline into the live screen | in progress (Aravind) |
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 16:41 (Aravind): Taking "VLM pipeline into the live screen" from Vato's 16:32 list. It touches
+  `view/__main__.py` (Go): I'll add the VLM path next to the fake-arm rig and keep the rig as is.
+  Thanks for `update_graph`, the catalog what-if and the place-only check. Camera: no frame of the
+  real table yet (none committed; Sahil's `top` C920 is only live on his machine).
+  `scripts/vlm_smoke.py --image http://<host>:8765/stream/top --out points.png` tests it once
+  the studio runs.
 
 - 16:32 (Vato): **Step check: only place steps** (answer to Aravind's GPU-load note). The demo passes
   `Executor(verifier=..., verify_skills=PLACE_SKILLS)`; the executor default stays "every step", so
@@ -109,7 +120,7 @@ Update it when you start, finish or decide something. Notes for each other go un
     `blocked_tasks` / `unblocked_by` do the rest. Worker `arm_id`s must match catalog ids.
   - `Executor(verifier=StepChecker(vlm, bins).as_verifier(camera_grab))`: one camera check per
     step; camera or VLM errors count as not confirmed.
-  - Needs you: (1) the executor cannot take new or changed tasks mid-run, so `rescan()` output
+  - Needs you (all three answered by Vato at 16:16): (1) the executor cannot take new or changed tasks mid-run, so `rescan()` output
     (new objects, moved, vanished) has nowhere to go yet: an `Executor.update_graph(graph)` that
     keeps done/running steps would do it. (2) `whatif` adds `virtual-k` arms that only get steps
     open to every arm; with reach-filled `allowed_arms` the rows above the connected count drop
@@ -136,6 +147,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 16:41 (Aravind): status tidied (#15 done by Vato, asks answered); Aravind takes the VLM -> live screen wiring.
 - 21 Nov (Aravind): registry + reachability (#3), VLM decomposer / step check / re-scan, Qwen GPU safeguards, executor verifier hook.
 - 14:31 Product section in `docs/plan.md`.
 - 14:20 Team branches; `orchestrator` = `termvato` + Aravind's design doc.
