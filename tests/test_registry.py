@@ -57,11 +57,12 @@ def test_example_bins_reachable_at_full_extension() -> None:
 
 
 def test_so101_reach_sector() -> None:
-    # facing +y (yaw 90): pan axis at (0, 0.0388); reach 0.44 m; hip +-110 deg
+    # facing +y (yaw 90): pan axis at (0, 0.0388); pick IK reach 0.14-0.42 m; hip +-110 deg
     arm = ArmNode("a", base_yaw_deg=90.0, reach=SO101_REACH)
     y0 = 0.0388
-    assert arm.reaches((0.0, y0 + 0.43))
-    assert not arm.reaches((0.0, y0 + 0.45)), "beyond full extension"
+    assert arm.reaches((0.0, y0 + 0.41))
+    assert not arm.reaches((0.0, y0 + 0.43)), "beyond the pick skill's IK reach"
+    assert not arm.reaches((0.0, y0 + 0.10)), "too close to the base for a tool-down pick"
     assert arm.reaches((0.40, y0)), "90 deg to the side is inside +-110"
     assert not arm.reaches((0.0, y0 - 0.30)), "straight behind is outside +-110"
     assert not arm.reaches((0.20, y0 - 0.20)), "135 deg off forward"
@@ -167,3 +168,42 @@ def test_travel_makes_the_nearer_arm_faster() -> None:
     assert arm_of["pick_ob"] == "b" and arm_of["pick_oa"] == "a"
     # without travel, durations are untouched
     assert resolve(g, [a, b]).graph.tasks["pick_ob"].durations == {}
+
+
+def test_clearance_zones_keep_arms_apart() -> None:
+    from hfteama.registry.reachability import clearance_zones
+
+    c = 0.15
+    z = {d: set(clearance_zones([(0.30 + d, 0.30)], c)) for d in (0.0, 0.10, 0.149, 0.21)}
+    assert z[0.0] & z[0.10] and z[0.0] & z[0.149], "closer than the clearance: share a zone"
+    assert not z[0.0] & z[0.21], "farther than 1.35 x clearance: never share"
+
+
+def test_clearance_only_where_two_arms_reach() -> None:
+    a = ArmNode("a", (0.0, 0.4, 0.0), base_yaw_deg=-90.0, reach=SO101_REACH)
+    b = ArmNode("b", (0.4, 0.4, 0.0), base_yaw_deg=-90.0, reach=SO101_REACH)
+    shared = pair("mid", (0.20, 0.20, 0), (0.20, 0.05, 0))
+    own = pair("own", (-0.15, 0.25, 0), (-0.05, 0.10, 0))  # only arm a reaches it
+    r = resolve(graph(*shared, *own), [a, b], clearance_m=0.15)
+    zones = [x for x in r.graph.tasks["pick_mid"].resources if x.startswith("zone:")]
+    assert zones, "both arms reach it: it locks its zone"
+    assert r.graph.tasks["pick_own"].allowed_arms == ("a",)
+    assert not [x for x in r.graph.tasks["pick_own"].resources if x.startswith("zone:")]
+    assert resolve(graph(*shared), [a, b]).graph.tasks["pick_mid"].resources == ()
+
+
+def test_clearance_serialises_close_picks() -> None:
+    from hfteama.scheduler.heft import heft
+    from hfteama.scheduler.problem import Problem
+
+    a = ArmNode("a", (0.0, 0.4, 0.0), base_yaw_deg=-90.0, reach=SO101_REACH)
+    b = ArmNode("b", (0.4, 0.4, 0.0), base_yaw_deg=-90.0, reach=SO101_REACH)
+    close = [  # two picks 6 cm apart, both reachable by both arms
+        Task(id="p1", skill="pick", args={"pick_xyz": (0.17, 0.22, 0)}, duration=4),
+        Task(id="p2", skill="pick", args={"pick_xyz": (0.23, 0.22, 0)}, duration=4),
+    ]
+    free = heft(Problem(resolve(graph(*close), [a, b]).graph, ["a", "b"]))
+    safe = heft(Problem(resolve(graph(*close), [a, b], clearance_m=0.15).graph, ["a", "b"]))
+    s = {x.task_id: x for x in safe.assignments}
+    assert free.makespan == pytest.approx(4.0), "without clearance: side by side"
+    assert s["p1"].end <= s["p2"].start or s["p2"].end <= s["p1"].start, "with: one after other"

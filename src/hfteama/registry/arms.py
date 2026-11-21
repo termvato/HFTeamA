@@ -68,12 +68,14 @@ class Reach:
         )
 
 
-# SO-101 from the MuJoCo Menagerie model (robotstudio_so101), same model as arms/kinematics.py:
-# fully extended horizontal reach, pan axis to the gripper frame, is 0.441 m (0.439 m at table
-# height); the pan axis is 0.0388 m in front of the base origin; hip range +-110 deg.
+# SO-101 from the MuJoCo Menagerie model (robotstudio_so101), same model as arms/kinematics.py.
+# The arm's fully extended horizontal reach is 0.441 m, but the pick skill (tool pointing down,
+# hover 8 cm, grasp, lift 10 cm) only solves in IK from ~0.14 to 0.42 m from the pan axis
+# (Action's arms/ik.py, checked on a 4 cm grid: scripts/validation/reach_vs_ik.py). The pan axis
+# is 0.0388 m in front of the base origin; hip range +-110 deg.
 SO101_REACH = Reach(
-    r_min=0.0,
-    r_max=0.44,
+    r_min=0.14,
+    r_max=0.42,
     pan_offset_m=0.0388,
     pan_limit_deg=math.degrees(LIMITS_RAD["shoulder_pan"][1]),
 )
