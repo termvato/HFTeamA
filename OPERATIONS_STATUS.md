@@ -28,7 +28,6 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
-| Real-arm adapter: real follower as an arm worker (from Hardware's pairs config), safety checks, slow moves and park, heartbeat, runs Action's skills | Vato | #4, #19, #20 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -69,6 +68,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 | new | Object detection (camera -> table positions) | code done, tested on a scripted VLM: Qwen points at objects, pixel ray meets the table plane (`perception/pointing.py`); position only, no yaw. OnePose dropped (per-object iOS scans, CUDA 10.2, Linux only); pointing accuracy on the real model not measured yet |
 
 ## Notes
+
+- 16:09 (Vato): Real-arm adapter withdrawn: Action already plans it (Vivek's `SkillWorker` + `LeRobotDriver` on `action-arm-skills`). Operations posted LeRobot safety notes and offered to take his Task 8 (#20).
 
 - 21 Nov (Aravind): Built and on `orchestrator`: `src/hfteama/registry/` (#3) and
   `src/hfteama/perception/` (VLM). Objects: Qwen points at each one (0..1000 coords), the camera
