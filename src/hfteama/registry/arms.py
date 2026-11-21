@@ -133,6 +133,28 @@ def load_catalog(path: str | Path) -> dict[str, ArmNode]:
     return out
 
 
+def load_real_arms(path: str | Path, reach: Any = "so101") -> dict[str, ArmNode]:
+    """The planner's arm catalog from Action's real-arm config (`configs/real_arms.json`), so the
+    planner and the real driver read arm positions from one file.
+
+    That file is a dict of arm id -> {"base": [x, y, z] metres in the table frame, "yaw": radians
+    about z (0 = the arm's forward is table +x), "pair": ...}; see `arms/real.py::from_config`.
+    The arm id must be the worker's `arm_id`. Optional per-arm "reach" overrides `reach`.
+    """
+    raw = json.loads(Path(path).read_text())["arms"]
+    out: dict[str, ArmNode] = {}
+    for arm_id, d in raw.items():
+        out[arm_id] = ArmNode(
+            arm_id=arm_id,
+            base_pose_m=tuple(float(v) for v in d.get("base", (0.0, 0.0, 0.0))),
+            base_yaw_deg=math.degrees(float(d.get("yaw", 0.0))),
+            reach=Reach.from_config(d.get("reach", reach)),
+            serial=d.get("serial", ""),
+            backend="real",
+        )
+    return out
+
+
 Listener = Callable[[str, str], None]  # (event kind, arm_id)
 
 
