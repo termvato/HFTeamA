@@ -84,6 +84,21 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | Scene changes | New or moved objects mid-run: the camera notices, the VLM re-reads the table, the plan and countdown update. |
 | Simulated arms | Only in the what-if estimate; they do not execute in the live run. |
 
+## Pitch (Hugging Face track: "Desk Hero")
+
+Track brief: solve a simple everyday problem on your desk using LeRobot SO-101.
+
+- **The desk problem:** a messy desk. Point a camera at it and the arms tidy it: the VLM names what
+  is there and decides where each thing goes. No training per object; a judge can add their own item.
+- **The moment:** in a hurry? Plug in another arm. The work is re-split in seconds, the predicted
+  time drops, and the screen says what limits further speed-up.
+- **Beyond the desk:** the same system fits small-batch work in industry (sorting, kitting,
+  packing): add or remove arms without re-programming, and know the finish time. Say this last, in
+  one sentence; the desk is the story.
+- **Words:** say "tidy the desk" and "plug in another arm" in the pitch. Keep "plug and produce",
+  scheduling terms and the plan chart for questions.
+- **Demo objects:** real desk things (pens, tape, lip balm, a snack bar) into a bowl or tray.
+
 ## Demo (filmed on the real setup)
 
 1. **The VLM splits the task.** The top camera sees the table; the VLM names the objects and
