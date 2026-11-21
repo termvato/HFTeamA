@@ -8,7 +8,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ---
 
-## Now (Sat 21 Nov, 18:05)
+## Now (Sat 21 Nov, 19:10)
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
@@ -30,6 +30,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | 2 | Arm base poses in the table frame (marker 0). Nobody knows where the markers sit relative to the arms, so the arms measure it themselves: jog the gripper tip onto two marker centres, read the joints, FK (`arms/kinematics.py`) gives base x, y, yaw. ~2 min per arm. Until then: estimated from the image (+-3-5 cm; spacing checked against the measured 30 cm gap) | Aravind (tool), Hardware (jogging) | open |
 | 3 | Machines: decided (Aravind, 17:55): once everything is merged on `main` and verified, the real run happens on Aravind's laptop (RTX 4060): arms, cameras, Qwen and the executor in one process, so no network service is needed. Catch: the laptop is Windows, and Hardware's and Sahil's code assumes Linux (`/dev/ttyACM*`, `/dev/v4l/by-id/...`, `/sys`, `/proc`). Needs Windows entries (COM ports, camera names; the C920 already works through ffmpeg/DirectShow) or WSL with USB passthrough | Hardware, Aravind | open: settle before integration |
 | 4 | Grasp angle: pointing gives position only. IK cannot know the angle (it needs one as input). Cheap fix: Qwen gives two points along each object's long axis -> yaw in task args (`pick_yaw_deg`). A VLA can learn it from the wrist camera if its data has varied orientations (Sahil) | Aravind (yaw), Action (uses it) | open |
+| 7 | **Place must leave the shared area before it returns** (root cause of Vato's "stall" at 18:09): `place` ends hovering 8 cm over the bowl, the executor frees the bowl lock, and the next arm drives into the parked one; both jam. Traced in MuJoCo with Action's IK. Fix tried locally (not pushed, Action's file): `_do_place` moves to the arm's `carry` pose after releasing, as `pick` already can; with that, every run finished. Needs a `carry` pose per arm in `poses.json` that IK reaches, e.g. hacklab table: `rakesh_follower` [-0.171, 0.231, 0.10], `vato_follower` [0.748, 0.251, 0.10] (outer side, ~0.45 m from the bowl) | Action (Vivek) | open: Action's change |
 | 5 | Arg names: `object`, `target`, `pick_xyz`, `place_xyz` (metres, table frame) | Action, Operations | agreed in both designs; to confirm on #20 |
 | 6 | Third robot for the plug-in test (an arm joins mid-run, work re-splits): needs its catalog id (its follower calibration id) and base pose (same touch tool as #2). Placed where it reaches objects the other two cannot, it also unblocks steps | Hardware, Aravind | open |
 
@@ -44,7 +45,6 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
-| RTX rehearsal: Isaac Sim scene of the table and arms, plays the plan before the real run, side by side with the real arms; second machine | Vato | #33 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -65,7 +65,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | # | Item | State |
 |---|---|---|
 | #2 | Task model and task graph | first version on `main` (no JSON schema file yet) |
-| #3 | Arm registry | done: `registry/` catalog (`configs/arms.json`), SO-101 reach (0.44 m fully extended, hip +-110 deg, mounting yaw), `resolve()` fills `allowed_arms`; live arm state stays in the executor |
+| #3 | Arm registry | done: `registry/` catalog, SO-101 reach 0.14-0.42 m (pick IK, Action's `ik.py`), hip +-110 deg, mounting yaw; `resolve()` fills `allowed_arms`, distance-aware durations, clearance locks between arms; live arm state stays in the executor |
 | #4 | Worker interface | locked; in `arms/base.py` |
 | #5 | Event log | first version on `main` |
 | #6 | Greedy allocator | done: greedy fallback + HEFT full schedule (`scheduler/greedy.py`, `heft.py`) |
@@ -88,6 +88,40 @@ Update it when you start, finish or decide something. Notes for each other go un
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 19:10 (Aravind), answers to Vato's 18:09 IK validation (checked with `action-arm-skills`
+  merged in a local worktree, MuJoCo, Vato's scripts):
+  1. **Reach: done.** `SO101_REACH` is now 0.14-0.42 m from the hip axis (pick IK with the tool
+     down). Planner-yes / IK-no points: 33 and 36 before, 1 and 5 now (all at the 0.14 m edge);
+     IK-yes / planner-no: 3 and 6 (safe side). Both tests moved.
+  2. **The stall was not the pick zone.** Traced both tool points over time: after a place, the
+     arm stays hovering over the bowl after the bowl lock is freed; the next arm's place drives
+     into it and both jam. Action's place must retreat (Blockers #7).
+  3. **Clearance between arms: done** (`resolve(..., clearance_m=0.15)`): a step two arms can
+     reach locks the table cells around its point, so two arms never work closer than 15 cm at
+     once; one-arm steps take no lock. On the real table layout (Qwen's 5 positions), 3 runs each:
+     place-retreat alone 1/3 runs finished (tool points 8-11 cm apart); clearance alone 0/3;
+     **both 3/3** (11.8-14.5 cm apart), ~35% longer than the one lucky run without clearance.
+  4. For the demo runner (yours): `demo.py:97` calls `resolve(graph, ..., travel_s_per_m=10.0)`;
+     please add `clearance_m=0.15` (as `scripts/real_table_plan.py` does) so the real arms keep
+     15 cm apart in the shared area.
+
+- 18:56 (Vato): **Demo plan updated** (`docs/plan.md`, Demo): VLM splits the task on screen ->
+  one arm sorting -> second arm plugged in -> visible re-planning moment -> time comes down ->
+  both arms work. Built on `orchestrator`: the re-planning banner (4 s: "re-planning…", then
+  before / after and the plans compared), a top-view map "who takes what" (arms' reach, bowl,
+  objects coloured by planned arm), `python -m hfteama.demo --table configs/hacklab_table.json`
+  (reach from the table layout), stand-in batch `tasks/sort/hacklab6.json`.
+  **Aravind, needed for the film:** (1) `--planner` hook returning your resolved graph, with
+  `args.object`, `args.label` and `pick_xyz` on the pick steps (the map reads them); (2) reach
+  0.14-0.42 m; (3) write a `scene` event or tell me the object list after each scan so the map
+  follows re-scans. **Layout rule for the film:** arm 1 must reach every object, otherwise the
+  time goes up when arm 2 joins (seen on the hacklab layout: 0:43 -> 0:50).
+
+- 18:48 (Vato): **Isaac Sim is dropped** (#33 closed; scripts and the joint streamer removed).
+  **The demo is filmed on the real setup:** one arm sorting, the second arm is plugged in, the
+  screen shows the re-planning moment, the predicted finish time comes down, both arms work
+  together.
 
 - 18:27 (Vato): **RTX rehearsal bridge works (#33):** `view/joint_stream.py` streams each simulated
   arm's joints over UDP; `python -m hfteama.demo --backend sim --isaac HOST:PORT` turns it on.
@@ -244,6 +278,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 20:12 (Vato): demo runner uses 15 cm clearance between arms (`--clearance`, default 0.15, 0 = off), as Aravind asked at 19:10. His checks run here: 149 tests pass, ruff clean. Blockers #7 (place must retreat to carry) reads right; fine to send to Action.
+- 19:10 (Aravind): IK join: reach 0.14-0.42 m, clearance locks, stall traced to place not leaving the bowl (Action, Blockers #7).
 - 17:55 (Aravind): real run on Aravind's laptop after the merge to `main` (no Qwen service needed); Windows paths flagged; third robot for the plug-in test.
 - 17:20 (Aravind): real camera end to end (markers, Qwen positions, reach, executor split); blockers table for the real arms.
 - 16:41 (Aravind): status tidied (#15 done by Vato, asks answered); Aravind takes the VLM -> live screen wiring.
@@ -260,14 +296,14 @@ orchestrator); 2 wrist cameras (for the grasping skill / VLA); 1 top camera (C92
 objects, step check); a third robot to plug in mid-run. All on Aravind's laptop after the merge to
 `main`.
 
-All on `orchestrator`. Verified on Aravind's laptop: `ruff check .` clean, `pytest` 125 passed
+All on `orchestrator`. Verified on Aravind's laptop: `ruff check .` clean, `pytest` 149 passed (with CI's extras)
 (2 skipped: no ortools / dash locally). Please run the checks below and tick them.
 
 ### What is built
 
 | Piece | Where | What it does |
 |---|---|---|
-| Arm registry, reach (#3) | `registry/` | catalog from config; SO-101 reach 0.44 m from the hip axis, hip +-110 deg, mounting yaw; `resolve(graph, arms, travel_s_per_m)` fills `allowed_arms` and per-arm durations by distance (nearer arm is faster) |
+| Arm registry, reach (#3) | `registry/` | catalog from config; SO-101 reach 0.14-0.42 m from the hip axis (checked against Action's IK), hip +-110 deg, mounting yaw; `resolve(graph, arms, travel_s_per_m, clearance_m)` fills `allowed_arms`, per-arm durations by distance (nearer arm is faster) and 15 cm clearance locks between arms |
 | Camera calibration | `perception/markers.py` | camera pose + focal length from the ArUco tags on the table (4x4, 7 cm), every run; table frame = marker 0 |
 | Object detection | `perception/pointing.py` | Qwen points at every object; pixel ray meets the table plane -> metres |
 | Decomposer | `perception/decomposer.py` | Qwen picks categories and bins; pick + place per object (`same_arm_as`, `pick_xyz`, `place_xyz`, bin as resource); validator + 3 retries |
@@ -305,6 +341,14 @@ the executor and travel tests pass; `resolve()`, `as_verifier` (returns `(ok, wh
 and catalog ids (`rakesh_follower`, `vato_follower`) all fit the executor. Watch: Action's handoff
 example names the real worker `arm_a`; it must use the catalog id or reach and planning will not
 match (flagged on #20). The camera run (last item) needs your laptop.
+
+### New checks for Vato (19:10, IK join)
+
+- [ ] `pytest tests/test_registry.py -k "clearance or reach"`: reach 0.14-0.42 m; picks 6 cm
+      apart never run at once; one-arm steps take no zone lock.
+- [ ] With `action-arm-skills` merged locally: `python scripts/validation/reach_vs_ik.py` shows
+      planner-yes / IK-no at 1 and 5 points (was 33 and 36).
+- [ ] Blockers #7 (place retreat) reads right to you before it goes to Vivek.
 
 ### Open on Aravind's side
 

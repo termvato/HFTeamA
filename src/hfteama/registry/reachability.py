@@ -66,8 +66,34 @@ class ReachResult:
         return TaskGraph(name=self.graph.name, tasks=tasks)
 
 
+def clearance_zones(points: list[tuple[float, ...]], clearance_m: float) -> list[str]:
+    """Table cells (size clearance/4) touched by a disc of radius clearance/2 around each point.
+
+    Two points closer than clearance_m have overlapping discs, so they share a cell: their steps
+    lock a common resource and never run at the same time. Points farther apart than
+    clearance_m + one cell diagonal (about 1.35 x clearance_m) never share one.
+    """
+    cell = clearance_m / 4.0
+    r = clearance_m / 2.0
+    out: list[str] = []
+    for p in points:
+        x, y = p[0], p[1]
+        for i in range(math.floor((x - r) / cell), math.floor((x + r) / cell) + 1):
+            for j in range(math.floor((y - r) / cell), math.floor((y + r) / cell) + 1):
+                # nearest point of cell (i, j) to the disc centre
+                nx = min(max(x, i * cell), (i + 1) * cell)
+                ny = min(max(y, j * cell), (j + 1) * cell)
+                z = f"zone:{i},{j}"
+                if math.hypot(nx - x, ny - y) <= r and z not in out:
+                    out.append(z)
+    return out
+
+
 def resolve(
-    graph: TaskGraph, arms: Iterable[ArmNode], travel_s_per_m: float | None = None
+    graph: TaskGraph,
+    arms: Iterable[ArmNode],
+    travel_s_per_m: float | None = None,
+    clearance_m: float | None = None,
 ) -> ReachResult:
     """Fill allowed_arms from reach, and find the steps none of `arms` can do.
 
@@ -83,6 +109,10 @@ def resolve(
     the step's duration plus this many seconds per metre from the arm's pan axis to the step's
     points (architecture doc 4.3), so the planner prefers the nearer arm. A prior only: once an
     arm has measured runs of a skill, the executor's DurationModel uses those instead.
+
+    clearance_m: if set, a step that two or more arms can reach locks the table cells around its
+    points (resources "zone:i,j", see clearance_zones), so two arms never work on points closer
+    than clearance_m at the same time. Steps only one arm can reach take no zone locks.
     """
     arms = list(arms)
     allowed = {tid: arms_reaching(t, arms) for tid, t in graph.tasks.items()}
@@ -101,13 +131,21 @@ def resolve(
     tasks = {}
     for tid, t in graph.tasks.items():
         durations = dict(t.durations)
+        resources = list(t.resources)
         pts = task_points(t)
         if travel_s_per_m and pts:
             for arm_id in allowed[tid]:
                 a = by_id[arm_id]
                 reach = sum(math.dist(a.pan_axis_xy, p[:2]) for p in pts) / len(pts)
                 durations[arm_id] = t.duration_on(arm_id) + travel_s_per_m * reach
-        tasks[tid] = replace(t, allowed_arms=tuple(sorted(allowed[tid])), durations=durations)
+        if clearance_m and pts and len(allowed[tid]) >= 2:
+            resources += [z for z in clearance_zones(pts, clearance_m) if z not in resources]
+        tasks[tid] = replace(
+            t,
+            allowed_arms=tuple(sorted(allowed[tid])),
+            durations=durations,
+            resources=tuple(resources),
+        )
     return ReachResult(
         graph=TaskGraph(name=graph.name, tasks=tasks),
         blocked=frozenset(blocked),

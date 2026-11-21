@@ -79,6 +79,12 @@ def main() -> int:
     ap.add_argument("--image", help="frame file or URL instead of a camera")
     ap.add_argument("--table", default=str(ROOT / "configs/hacklab_table.json"))
     ap.add_argument("--travel", type=float, default=4.0, help="s per metre from arm to step")
+    ap.add_argument(
+        "--clearance",
+        type=float,
+        default=0.15,
+        help="min distance (m) between two arms working at once; 0 = off",
+    )
     ap.add_argument("--image-side", type=int, default=1920, help="pixels sent to Qwen")
     ap.add_argument("--out", default="real_table_plan.png")
     ap.add_argument("--no-run", action="store_true", help="skip the executor runs")
@@ -128,7 +134,7 @@ def main() -> int:
     finally:
         vlm.unload()
 
-    rr = resolve(dec.graph, arms, travel_s_per_m=a.travel)
+    rr = resolve(dec.graph, arms, travel_s_per_m=a.travel, clearance_m=a.clearance)
     print("\nsteps (allowed arms: planned seconds):")
     for tid, t in rr.graph.tasks.items():
         times = ", ".join(f"{arm} {t.duration_on(arm):.1f}" for arm in t.allowed_arms)

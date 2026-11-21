@@ -83,15 +83,24 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | Failures | Says what happened ("grasp failed, retrying", "arm lost, moving its work", "too slow") and recovers; a camera check confirms every place step (decided 21 Nov: one GPU, ~2.8 s per check; a failed pick shows up as a grasp failure). |
 | Scene changes | New or moved objects mid-run: the camera notices, the VLM re-reads the table, the plan and countdown update. |
 | Simulated arms | Only in the what-if estimate; they do not execute in the live run. |
-| RTX rehearsal (sim first, then real) | On Go, the batch first plays in a photoreal Isaac Sim scene of the same table (same plan, same arms), then the identical plan runs on the real arms; sim and real side by side. Built by Operations; runs on a second machine (GPU: Isaac Sim and the VLM do not share one 8 GB laptop). |
 
-## Demo
+## Demo (filmed on the real setup)
 
-1. Objects on the table, one arm plugged in: the screen shows the VLM's grouping and the estimate (with what-if for more arms).
-2. Press Go. Plug in a second arm mid-run: it is detected, the work re-splits, the countdown drops.
-3. Plug in the third: a smaller drop, and the screen names the limit.
-4. Drop a part or unplug an arm: the screen says what happened and the work flows to the others.
-5. Drop a new object on the table: it is picked up by the re-scan and sorted too.
+1. **The VLM splits the task.** The top camera sees the table; the VLM names the objects and
+   decides where each goes. The screen shows a top view: every object in the colour of the arm
+   that will take it, each arm's reach, and the estimated time.
+2. **One real arm is sorting**; the countdown runs.
+3. **Someone plugs in the second arm.**
+4. **The system re-plans, visibly:** "Arm joined: re-planning…", then the plans it compared (reach,
+   free arms, shared areas) and the time before and after. Narration: once the plan settles on the
+   best split for reach and availability, the arms move.
+5. **The predicted finish time comes down** and **both arms work together** until the batch is done.
+
+For the time to come down in step 5, the first arm must be able to reach every object; objects only
+the second arm can reach add work when it joins, and the time goes up instead.
+
+Try it without hardware: `python -m hfteama.demo --backend fake --table configs/hacklab_table.json
+--task tasks/sort/hacklab6.json --plugged rakesh_follower`.
 
 ## Later extensions (not in the core build)
 
@@ -135,7 +144,6 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | Scaling benchmark | done: about 2.2x with 3 arms, then a shared area or step order limits it |
 | Real-arm skills and driver | written and tested in MuJoCo (branch `action-arm-skills`); not yet run on a real arm |
 | Real run (camera + VLM + executor + real arms) | waiting for the first real arm motion |
-| RTX rehearsal in Isaac Sim (#33) | feasibility done; bridge from the plan still to build |
 
 ## Run
 
