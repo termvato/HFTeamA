@@ -1,0 +1,5 @@
+
+# Per-rig arm registry (USB serials)
+vla/arms.json
+__pycache__/
+*.py[cod]
