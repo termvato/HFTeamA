@@ -1,5 +1,7 @@
 # One trained policy, any number of arms
 
+Team summary of this as an alternate method: [`docs/alternate_method_vla.md`](../docs/alternate_method_vla.md).
+
 **Question.** We trained a policy on one arm ("put the objects in the box"). When a second arm is
 plugged in, can that same model split the work, e.g. 4 objects: arm A does two and arm B the
 other two, without training anything on arm B?

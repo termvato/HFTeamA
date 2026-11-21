@@ -236,6 +236,7 @@ lerobot-train \
 
 ## Part 6 (later): Use the policy in our architecture
 
+The team-facing summary of this alternate method is [`docs/alternate_method_vla.md`](../docs/alternate_method_vla.md).
 How one policy trained on one arm serves 2+ arms (who splits the work, what transfers to an
 untrained arm, what to record): [`multi_arm_policy.md`](multi_arm_policy.md).
 
