@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>HFTeamA Orchestrator Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column, schematic diagram first, then sequence, limits, ownership, phases. */
+:root {
+  --bg: #F3F5F6; --surface: #FFFFFF; --fg: #16212B; --muted: #5B6873; --line: #C6CFD5;
+  --accent: #1C6E8C; --done: #2E7D4F; --todo: #A86B12;
+  --arms: #1C6E8C; --zone: #C0612B; --chain: #7A5AA6;
+  --display: "Chivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0F161C; --surface: #172129; --fg: #E3E9ED; --muted: #93A1AC; --line: #2F3D48;
+  --accent: #5FB3D1; --done: #5CC08A; --todo: #E0A54A;
+  --arms: #5FB3D1; --zone: #E08654; --chain: #A98BD8; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0F161C; --surface: #172129; --fg: #E3E9ED; --muted: #93A1AC; --line: #2F3D48;
+  --accent: #5FB3D1; --done: #5CC08A; --todo: #E0A54A;
+  --arms: #5FB3D1; --zone: #E08654; --chain: #A98BD8; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1060px; margin: 0 auto; padding-block: 32px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 44px; }
+header { display: grid; gap: 8px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 4.4vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); font-size: 16.5px; }
+section { display: grid; gap: 14px; min-width: 0; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.done { border: 2px solid var(--done); background: color-mix(in srgb, var(--done) 14%, transparent); }
+.sw.todo { border: 2px dashed var(--todo); }
+
+.diagram { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.diagram svg { display: block; min-width: 780px; width: 100%; height: auto; }
+svg text { font-family: var(--body); fill: var(--fg); }
+svg .t { font-family: var(--display); font-weight: 600; font-size: 15px; }
+svg .s { font-size: 12px; fill: var(--muted); }
+svg .m { font-family: var(--mono); font-size: 11.5px; fill: var(--fg); }
+svg .lab { font-family: var(--mono); font-size: 11px; fill: var(--accent); }
+svg .box { fill: var(--surface); stroke-width: 2; }
+svg .done { stroke: var(--done); fill: color-mix(in srgb, var(--done) 9%, var(--surface)); }
+svg .todo { stroke: var(--todo); stroke-dasharray: 6 4; }
+svg .group { fill: none; stroke: var(--line); stroke-width: 1.5; }
+svg .arrow { stroke: var(--accent); stroke-width: 2; fill: none; }
+svg .ah { fill: var(--accent); }
+
+ol.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: s; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+ol.steps li::before { content: counter(s); font-family: var(--mono); font-weight: 500; color: var(--accent);
+  border: 1.5px solid var(--accent); border-radius: 50%; width: 26px; height: 26px; display: grid; place-items: center; font-size: 13px; }
+ol.steps li > div { min-width: 0; }
+ol.steps b { font-weight: 600; }
+.note { font-size: 14px; color: var(--muted); border-left: 3px solid var(--zone); padding-left: 12px; }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.chart { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+.chart h3 { margin: 0; font-family: var(--mono); font-weight: 500; font-size: 14px; }
+.chart .sub { font-size: 13px; color: var(--muted); }
+.row { display: grid; grid-template-columns: 58px 1fr 64px; align-items: center; gap: 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.row .n { font-family: var(--mono); color: var(--muted); }
+.track { height: 16px; background: color-mix(in srgb, var(--line) 45%, transparent); border-radius: 3px; overflow: hidden; }
+.bar { height: 100%; border-radius: 3px; }
+.bar.arms { background: var(--arms); } .bar.zone { background: var(--zone); } .bar.chain { background: var(--chain); }
+.row .v { font-family: var(--mono); text-align: right; }
+.keys { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); }
+.keys i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 14px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-weight: 500; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.path { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 11.5px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.done { color: var(--done); border: 1.5px solid var(--done); }
+.pill.todo { color: var(--todo); border: 1.5px dashed var(--todo); }
+
+.phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
+.phase { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.phase .h { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.phase b { font-family: var(--display); font-weight: 600; font-size: 16px; }
+.phase p { font-size: 13.5px; color: var(--muted); }
+.phase .gate { font-size: 13px; border-top: 1px dashed var(--line); padding-top: 6px; }
+footer { font-size: 13px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">HFTeamA · HackLab Berlin · plug and produce</div>
+    <h1>HFTeamA Orchestrator Map</h1>
+    <p class="lede">Plug in more SO-101 arms and the batch finishes sooner. When an arm is added, removed or fails, the orchestrator re-splits the remaining work, shows the new finish time, and names what stops further speed-up. The core knows no task: each task is a folder of steps, order and shared zones.</p>
+  </header>
+
+  <section>
+    <h2>How the parts connect</h2>
+    <div class="legend">
+      <span><i class="sw done"></i>built and tested</span>
+      <span><i class="sw todo"></i>to build</span>
+    </div>
+    <div class="diagram">
+      <svg viewBox="0 0 1000 570" role="img" aria-label="Architecture: task folder feeds task graph, scheduler makes a plan, executor runs arm workers, discovery reports arms, events feed the live view">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- tasks folder -->
+        <rect class="box done" x="20" y="50" width="200" height="150" rx="8"/>
+        <text class="t" x="36" y="78">tasks/&lt;name&gt;/</text>
+        <text class="m" x="36" y="104">graph.json</text>
+        <text class="m" x="36" y="124">poses.json</text>
+        <text class="m" x="36" y="144">skills.py  (optional)</text>
+        <text class="s" x="36" y="176">examples: sort12, assemble3</text>
+
+        <!-- taskgraph -->
+        <rect class="box done" x="280" y="50" width="200" height="100" rx="8"/>
+        <text class="t" x="296" y="78">taskgraph</text>
+        <text class="s" x="296" y="102">load and validate:</text>
+        <text class="s" x="296" y="120">order, zones, reach, durations</text>
+
+        <!-- scheduler -->
+        <rect class="box todo" x="280" y="220" width="200" height="150" rx="8"/>
+        <text class="t" x="296" y="248">scheduler</text>
+        <text class="s" x="296" y="272">HEFT: fast, never fails</text>
+        <text class="s" x="296" y="292">CP-SAT: best plan, 5 s</text>
+        <text class="s" x="296" y="312">plan checker</text>
+        <text class="m" x="296" y="345" style="fill:var(--done)">✓ lower bound + limit</text>
+
+        <!-- executor -->
+        <rect class="box todo" x="540" y="50" width="200" height="320" rx="8"/>
+        <text class="t" x="556" y="78">executor</text>
+        <text class="s" x="556" y="104">starts a task when its deps,</text>
+        <text class="s" x="556" y="122">arm and zones are free</text>
+        <text class="s" x="556" y="152">zone locks, checked again</text>
+        <text class="s" x="556" y="170">right before motion</text>
+        <text class="s" x="556" y="200">re-plans on arm added,</text>
+        <text class="s" x="556" y="218">removed, failed, or overrun</text>
+        <text class="s" x="556" y="248">running tasks stay fixed</text>
+        <text class="s" x="556" y="278">writes every event</text>
+
+        <!-- arm workers group -->
+        <rect class="group" x="790" y="30" width="195" height="350" rx="10"/>
+        <text class="t" x="804" y="56">arm workers</text>
+        <text class="s" x="804" y="74">one process per arm</text>
+        <rect class="box done" x="804" y="86" width="167" height="34" rx="6"/>
+        <text class="m" x="814" y="108">execute(task) → Result</text>
+        <rect class="box todo" x="804" y="136" width="167" height="64" rx="6"/>
+        <text class="t" x="816" y="160" style="font-size:14px">fake</text>
+        <text class="s" x="816" y="182">sleeps; for tests</text>
+        <rect class="box todo" x="804" y="212" width="167" height="64" rx="6"/>
+        <text class="t" x="816" y="236" style="font-size:14px">MuJoCo</text>
+        <text class="s" x="816" y="258">sim SO-101, 1x clock</text>
+        <rect class="box todo" x="804" y="288" width="167" height="76" rx="6"/>
+        <text class="t" x="816" y="312" style="font-size:14px">real SO-101</text>
+        <text class="s" x="816" y="332">LeRobot SOFollower</text>
+        <text class="s" x="816" y="350">skills + grasp check</text>
+
+        <!-- discovery -->
+        <rect class="box todo" x="790" y="430" width="195" height="120" rx="8"/>
+        <text class="t" x="806" y="458">discovery</text>
+        <text class="s" x="806" y="482">watches USB for known arms</text>
+        <text class="s" x="806" y="500">safety check, slow home</text>
+        <text class="s" x="806" y="518">reports arm added / removed</text>
+
+        <!-- event log -->
+        <rect class="box done" x="540" y="430" width="200" height="120" rx="8"/>
+        <text class="t" x="556" y="458">event log</text>
+        <text class="s" x="556" y="482">plan, task start / end,</text>
+        <text class="s" x="556" y="500">arm events, re-plans</text>
+        <text class="m" x="556" y="530">events.jsonl</text>
+
+        <!-- view -->
+        <rect class="box todo" x="20" y="430" width="460" height="120" rx="8"/>
+        <text class="t" x="36" y="458">live view</text>
+        <text class="s" x="36" y="482">Gantt per arm: plan faint, actual solid, failures red, REAL / SIM lanes</text>
+        <text class="s" x="36" y="502">predicted finish time and the limit in words</text>
+        <text class="s" x="36" y="522">scaling plot: finish time vs number of arms</text>
+
+        <!-- arrows -->
+        <path class="arrow" d="M220,100 L276,100" marker-end="url(#ah)"/>
+        <path class="arrow" d="M380,150 L380,216" marker-end="url(#ah)"/>
+        <text class="lab" x="388" y="190">graph</text>
+        <path class="arrow" d="M480,268 L536,268" marker-end="url(#ah)"/>
+        <text class="lab" x="490" y="260">plan</text>
+        <path class="arrow" d="M540,326 L484,326" marker-end="url(#ah)"/>
+        <text class="lab" x="486" y="345">re-plan</text>
+        <path class="arrow" d="M740,170 L800,170" marker-end="url(#ah)"/>
+        <text class="lab" x="745" y="162">run</text>
+        <path class="arrow" d="M800,246 L744,246" marker-end="url(#ah)"/>
+        <text class="lab" x="745" y="238">result</text>
+        <path class="arrow" d="M790,460 C760,460 770,370 744,350" marker-end="url(#ah)"/>
+        <path class="arrow" d="M640,370 L640,426" marker-end="url(#ah)"/>
+        <text class="lab" x="648" y="402">events</text>
+        <path class="arrow" d="M540,490 L484,490" marker-end="url(#ah)"/>
+        <text class="lab" x="492" y="482">read</text>
+      </svg>
+    </div>
+    <p style="font-size:14px;color:var(--muted)">Three shared formats are fixed so people can build in parallel: the task graph, the arm contract <code>execute(task) → Result</code> (ok, grasp_fail, timeout, arm_down), and the event log.</p>
+  </section>
+
+  <section>
+    <h2>When an arm is plugged in</h2>
+    <ol class="steps">
+      <li><div><b>Discovery sees a known USB serial</b> and looks it up in the arm registry (id, calibration, base position, reach).</div></li>
+      <li><div><b>The arm's worker starts</b>, reads pose, temperatures and torque, and checks targets are inside joint limits and above the table.</div></li>
+      <li><div><b>The arm moves slowly to home</b>, reports READY, and an <code>arm_added</code> event goes to the executor.</div></li>
+      <li><div><b>The executor re-plans the remaining work.</b> Tasks already running stay where they are. CP-SAT gets 1 to 2 seconds; HEFT takes over if it runs out.</div></li>
+      <li><div><b>The screen updates:</b> new bars on the Gantt, a new predicted finish time, and the limit that now binds.</div></li>
+    </ol>
+    <p class="note">Removing an arm is a slow stop: press "remove arm N", the arm finishes or aborts its skill and parks, then the cable comes out. Its unfinished tasks go back to the others. A dropped part is caught by the grasp check and retried.</p>
+  </section>
+
+  <section>
+    <h2>Why the speed-up curve bends</h2>
+    <p>Finish time can never beat the largest of three numbers: total work divided by arms, the longest chain of ordered steps, and the busiest shared zone. The bar colour shows which one binds. Values are lower bounds in seconds from the code, with placeholder durations until we time the real arms.</p>
+    <div class="keys"><span><i style="background:var(--arms)"></i>arm count</span><span><i style="background:var(--zone)"></i>shared zone</span><span><i style="background:var(--chain)"></i>step order</span></div>
+    <div class="charts">
+      <div class="chart">
+        <h3>sort12</h3>
+        <div class="sub">12 blocks: pick from one shared input bin, then place</div>
+        <div class="row"><span class="n">1 arm</span><div class="track"><div class="bar arms" style="width:100%"></div></div><span class="v">120 s</span></div>
+        <div class="row"><span class="n">2 arms</span><div class="track"><div class="bar arms" style="width:50%"></div></div><span class="v">60 s</span></div>
+        <div class="row"><span class="n">3 arms</span><div class="track"><div class="bar zone" style="width:40%"></div></div><span class="v">48 s</span></div>
+        <div class="row"><span class="n">4 arms</span><div class="track"><div class="bar zone" style="width:40%"></div></div><span class="v">48 s</span></div>
+        <div class="row"><span class="n">6 arms</span><div class="track"><div class="bar zone" style="width:40%"></div></div><span class="v">48 s</span></div>
+        <div class="sub">From 3 arms the input bin is the bottleneck: a second bin helps more than a fourth arm.</div>
+      </div>
+      <div class="chart">
+        <h3>assemble3</h3>
+        <div class="sub">3 products, 5 ordered steps each, shared output tray</div>
+        <div class="row"><span class="n">1 arm</span><div class="track"><div class="bar arms" style="width:77.5%"></div></div><span class="v">93 s</span></div>
+        <div class="row"><span class="n">2 arms</span><div class="track"><div class="bar arms" style="width:38.75%"></div></div><span class="v">46.5 s</span></div>
+        <div class="row"><span class="n">3 arms</span><div class="track"><div class="bar arms" style="width:25.83%"></div></div><span class="v">31 s</span></div>
+        <div class="row"><span class="n">4 arms</span><div class="track"><div class="bar chain" style="width:25.83%"></div></div><span class="v">31 s</span></div>
+        <div class="row"><span class="n">6 arms</span><div class="track"><div class="bar chain" style="width:25.83%"></div></div><span class="v">31 s</span></div>
+        <div class="sub">From 4 arms the order of steps caps it: more arms add nothing.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Who builds what</h2>
+    <p style="font-size:14px;color:var(--muted)">Each team owns a problem; how to solve it is the team's call. Hardware: Diego, Om (#19). Action: Vivek, Sahil (#20). Operations: Vato, Aravind (#21, backlog #2 to #18).</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Path</th><th>Part</th><th>Team</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="path">taskgraph/</td><td>task graph format, loader, validator</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
+          <tr><td class="path">scheduler/</td><td>plan format and lower bound</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
+          <tr><td class="path">scheduler/</td><td>planning (fast and best plans), plan checker</td><td>Operations</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">executor/</td><td>running the plan, re-splitting</td><td>Operations</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">events.py</td><td>event log</td><td>Operations</td><td><span class="pill done">done</span></td></tr>
+          <tr><td class="path">arms/base.py</td><td>arm contract</td><td>all teams agree</td><td><span class="pill done">done</span></td></tr>
+          <tr><td class="path">arms/skills.py</td><td>skill registry</td><td>Action</td><td><span class="pill done">done</span></td></tr>
+          <tr><td class="path">arms/</td><td>skills on real arms</td><td>Action</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">arms/</td><td>safe real arms, plug-in detection</td><td>Hardware</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">arms/</td><td>simulated arms</td><td>Action</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">view/</td><td>live screen, fake arms for testing</td><td>Operations</td><td><span class="pill todo">to build</span></td></tr>
+          <tr><td class="path">tasks/</td><td>one folder per task</td><td>task owner</td><td><span class="pill done">2 examples</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Phases and gates</h2>
+    <div class="phases">
+      <div class="phase"><span class="h">H0 to H2</span><b>Shared formats</b><p>Task graph, arm contract, event log.</p><div class="gate">Gate: formats fixed. Done.</div></div>
+      <div class="phase"><span class="h">H2 to H10</span><b>Software loop</b><p>Fake arms, HEFT, executor, Gantt. No hardware needed.</p><div class="gate">Gate: "add arm" in the UI moves the finish time.</div></div>
+      <div class="phase"><span class="h">H10 to H20</span><b>CP-SAT and sim arms</b><p>Best-plan solver, MuJoCo workers.</p><div class="gate">Gate: CP-SAT under 5 s, else HEFT runs live.</div></div>
+      <div class="phase"><span class="h">From H2, in parallel</span><b>Real arms</b><p>Registry, plug detection, skills, grasp check, zone locks.</p><div class="gate">Gate: plugging arm 2 mid-run triggers a re-plan.</div></div>
+      <div class="phase"><span class="h">H30 to H48</span><b>Demo</b><p>Scaling sweep, baselines (1 arm, HEFT, CP-SAT), backup video.</p><div class="gate">Gate: code freeze at H40.</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Later extension</h2>
+    <p class="note" style="border-left-color:var(--chain)"><b>Two-hand steps unlocked by a second arm.</b> A step that needs two arms (hold and insert, handoff) stays blocked while one arm is plugged in; plugging in arm 2 makes it runnable, so a new arm adds capability as well as speed. Fits the current task graph via <code>needs_arms: 2</code>. Not in the core build.</p>
+  </section>
+
+  <footer>Repo termvato/HFTeamA, branch termvato. Status as of Saturday 21 November 2026.</footer>
+</div>
+
+</body>
+</html>

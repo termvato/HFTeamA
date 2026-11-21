@@ -11,7 +11,7 @@ from hfteama.taskgraph import Task
 
 class Outcome(str, Enum):
     OK = "ok"
-    GRASP_FAIL = "grasp_fail"  # gripper closed to near-empty, or object lost in transport
+    FAILED = "failed"  # the step did not succeed (e.g. part not grasped); see Result.reason
     TIMEOUT = "timeout"  # skill ran past ~1.5x predicted duration
     ARM_DOWN = "arm_down"  # bus error, heartbeat lost, or arm removed
 
@@ -29,12 +29,13 @@ class Result:
     task_id: str
     arm_id: str
     outcome: Outcome
-    started: float  # wall clock, time.time()
-    ended: float
+    started_at: float  # wall clock, time.time()
+    finished_at: float
+    reason: str = ""  # free text for FAILED / ARM_DOWN, e.g. "grasp", "bus error"
 
     @property
     def duration(self) -> float:
-        return self.ended - self.started
+        return self.finished_at - self.started_at
 
 
 class ArmWorker(Protocol):
@@ -45,6 +46,14 @@ class ArmWorker(Protocol):
 
     def execute(self, task: Task) -> Result:
         """Run one task's skill. Blocks until done. Never raises for a task failure; returns it."""
+        ...
+
+    def heartbeat(self) -> float:
+        """Time of the arm's last sign of life; the executor marks it down if this goes stale."""
+        ...
+
+    def cancel(self, task_id: str) -> None:
+        """Stop a task no longer assigned to this arm (slow stop, then park or hold safely)."""
         ...
 
     def park(self) -> None:

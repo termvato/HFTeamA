@@ -18,15 +18,21 @@ class Task:
     skill: str
     args: dict[str, Any] = field(default_factory=dict)
     deps: tuple[str, ...] = ()
-    zones: tuple[str, ...] = ()
+    resources: tuple[str, ...] = ()  # shared zones / tools, capacity 1
     allowed_arms: str | tuple[str, ...] = "*"
+    capability: str | None = None  # kind of arm needed; None = any
     duration: float = 0.0
     durations: dict[str, float] = field(default_factory=dict)
     needs_arms: int = 1
     same_arm_as: str | None = None
 
-    def can_run_on(self, arm_id: str) -> bool:
-        return self.allowed_arms == "*" or arm_id in self.allowed_arms
+    def can_run_on(self, arm_id: str, capabilities: frozenset[str] | None = None) -> bool:
+        """True if the arm may run this task (listed, and has the capability when one is needed)."""
+        if self.allowed_arms != "*" and arm_id not in self.allowed_arms:
+            return False
+        if self.capability is None or capabilities is None:
+            return True
+        return self.capability in capabilities
 
     def duration_on(self, arm_id: str) -> float:
         return self.durations.get(arm_id, self.duration)
@@ -79,7 +85,8 @@ def _task_from_dict(d: dict[str, Any]) -> Task:
         skill=d["skill"],
         args=dict(d.get("args", {})),
         deps=tuple(d.get("deps", ())),
-        zones=tuple(d.get("zones", ())),
+        resources=tuple(d.get("resources", ())),
+        capability=d.get("capability"),
         allowed_arms=arms if arms == "*" else tuple(arms),
         duration=float(d.get("duration", 0.0)),
         durations={k: float(v) for k, v in d.get("durations", {}).items()},

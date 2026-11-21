@@ -19,7 +19,7 @@ class Plan:
     solver: str  # "heft" | "cpsat"
     makespan: float  # predicted finish time
     lower_bound: float = 0.0
-    binding: str = ""  # "arms" | "chain" | "zone:<name>"
+    binding: str = ""  # "arms" | "order" | "resource:<name>"
     info: dict[str, float] = field(default_factory=dict)  # solve time, gap, ...
 
     def by_arm(self) -> dict[str, list[Assignment]]:

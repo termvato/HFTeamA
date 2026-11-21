@@ -16,7 +16,7 @@ tasks/<name>/
 ## Adding a task in 4 steps
 
 1. Split the job into steps an arm does alone (or two arms together: `needs_arms: 2`).
-2. Write the graph: `deps` for order, `zones` for shared table regions (a bin, a fixture, a tray),
+2. Write the graph: `deps` for order, `resources` for shared regions or tools (a bin, a fixture, a tray),
    `same_arm_as` when an arm must keep holding the object, `allowed_arms` when reach differs.
 3. Reuse generic skills (`pick`, `place`, `pick_place`, `inspect`, `park`); add new ones with
    `@skill("name")` from `hfteama.arms.skills`.
@@ -24,8 +24,9 @@ tasks/<name>/
 
 ## What makes a task speed up with more arms
 
-The lower bound `max(work / N, longest chain, busiest zone)` tells you before you build:
-- many independent units (sorting, kitting, packing): scales until a shared zone saturates.
+The lower bound `max(work / N, longest chain of ordered steps, busiest shared resource)` tells
+you before you build:
+- many independent units (sorting, kitting, packing): scales until a shared resource saturates.
 - long ordered chains (assembly): capped by the chain, whatever N is.
 
 ## Included

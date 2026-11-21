@@ -8,7 +8,8 @@ Owners:
 - Action (#20): the skills, on real and simulated arms. Scripted, learned or both is their call.
 - Operations (#21): the contract in base.py and a fake arm for testing (backlog #4, #14).
 
-Every backend implements arms.base.ArmWorker: state(), execute(task) -> Result, park().
+Every backend implements arms.base.ArmWorker: state(), execute(task) -> Result, heartbeat(),
+cancel(task_id), park().
 """
 
 from hfteama.arms.base import ArmState, ArmWorker, Outcome, Result

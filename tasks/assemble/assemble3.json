@@ -10,9 +10,9 @@
         "step": "base"
       },
       "deps": [],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 6.0
+      "duration": 6.0,
+      "resources": []
     },
     {
       "id": "p1_peg1",
@@ -24,9 +24,9 @@
       "deps": [
         "p1_base"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 8.0
+      "duration": 8.0,
+      "resources": []
     },
     {
       "id": "p1_peg2",
@@ -38,9 +38,9 @@
       "deps": [
         "p1_peg1"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 8.0
+      "duration": 8.0,
+      "resources": []
     },
     {
       "id": "p1_inspect",
@@ -52,9 +52,9 @@
       "deps": [
         "p1_peg2"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": []
     },
     {
       "id": "p1_out",
@@ -66,11 +66,11 @@
       "deps": [
         "p1_inspect"
       ],
-      "zones": [
-        "output_tray"
-      ],
       "allowed_arms": "*",
-      "duration": 5.0
+      "duration": 5.0,
+      "resources": [
+        "output_tray"
+      ]
     },
     {
       "id": "p2_base",
@@ -80,9 +80,9 @@
         "step": "base"
       },
       "deps": [],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 6.0
+      "duration": 6.0,
+      "resources": []
     },
     {
       "id": "p2_peg1",
@@ -94,9 +94,9 @@
       "deps": [
         "p2_base"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 8.0
+      "duration": 8.0,
+      "resources": []
     },
     {
       "id": "p2_peg2",
@@ -108,9 +108,9 @@
       "deps": [
         "p2_peg1"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 8.0
+      "duration": 8.0,
+      "resources": []
     },
     {
       "id": "p2_inspect",
@@ -122,9 +122,9 @@
       "deps": [
         "p2_peg2"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": []
     },
     {
       "id": "p2_out",
@@ -136,11 +136,11 @@
       "deps": [
         "p2_inspect"
       ],
-      "zones": [
-        "output_tray"
-      ],
       "allowed_arms": "*",
-      "duration": 5.0
+      "duration": 5.0,
+      "resources": [
+        "output_tray"
+      ]
     },
     {
       "id": "p3_base",
@@ -150,9 +150,9 @@
         "step": "base"
       },
       "deps": [],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 6.0
+      "duration": 6.0,
+      "resources": []
     },
     {
       "id": "p3_peg1",
@@ -164,9 +164,9 @@
       "deps": [
         "p3_base"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 8.0
+      "duration": 8.0,
+      "resources": []
     },
     {
       "id": "p3_peg2",
@@ -178,9 +178,9 @@
       "deps": [
         "p3_peg1"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 8.0
+      "duration": 8.0,
+      "resources": []
     },
     {
       "id": "p3_inspect",
@@ -192,9 +192,9 @@
       "deps": [
         "p3_peg2"
       ],
-      "zones": [],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": []
     },
     {
       "id": "p3_out",
@@ -206,11 +206,11 @@
       "deps": [
         "p3_inspect"
       ],
-      "zones": [
-        "output_tray"
-      ],
       "allowed_arms": "*",
-      "duration": 5.0
+      "duration": 5.0,
+      "resources": [
+        "output_tray"
+      ]
     }
   ]
 }

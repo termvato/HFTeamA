@@ -2,7 +2,7 @@
 
 Owner: Operations (#21, backlog #2).
 
-Task-agnostic: any job that splits into skills, order and shared zones fits.
+Task-agnostic: any job that splits into skills, order and shared resources fits.
 Examples: tasks/sort/sort12.json (independent units), tasks/assemble/assemble3.json (ordered).
 
 File format:
@@ -10,14 +10,15 @@ File format:
       "name": "...",
       "tasks": [
         {"id": "pick_01", "skill": "pick_place", "args": {"object": "block_01"},
-         "deps": [], "zones": ["input_bin"], "allowed_arms": "*",
+         "deps": [], "resources": ["input_bin"], "allowed_arms": "*",
          "duration": 4.0, "durations": {"arm_b": 4.5}, "needs_arms": 1},
         {"id": "place_01", "skill": "place", "deps": ["pick_01"], "same_arm_as": "pick_01", ...}
       ]
     }
 
 - deps: ids that must finish before this task starts.
-- zones: shared table regions this task occupies; capacity 1 (a lock).
+- resources: shared zones or tools this task occupies; capacity 1 (a lock).
+- capability: kind of arm needed (optional; None = any arm).
 - allowed_arms: "*" or a list of arm ids that can reach the task.
 - duration: default expected seconds; durations: per-arm override (measured p80 or twin estimate).
 - same_arm_as: task id that must run on the same arm (a place after its pick: the arm holds it).

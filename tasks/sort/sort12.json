@@ -10,11 +10,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_01",
@@ -26,10 +26,10 @@
       "deps": [
         "pick_01"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_01"
+      "same_arm_as": "pick_01",
+      "resources": []
     },
     {
       "id": "pick_02",
@@ -39,11 +39,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_02",
@@ -55,10 +55,10 @@
       "deps": [
         "pick_02"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_02"
+      "same_arm_as": "pick_02",
+      "resources": []
     },
     {
       "id": "pick_03",
@@ -68,11 +68,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_03",
@@ -84,10 +84,10 @@
       "deps": [
         "pick_03"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_03"
+      "same_arm_as": "pick_03",
+      "resources": []
     },
     {
       "id": "pick_04",
@@ -97,11 +97,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_04",
@@ -113,10 +113,10 @@
       "deps": [
         "pick_04"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_04"
+      "same_arm_as": "pick_04",
+      "resources": []
     },
     {
       "id": "pick_05",
@@ -126,11 +126,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_05",
@@ -142,10 +142,10 @@
       "deps": [
         "pick_05"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_05"
+      "same_arm_as": "pick_05",
+      "resources": []
     },
     {
       "id": "pick_06",
@@ -155,11 +155,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_06",
@@ -171,10 +171,10 @@
       "deps": [
         "pick_06"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_06"
+      "same_arm_as": "pick_06",
+      "resources": []
     },
     {
       "id": "pick_07",
@@ -184,11 +184,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_07",
@@ -200,10 +200,10 @@
       "deps": [
         "pick_07"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_07"
+      "same_arm_as": "pick_07",
+      "resources": []
     },
     {
       "id": "pick_08",
@@ -213,11 +213,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_08",
@@ -229,10 +229,10 @@
       "deps": [
         "pick_08"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_08"
+      "same_arm_as": "pick_08",
+      "resources": []
     },
     {
       "id": "pick_09",
@@ -242,11 +242,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_09",
@@ -258,10 +258,10 @@
       "deps": [
         "pick_09"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_09"
+      "same_arm_as": "pick_09",
+      "resources": []
     },
     {
       "id": "pick_10",
@@ -271,11 +271,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_10",
@@ -287,10 +287,10 @@
       "deps": [
         "pick_10"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_10"
+      "same_arm_as": "pick_10",
+      "resources": []
     },
     {
       "id": "pick_11",
@@ -300,11 +300,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_11",
@@ -316,10 +316,10 @@
       "deps": [
         "pick_11"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_11"
+      "same_arm_as": "pick_11",
+      "resources": []
     },
     {
       "id": "pick_12",
@@ -329,11 +329,11 @@
         "from": "input_bin"
       },
       "deps": [],
-      "zones": [
-        "input_bin"
-      ],
       "allowed_arms": "*",
-      "duration": 4.0
+      "duration": 4.0,
+      "resources": [
+        "input_bin"
+      ]
     },
     {
       "id": "place_12",
@@ -345,10 +345,10 @@
       "deps": [
         "pick_12"
       ],
-      "zones": [],
       "allowed_arms": "*",
       "duration": 6.0,
-      "same_arm_as": "pick_12"
+      "same_arm_as": "pick_12",
+      "resources": []
     }
   ]
 }

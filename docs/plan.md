@@ -5,7 +5,7 @@ fails, the system re-splits the remaining work live and shows the new predicted 
 what limits further speed-up (arm count, step order, or a shared zone).
 
 Works for any task that splits into steps (see `tasks/README.md`); the demo picks one.
-Background and sources: `research/`. Umbrella issue: #1.
+Background and sources: `research/`. Visual map: `docs/README.md` (diagram) and `docs/map.html`. Umbrella issue: #1.
 
 ## Teams
 

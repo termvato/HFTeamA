@@ -26,6 +26,7 @@ class Event:
     planned_start: float | None = None
     planned_end: float | None = None
     outcome: str | None = None
+    plan_version: int | None = None
     data: dict[str, Any] = field(default_factory=dict)
 
 

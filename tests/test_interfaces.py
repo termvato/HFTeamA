@@ -27,8 +27,8 @@ def test_sort12_loads() -> None:
     [
         (1, 120.0, "arms"),
         (2, 60.0, "arms"),
-        (3, 48.0, "zone:input_bin"),
-        (8, 48.0, "zone:input_bin"),
+        (3, 48.0, "resource:input_bin"),
+        (8, 48.0, "resource:input_bin"),
     ],
 )
 def test_bound_names_the_limit(n: int, value: float, binding: str) -> None:
@@ -38,7 +38,7 @@ def test_bound_names_the_limit(n: int, value: float, binding: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "n, value, binding", [(1, 93.0, "arms"), (2, 46.5, "arms"), (4, 31.0, "chain")]
+    "n, value, binding", [(1, 93.0, "arms"), (2, 46.5, "arms"), (4, 31.0, "order")]
 )
 def test_bound_on_ordered_task(n: int, value: float, binding: str) -> None:
     lb = lower_bound(load(ASSEMBLE3), [f"arm_{i}" for i in range(n)])

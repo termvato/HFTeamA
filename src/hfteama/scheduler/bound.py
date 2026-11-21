@@ -1,6 +1,7 @@
 """Lower bound on finish time, and which limit binds. Shown live on the demo screen.
 
-finish >= max(total work / N, longest dependency chain, busiest shared zone's load).
+finish >= max(total work / N, longest chain of ordered steps, busiest shared resource).
+Binding term: "arms" (more arms help), "order" (dependencies cap it), "resource:<name>".
 Each task counts at its fastest allowed arm, so the bound stays valid with unequal arms.
 """
 
@@ -14,7 +15,7 @@ from hfteama.taskgraph import Task, TaskGraph
 @dataclass(frozen=True)
 class LowerBound:
     value: float
-    binding: str  # "arms" | "chain" | "zone:<name>"
+    binding: str  # "arms" | "order" | "resource:<name>"
     terms: dict[str, float]
 
 
@@ -40,9 +41,10 @@ def lower_bound(
             prev = [chain[d] for d in todo[tid].deps if d in chain]
             chain[tid] = cost[tid] / todo[tid].needs_arms + max(prev, default=0.0)
 
-    terms = {"arms": sum(cost.values()) / len(arms), "chain": max(chain.values(), default=0.0)}
+    terms = {"arms": sum(cost.values()) / len(arms), "order": max(chain.values(), default=0.0)}
     for tid, t in todo.items():
-        for z in t.zones:
-            terms[f"zone:{z}"] = terms.get(f"zone:{z}", 0.0) + cost[tid] / t.needs_arms
+        for r in t.resources:
+            key = f"resource:{r}"
+            terms[key] = terms.get(key, 0.0) + cost[tid] / t.needs_arms
     binding = max(terms, key=lambda k: terms[k])
     return LowerBound(value=terms[binding], binding=binding, terms=terms)

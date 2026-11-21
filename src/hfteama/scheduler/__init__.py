@@ -8,12 +8,13 @@ Contract used by the executor:
 
 Modules:
 - plan.py   Plan / Assignment dataclasses (done).
-- bound.py  lower bound max(work / N, longest chain, busiest zone) and which term binds (done).
-- check.py  independent validator: deps respected, no overlap per arm and per zone, allowed arms.
+- bound.py  lower bound and which term binds: arms, order or a resource (done).
+- check.py  independent validator: deps respected, no overlap per arm and per resource.
 - heft.py   greedy HEFT: baseline and fallback.
             Done when: every graph in tasks/ plans on 1-8 arms and check.py passes.
 - cpsat.py  OR-Tools CP-SAT flexible job shop: optional interval per (task, arm), NoOverlap per arm
-            and per zone, precedence, minimise makespan, HEFT as hint, 5 s limit (1-2 s on re-plan).
+            and per resource, precedence, minimise makespan, HEFT as hint,
+            5 s limit (1-2 s on re-plan).
             Done when: under 5 s at demo size (else live demo uses HEFT, CP-SAT shown offline).
 """
 
