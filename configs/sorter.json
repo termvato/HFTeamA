@@ -163,6 +163,7 @@
     "home_note": "Home (camera-clear) pose = the pose the arm has when the sorter connects: leave each arm folded at rest before starting.",
     "home": null,
     "wrist_roll_half_range_deg": 90.0,
-    "wrist_roll_note": "wrist_roll stays within (arm's wrist_roll_center_deg, LeRobot deg, default 0) +- this: the moving jaw always on the same side"
+    "wrist_roll_note": "wrist_roll stays within (arm's wrist_roll_center_deg, LeRobot deg, default 0) +- this: the moving jaw always on the same side",
+    "lift_after_drop": 0.05
   }
 }

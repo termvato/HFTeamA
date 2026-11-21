@@ -177,7 +177,7 @@ def test_jog_log_saves_a_grasp_the_gripper_reading_missed(monkeypatch, capsys, t
         def gripper(self, value, wait=None):
             return 2.5  # closes almost fully: reads as empty
 
-        def go_upright(self):
+        def lift(self, dz=None):
             pass
 
         def go_home(self):
@@ -253,7 +253,7 @@ def test_jog_camera_confirms_a_grasp_after_box(monkeypatch, capsys, tmp_path) ->
         def gripper(self, value, wait=None):
             return 3.1  # a thin piece: reads like an empty grasp
 
-        def go_upright(self):
+        def lift(self, dz=None):
             pass
 
         def go_home(self):

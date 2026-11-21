@@ -689,15 +689,15 @@ class Jog:
         self.drv.gripper(self.mc.get("gripper_open", 60.0))
         tip = self.arm.placement.to_table(fk(sol.q)[:3, 3])
         print(f"  dropped from {(tip[2] - bc['height']) * 100:.0f} cm over the rim")
-        self.drv.go_upright()  # straight up, clear of the box, before going anywhere else
+        self.drv.lift()  # a little straight up, clear of the box, before going on
         self.q = self.drv.q()
         self.target = None
         self.piece = None
         self._check_last_grasp()
-        print("  arm upright; `scan` to look again, or a piece number")
+        print("  arm lifted; `scan` to look again, or a piece number")
 
     def _check_last_grasp(self) -> None:
-        """With the arm upright, the camera looks where the last grasped piece was: gone
+        """With the arm lifted, the camera looks where the last grasped piece was: gone
         means it was taken (logged if the gripper reading said empty)."""
         if self.last_grasp is None or getattr(self.eye, "cam", None) is None:
             return  # no live camera (a saved image, or tests)
@@ -1027,7 +1027,7 @@ def _misses(failed, piece, radius=0.02) -> int:
 
 
 def pick_and_drop(drv, pick, drop, mc: dict, pc: dict) -> bool:
-    """One pick: open, above, down, close, up, over the box, open, upright, home.
+    """One pick: open, above, down, close, up, over the box, open, lift a little, home.
 
     Always goes to the box: the gripper's closing position can't tell a thin piece from an
     empty grasp. Whether the piece was taken is judged by the camera on the next look (the
@@ -1043,7 +1043,7 @@ def pick_and_drop(drv, pick, drop, mc: dict, pc: dict) -> bool:
         drv.move_line(drv.q(), up, yaw, steps=4)
         drv.move_q(drop.q)
         drv.gripper(mc.get("gripper_open", 60.0))
-        drv.go_upright()  # straight up, clear of the box, then home
+        drv.lift()  # a little straight up, clear of the box, then home
         drv.go_home()
         return True
     except (RuntimeError, ValueError) as e:

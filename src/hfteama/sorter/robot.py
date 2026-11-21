@@ -205,5 +205,18 @@ class ArmDriver:
 
         self.move_q(upright(self.q(), self.limits))
 
+    def lift(self, dz: float | None = None) -> None:
+        """Raise the tool dz (m, default motion.lift_after_drop) straight up from where it
+        is, any gripper orientation; if that is out of reach, go halfway to upright."""
+        from hfteama.arms.so101_ik import upright
+
+        dz = self.motion.get("lift_after_drop", 0.05) if dz is None else dz
+        q = self.q()
+        sol = solve_ik(fk(q)[:3, 3] + [0.0, 0.0, dz], down=False, seed=q, limits=self.limits)
+        if sol.ok:
+            self.move_q(sol.q)
+        else:
+            self.move_q(q + 0.5 * (upright(q, self.limits) - q))
+
     def go_home(self) -> None:
         self.move_deg(self.home)
