@@ -278,6 +278,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 20:12 (Vato): demo runner uses 15 cm clearance between arms (`--clearance`, default 0.15, 0 = off), as Aravind asked at 19:10. His checks run here: 149 tests pass, ruff clean. Blockers #7 (place must retreat to carry) reads right; fine to send to Action.
 - 19:10 (Aravind): IK join: reach 0.14-0.42 m, clearance locks, stall traced to place not leaving the bowl (Action, Blockers #7).
 - 17:55 (Aravind): real run on Aravind's laptop after the merge to `main` (no Qwen service needed); Windows paths flagged; third robot for the plug-in test.
 - 17:20 (Aravind): real camera end to end (markers, Qwen positions, reach, executor split); blockers table for the real arms.

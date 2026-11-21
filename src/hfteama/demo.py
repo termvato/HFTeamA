@@ -86,7 +86,9 @@ def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[
     return make_sim
 
 
-def with_table(graph: TaskGraph, table: str, arm_ids: list[str]) -> tuple[TaskGraph, dict]:
+def with_table(
+    graph: TaskGraph, table: str, arm_ids: list[str], clearance_m: float | None = 0.15
+) -> tuple[TaskGraph, dict]:
     """Fill each step's allowed arms from reach on the real table layout, and describe the table
     for the screen's top view (arms with their reach, bins, objects with their steps)."""
     import json
@@ -94,7 +96,7 @@ def with_table(graph: TaskGraph, table: str, arm_ids: list[str]) -> tuple[TaskGr
     from hfteama.registry import load_catalog, resolve
 
     catalog = {a: n for a, n in load_catalog(table).items() if a in arm_ids}
-    resolved = resolve(graph, catalog.values(), travel_s_per_m=10.0).graph
+    resolved = resolve(graph, catalog.values(), travel_s_per_m=10.0, clearance_m=clearance_m).graph
     objects: dict[str, dict] = {}
     for t in resolved.tasks.values():
         oid = t.args.get("object")
@@ -217,6 +219,12 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument(
         "--table", help="table layout JSON (arm poses, bins): fills reach and draws the map"
     )
+    ap.add_argument(
+        "--clearance",
+        type=float,
+        default=0.15,
+        help="metres two arms keep apart where both can reach (0 = off; needs --table)",
+    )
     ap.add_argument("--log", default=None)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8050)
@@ -230,7 +238,7 @@ def main(argv: list[str] | None = None) -> None:
     verifier = hook(args.verifier)() if args.verifier else None
     scene = None
     if args.table:
-        graph, scene = with_table(graph, args.table, list(known.values()))
+        graph, scene = with_table(graph, args.table, list(known.values()), args.clearance or None)
     if args.backend == "fake":
         factory = fake_factory(clock)
     else:
