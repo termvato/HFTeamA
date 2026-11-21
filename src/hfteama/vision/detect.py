@@ -16,7 +16,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from hfteama.vision.table import CameraPose, Intrinsics, pixel_to_table, project, table_grid
+from hfteama.vision.table import (
+    CameraPose,
+    Intrinsics,
+    centre_pixel,
+    pixel_to_table,
+    project,
+    table_grid,
+)
 
 MM_PER_PX = 1.0
 
@@ -373,7 +380,8 @@ def pieces_from_tags(dets, pose: CameraPose, intr: Intrinsics, pc: dict, extent)
     x0, x1, y0, y1 = extent
     out = []
     for _, c in dets:
-        P = pixel_to_table(np.vstack([c, [c.mean(0)]]), pose, intr, H)[:, :2]
+        # centre = crossing of the diagonals (exact under perspective, unlike the mean)
+        P = pixel_to_table(np.vstack([c, [centre_pixel(c)]]), pose, intr, H)[:, :2]
         corners, centre = P[:4], P[4]
         side = float(np.mean(np.linalg.norm(corners - np.roll(corners, 1, axis=0), axis=1)))
         if abs(side - size) > tol * size or not (x0 <= centre[0] <= x1 and y0 <= centre[1] <= y1):
