@@ -14,7 +14,7 @@ Design approved and updated after the team sync. Next: implementation plan.
 | # | Work | Owner | Status | Notes |
 |---|---|---|---|---|
 | 0 | Design doc | Vivek | done | updated after 14:50 sync |
-| 1 | Implementation plan | Vivek | in review | `docs/superpowers/plans/2026-11-21-action-arm-skills.md` |
+| 1 | Implementation plan | Vivek | done | `docs/superpowers/plans/2026-11-21-action-arm-skills.md` |
 | 2 | Vendor SO-101 model; MuJoCo 4.0.1 vs 3.17 check | Vivek | done | vendored so101-nexus model, MuJoCo 4.0.1 works |
 | 3 | IK (`arms/ik.py`) | Vivek | done | `arms/ik.py`, orientation weight 0.01 |
 | 4 | Primitives protocol (`arms/primitives.py`) | Vivek | done | `arms/primitives.py`; draft to post on #19 is in Task 9 |
@@ -23,8 +23,8 @@ Design approved and updated after the team sync. Next: implementation plan.
 | 7 | `SkillWorker` (`arms/worker.py`) | Vivek | done | `arms/worker.py` |
 | 8 | Sim demo on sort12, 3 arms | Vivek | done | `scripts/sim_demo.py`: 24/24 steps ok on 3 arms, 40.5 s sim time; grasp failure recovers |
 | 9 | Duration measurement script | Vivek | done | `scripts/measure_durations.py`; table below |
-| 10 | Real backend (`arms/real.py`) | Vivek | todo | mocked-bus tests only |
-| 11 | Handoff doc to Hardware | Vivek | todo | `docs/handoff/action-to-hardware.md` |
+| 10 | Real backend (`arms/real.py`) | Vivek | done | `arms/real.py`; unrun on hardware |
+| 11 | Handoff doc to Hardware | Vivek | done | `docs/handoff/action-to-hardware.md` |
 | 12 | Option A: contact grasping in sim | Vivek | later | follow-up |
 
 ## To agree with other teams
@@ -55,3 +55,7 @@ Design approved and updated after the team sync. Next: implementation plan.
 
 `tasks/sort/sort12.json` still has placeholders (pick 4.0, place 6.0); real-arm numbers will differ.
 Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_sim.json`).
+- 2026-11-21 ~16:30: Tasks 8-9 done: `arms/real.py` (mocked-bus tests), `configs/real_arms.example.json`,
+  `--backend real` in `scripts/measure_durations.py`, handoff `docs/handoff/action-to-hardware.md`
+  (staged checklist; draft comment for #19/#20 at its end, not posted). Merged origin/main and
+  origin/action again (Hardware's multi-pair CLI, Sahil's studio and cameras).
