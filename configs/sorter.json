@@ -69,6 +69,7 @@
     "gripper_open": 60.0,
     "gripper_closed": 2.0,
     "gripper_wait_s": 0.6,
+    "grasp_min_open": 4.0,
     "max_relative_target": 10.0,
     "home_note": "Home (camera-clear) pose = the pose the arm has when the sorter connects: leave each arm folded at rest before starting.",
     "home": null
