@@ -69,6 +69,11 @@ class ArmDriver:
             calibration_dir=self.arm.calibration_dir,
             max_relative_target=self.motion.get("max_relative_target", 10.0),
         )
+        # LeRobot logs every command max_relative_target trims: a joint lagging its ramp
+        # under load trips it by a fraction of a degree, harmlessly. Keep errors only.
+        import logging
+
+        logging.getLogger("lerobot.robots.utils").setLevel(logging.ERROR)
         self.robot = make_robot_from_config(cfg)
         self.robot.connect(calibrate=False)
         if not self.robot.is_calibrated:  # belt and braces: never write a calibration

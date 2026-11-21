@@ -96,3 +96,30 @@ def test_z_offset_shifts_heights_only() -> None:
     assert p.to_arm([0.114, 0.163, 0.045]) == pytest.approx([0.207, -0.024, 0.06])
     assert p.to_table(p.to_arm([0.2, 0.1, 0.03])) == pytest.approx([0.2, 0.1, 0.03])
     assert p.to_arm([0.2, 0.1]) == pytest.approx(Placement(0.138, 0.37, p.yaw).to_arm([0.2, 0.1]))
+
+
+def test_fit_aim_separates_fixed_and_turning_offsets() -> None:
+    from hfteama.sorter.geometry import fit_aim
+
+    yaw = np.radians(-90)
+    arm = ArmModel("rakesh", Placement(0.14, 0.35, yaw), None, (0.02, 0.01), (0.015, -0.005))
+    entries = []
+    for i, h in enumerate(np.radians([0, 70, 140, 230])):
+        cam = (0.1 + 0.03 * i, 0.15)
+        entries.append({"camera": cam, "aim": arm.aim(*cam, h), "heading_deg": np.degrees(h)})
+    aim, jaw, rms = fit_aim(entries, yaw)
+    assert aim == pytest.approx([0.02, 0.01], abs=1e-9)
+    assert jaw == pytest.approx([0.015, -0.005], abs=1e-9)
+    assert rms < 1e-9
+    # all jaws heading the same way: only the fixed part, from the mean
+    same = [dict(e, heading_deg=10.0) for e in entries[:2]]
+    aim1, jaw1, _ = fit_aim(same, yaw)
+    assert not jaw1.any()
+
+
+def test_grasp_aim_turns_with_the_jaws() -> None:
+    arm = ArmModel("rakesh", RAKESH, None, (0.0, 0.0), (0.02, 0.0))
+    a0 = np.subtract(arm.aim(0.2, 0.2, 0.0), (0.2, 0.2))
+    a90 = np.subtract(arm.aim(0.2, 0.2, np.pi / 2), (0.2, 0.2))
+    assert a0 == pytest.approx([0.02, 0.0])
+    assert a90 == pytest.approx([0.0, 0.02])

@@ -98,7 +98,11 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, **a.get("offsets_deg", {})})
             limits = calibrated_limits(json.loads(cal.read_text()), frame)
         out[side] = ArmModel(
-            side, Placement.from_config(a), limits, tuple(a.get("aim_offset", (0.0, 0.0)))
+            side,
+            Placement.from_config(a),
+            limits,
+            tuple(a.get("aim_offset", (0.0, 0.0))),
+            tuple(a.get("jaw_offset", (0.0, 0.0))),
         )
     return out
 
@@ -537,8 +541,8 @@ class Jog:
             print("  no such piece (scan to renumber)")
             return
         p = self.scene.pieces[i]
-        ax, ay = self.arm.aim(p.x, p.y)
-        if self.move([ax, ay, self.z], self.arm.placement.yaw_to_arm(p.yaw)):
+        ax, ay, yaw, _ = self.arm.grasp_aim(p, self.z)
+        if self.move([ax, ay, self.z], yaw):
             self.piece = i
             print(
                 f"  over piece {i + 1}: camera says ({p.x:.3f}, {p.y:.3f}),"
@@ -590,6 +594,8 @@ class Jog:
             closed = self.drv.gripper(self.mc.get("gripper_closed", 2.0))
             held = closed > self.mc.get("gripper_closed", 2.0) + self.mc.get("grasp_min_open", 4.0)
             print(f"  gripper closed to {closed:.1f}: {'HOLDING something' if held else 'empty'}")
+            if held and self.piece is not None:
+                self._log_grasp()
             self.q = self.drv.move_line(self.drv.q(), up, self.yaw, steps=4)
         except RuntimeError as e:
             print(f"  {e}")
@@ -630,6 +636,28 @@ class Jog:
         self.target[2] = real
         self.z_changed = True
         print(f"  z_offset now {pl.z * 100:+.1f} cm (saved with q); aim height {real * 100:.1f} cm")
+
+    def _log_grasp(self) -> None:
+        """Save where the tool really had to be for this piece (data for fit-grasps)."""
+        import time as _time
+
+        from hfteama.arms.so101_ik import jaw_yaw
+        from hfteama.sorter.geometry import log_grasp
+
+        p, pl = self.scene.pieces[self.piece], self.arm.placement
+        heading = jaw_yaw(fk(self.q)) + pl.yaw
+        n = log_grasp(
+            self.side,
+            {
+                "time": _time.strftime("%Y-%m-%d %H:%M:%S"),
+                "camera": [round(p.x, 4), round(p.y, 4)],
+                "piece_yaw_deg": round(float(np.degrees(p.yaw)), 1),
+                "aim": [round(float(self.target[0]), 4), round(float(self.target[1]), 4)],
+                "heading_deg": round(float(np.degrees(heading)), 1),
+                "placement": [pl.x, pl.y, round(float(np.degrees(pl.yaw)), 2), pl.z],
+            },
+        )
+        print(f"  grasp logged ({n} for {self.side}); `hfteama sort fit-grasps {self.side}`")
 
     def record(self) -> None:
         if self.piece is None:
@@ -746,6 +774,41 @@ def cmd_jog(args) -> int:
         )
         if input("Save it as this arm's placement? [y/N] ").strip().lower() == "y":
             print("saved", save_placement(side, fit, rms, len(jog.pairs_arm)))
+    return 0
+
+
+def cmd_fit_grasps(args) -> int:
+    """Fit the arm's grasp aim offsets from the grasps logged by `sort jog`."""
+    import json
+
+    from hfteama.sorter.geometry import GRASPS_FILE, PLACEMENTS_FILE, fit_aim
+
+    cfg = load_config(args.sorter_config)
+    side = args.arm
+    entries = json.loads(GRASPS_FILE.read_text()).get(side, []) if GRASPS_FILE.exists() else []
+    if not entries:
+        print(f"No grasps logged for {side}: grasp pieces with `hfteama sort jog {side}` (g).")
+        return 1
+    pl = Placement.from_config(cfg["arms"][side])
+    aim, jaw, rms = fit_aim(entries, pl.yaw)
+    print(
+        f"{len(entries)} grasps, jaw headings: "
+        + ", ".join(f"{e['heading_deg']:.0f}" for e in entries)
+    )
+    print(
+        f"aim_offset (forward, left) = ({aim[0] * 100:+.1f}, {aim[1] * 100:+.1f}) cm;"
+        f" jaw_offset (along, across the jaws) = ({jaw[0] * 100:+.1f}, {jaw[1] * 100:+.1f}) cm;"
+        f" rms {rms * 100:.1f} cm"
+    )
+    if not jaw.any():
+        print("(jaw headings too similar to separate the turning part: grasp rotated pieces)")
+    if args.save or input("Save? [y/N] ").strip().lower() == "y":
+        data = json.loads(PLACEMENTS_FILE.read_text()) if PLACEMENTS_FILE.exists() else {}
+        d = data.setdefault(side, {})
+        d["aim_offset"] = [round(float(aim[0]), 4), round(float(aim[1]), 4)]
+        d["jaw_offset"] = [round(float(jaw[0]), 4), round(float(jaw[1]), 4)]
+        PLACEMENTS_FILE.write_text(json.dumps(data, indent=2) + "\n")
+        print("saved", PLACEMENTS_FILE)
     return 0
 
 
@@ -873,6 +936,10 @@ def add_parser(sub) -> None:
     j.add_argument("--step", type=float, default=5.0, help="Jog step (mm)")
     j.add_argument("--no-viewer", action="store_true", help="Don't open the Rerun viewer")
 
+    fg = ss.add_parser("fit-grasps", help="Fit grasp aim offsets from the grasps jog logged")
+    fg.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
+    fg.add_argument("--save", action="store_true", help="Save without asking")
+
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")
     r.add_argument("--max-picks", type=int, help="Stop after this many picks")
@@ -885,5 +952,6 @@ def dispatch(args) -> int:
         "touch": cmd_touch,
         "goto": cmd_goto,
         "jog": cmd_jog,
+        "fit-grasps": cmd_fit_grasps,
         "run": cmd_run,
     }[args.sort_command](args)

@@ -27,14 +27,31 @@ class ArmModel:
     side: str
     placement: Placement
     limits: tuple[np.ndarray, np.ndarray] | None = None  # rad; None = model limits
-    # grasp aim shift in the arm frame (m): (forward, left) as seen from behind the arm
+    # grasp aim shift = a fixed part in the arm frame (forward, left as seen from behind the
+    # arm) + a part that turns with the gripper, in the tool frame (along the jaws' closing
+    # axis, across it): the open jaws are not centred on the tool point. See fit_aim.
     aim_offset: tuple[float, float] = (0.0, 0.0)
+    jaw_offset: tuple[float, float] = (0.0, 0.0)
 
-    def aim(self, x: float, y: float) -> tuple[float, float]:
-        """Table xy to aim the tool at to grasp a piece seen at (x, y)."""
+    def aim(self, x: float, y: float, heading: float = 0.0) -> tuple[float, float]:
+        """Table xy to aim the tool at to grasp a piece seen at (x, y), with the jaws'
+        closing axis heading along `heading` (rad, table frame)."""
+        c, s = np.cos(heading), np.sin(heading)
+        j = np.asarray(self.jaw_offset)
         a = self.placement.to_arm([x, y]) + np.asarray(self.aim_offset)
-        t = self.placement.to_table(a)
+        t = self.placement.to_table(a) + [c * j[0] - s * j[1], s * j[0] + c * j[1]]
         return float(t[0]), float(t[1])
+
+    def grasp_aim(self, piece: Piece, z: float):
+        """(x, y, yaw_arm, heading): where to put the tool to grasp `piece` at height z, the
+        wrist yaw for the IK, and the jaws' table heading the IK picks (yaw or yaw + pi)."""
+        from hfteama.arms.so101_ik import fk, jaw_yaw
+
+        yaw = self.placement.yaw_to_arm(piece.yaw)
+        sol = solve_ik(self.placement.to_arm([piece.x, piece.y, z]), yaw=yaw, limits=self.limits)
+        heading = jaw_yaw(fk(sol.q)) + self.placement.yaw
+        ax, ay = self.aim(piece.x, piece.y, heading)
+        return ax, ay, yaw, heading
 
 
 @dataclass
@@ -59,10 +76,9 @@ class Plan:
 
 def plan_pick(arm: ArmModel, piece: Piece, mc: dict, pc: dict) -> PickPlan | None:
     max_tilt = np.radians(mc.get("max_tilt_deg", 30.0))
-    ax, ay = arm.aim(piece.x, piece.y)
+    ax, ay, yaw, _ = arm.grasp_aim(piece, pc.get("approach_z", 0.05))
     g = arm.placement.to_arm([ax, ay, pc.get("grasp_z", 0.005)])
     a = arm.placement.to_arm([ax, ay, pc.get("approach_z", 0.05)])
-    yaw = arm.placement.yaw_to_arm(piece.yaw)
     above = solve_ik(a, yaw=yaw, limits=arm.limits)
     if not above.ok or above.tilt > max_tilt:
         return None

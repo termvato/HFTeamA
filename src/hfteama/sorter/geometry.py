@@ -17,6 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_CONFIG = PROJECT_ROOT / "configs" / "sorter.json"
 # Written by `hfteama sort touch`; overrides each arm's base/yaw_deg from the config.
 PLACEMENTS_FILE = PROJECT_ROOT / "configs" / "sorter_placements.json"
+# Every grasp that held something in `hfteama sort jog`: data for `hfteama sort fit-grasps`.
+GRASPS_FILE = PROJECT_ROOT / "configs" / "sorter_grasps.json"
+_FITTED_KEYS = ("base", "yaw_deg", "z_offset", "aim_offset", "jaw_offset")
 
 
 def load_config(path: str | Path | None = None, placements: str | Path | None = None) -> dict:
@@ -26,9 +29,7 @@ def load_config(path: str | Path | None = None, placements: str | Path | None = 
     if pfile.exists():
         for side, fitted in json.loads(pfile.read_text()).items():
             if side in cfg["arms"]:
-                cfg["arms"][side].update(
-                    {k: fitted[k] for k in ("base", "yaw_deg", "z_offset") if k in fitted}
-                )
+                cfg["arms"][side].update({k: fitted[k] for k in _FITTED_KEYS if k in fitted})
     return cfg
 
 
@@ -104,6 +105,7 @@ def save_placement(side: str, p: Placement, rms: float, n: int, path: str | Path
     path = Path(path or PLACEMENTS_FILE)
     data = json.loads(path.read_text()) if path.exists() else {}
     data[side] = {
+        **{k: v for k, v in data.get(side, {}).items() if k in ("aim_offset", "jaw_offset")},
         "base": [round(p.x, 4), round(p.y, 4)],
         "yaw_deg": round(float(np.degrees(p.yaw)), 2),
         "z_offset": round(p.z, 4),
@@ -112,3 +114,34 @@ def save_placement(side: str, p: Placement, rms: float, n: int, path: str | Path
     }
     path.write_text(json.dumps(data, indent=2) + "\n")
     return path
+
+
+def log_grasp(side: str, entry: dict, path: str | Path | None = None) -> int:
+    """Append one successful grasp; returns how many this arm has."""
+    path = Path(path or GRASPS_FILE)
+    data = json.loads(path.read_text()) if path.exists() else {}
+    data.setdefault(side, []).append(entry)
+    path.write_text(json.dumps(data, indent=1) + "\n")
+    return len(data[side])
+
+
+def fit_aim(entries: list[dict], arm_yaw: float, min_spread_deg: float = 25.0):
+    """Fit the grasp aim offsets from grasps that held: for each, the tool aim (table xy)
+    minus the camera's piece centre = R(arm_yaw) aim_offset + R(heading) jaw_offset.
+
+    Returns (aim_offset, jaw_offset, rms_m). With jaw headings all within min_spread_deg of
+    each other the turning part can't be told apart: jaw_offset is (0, 0) then."""
+    d = np.array([np.subtract(e["aim"], e["camera"]) for e in entries], float)
+    h = np.radians([e["heading_deg"] for e in entries])
+
+    def R(a):
+        return np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+
+    spread = max((abs((a - b + np.pi) % (2 * np.pi) - np.pi) for a in h for b in h), default=0.0)
+    turning = len(entries) >= 2 and np.degrees(spread) >= min_spread_deg
+    rows = [np.hstack([R(arm_yaw), R(hi)]) if turning else R(arm_yaw) for hi in h]
+    A, b = np.vstack(rows), d.ravel()
+    x = np.linalg.lstsq(A, b, rcond=None)[0]
+    aim, jaw = x[:2], (x[2:] if turning else np.zeros(2))
+    rms = float(np.sqrt(np.mean((A @ x - b) ** 2) * 2)) if len(entries) else 0.0
+    return aim, jaw, rms
