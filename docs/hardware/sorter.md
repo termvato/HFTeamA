@@ -8,6 +8,7 @@ the box. The arms take turns, so they never meet over the box.
 hfteama sort preview            # camera only: what it sees and what it would do
 hfteama sort goto rakesh --tag 2  # hover rakesh's tool tip 3 cm over tag 2's centre
 hfteama sort goto rakesh --box    # hover over the box (the drop pose)
+hfteama sort jog rakesh           # hover over a piece, correct by hand, fit where rakesh stands
 hfteama sort touch rakesh         # fit where rakesh stands (torque off, touch tags)
 hfteama sort run                # sort, both arms
 ```
@@ -66,6 +67,10 @@ file and the servos differ, the command stops instead of letting LeRobot prompt.
    Touch 3 or more tag centres with the tip of the closed gripper: tags 2 and 0 for rakesh,
    plus any extra `DICT_4X4_50` tag (id ≥ 4) you lay on the table, spread over the work
    area. The fit is saved to `configs/sorter_placements.json`.
+   Or, with torque on: `hfteama sort jog rakesh` hovers 5 cm over a piece the camera found;
+   nudge the tip with f/b/l/r/u/d (seen from behind the arm) until it is over the piece's
+   centre, type `ok`, repeat on 2-3 pieces spread out, `q` fits and offers to save. `g` tries
+   a grasp where the tip is.
 4. `hfteama -n sort run` prints the plan from one frame. Then `hfteama sort run --arms rakesh
    --max-picks 1`, then both arms.
 

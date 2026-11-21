@@ -34,3 +34,57 @@ def test_arm_not_plugged_in_is_refused_not_swapped(monkeypatch) -> None:
     drv = ArmDriver("hacklab", cfg["arms"]["hacklab"], cfg["motion"])
     with pytest.raises(SystemExit, match="not connected"):
         drv.connect()
+
+
+def test_jog_records_offset_and_fits(monkeypatch, capsys) -> None:
+    """Jog with a fake arm and camera: move 2 steps forward, 1 left, record, quit."""
+    import numpy as np
+
+    import hfteama.sorter.robot as robot
+    import hfteama.sorter.run as run
+    from hfteama.arms.so101_ik import fk
+    from hfteama.vision.detect import Piece, Scene
+
+    class FakeEye:
+        def __init__(self, cfg, image=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def look(self, arm_chains=()):
+            p = Piece(x=0.30, y=0.22, length=0.06, width=0.02, yaw=0.0, area_cm2=12.0)
+            return None, None, Scene(box=None, pieces=[p])
+
+    class FakeDriver:
+        def __init__(self, side, arm_cfg, motion, pairs_config=None):
+            self.limits = None
+            self._q = np.array([0.0, -1.5, 1.5, 1.0, 0.0])
+
+        def connect(self):
+            return self
+
+        def disconnect(self):
+            pass
+
+        def q(self):
+            return self._q
+
+        def tcp(self):
+            return fk(self._q)[:3, 3]
+
+        def move_q(self, q, speed=None):
+            self._q = np.asarray(q, float)
+
+    monkeypatch.setattr(run, "Eye", FakeEye)
+    monkeypatch.setattr(robot, "ArmDriver", FakeDriver)
+    answers = iter(["1", "f2", "l", "ok", "q", "n"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+    assert main(["sort", "jog", "rakesh", "--step", "10"]) == 0
+    out = capsys.readouterr().out
+    # rakesh faces the camera: forward = table -y, its left = table +x
+    assert "recorded: real = camera + (+1.0, -2.0) cm" in out
+    assert "fit from 1 points" in out
