@@ -49,11 +49,11 @@ MAX_TARGET_STEP_RAD = 0.05  # per set_joint_target call
 OBJECT_HALF_M = 0.015
 YAW_TOL_RAD = 0.1  # a requested grasp heading this far off is refused, not approximated
 # Folded sideways rest/park pose (pan, lift, elbow, wrist flex, wrist roll). The zero pose stretches
-# every arm toward the bin, so arms that face each other interpenetrate; this one keeps all
-# arm geometry >= 0.2 m from the bin centre with no self or arm-arm contact (checked for the sort
-# layout in tasks/sort/poses.json). Pan is negative so each arm rests on the side of its OWN output
-# bin; +1.85 pointed every arm at its neighbour's bin and arms collided there under the executor.
-REST_Q = np.array([-1.85, -1.6, 1.6, 1.0, 0.0])
+# every arm toward the bin, so arms that face each other interpenetrate. Folded, the gripper tucks
+# BEHIND the pan axis: with pan +1.85 each arm rests over its OWN output bin (-1.85 rests it over
+# its neighbour's, and the arms collide when that neighbour places). No self or arm-arm contact,
+# arm geometry >= 0.2 m from the bin centre (checked for the layout in tasks/sort/poses.json).
+REST_Q = np.array([1.85, -1.6, 1.6, 1.0, 0.0])
 PARK_Q = REST_Q
 
 # MuJoCo collision bits: the model's arm geoms use bit 1. Objects use bit 2 and the floor both, so
@@ -127,6 +127,7 @@ class SimTable:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", UserWarning)
                 frame.attach_body(child.worldbody.first_body(), f"{arm_id}/", "")
+        self._add_markers(world)
         for name, xyz in self.poses.objects.items():
             body = world.add_body(name=name, pos=list(xyz))
             body.add_freejoint()
@@ -141,6 +142,35 @@ class SimTable:
             )
         self._model = spec.compile()
         self._data = mujoco.MjData(self._model)
+
+    def _add_markers(self, world: Any) -> None:
+        """Flat discs on the floor at every named location, so a recording shows the bins.
+
+        Decoration only (no collision): a part may be put down on one.
+        """
+        spots = [
+            (f"marker_{n}", xyz, [0.2, 0.35, 0.8, 1.0]) for n, xyz in self.poses.locations.items()
+        ]
+        for arm_id in self.arm_ids:
+            for n, xyz in self.poses.per_arm.get(arm_id, {}).items():
+                if n != "carry":
+                    spots.append(
+                        (
+                            f"marker_{n}_{arm_id}" if n != "out" else f"marker_{n}",
+                            xyz,
+                            [0.2, 0.7, 0.3, 1.0],
+                        )
+                    )
+        for name, xyz, rgba in spots:
+            world.add_geom(
+                name=name,
+                type=mujoco.mjtGeom.mjGEOM_CYLINDER,
+                size=[0.07, 0.0005, 0],
+                pos=[xyz[0], xyz[1], self.poses.table_z + 0.0006],
+                rgba=rgba,
+                contype=0,
+                conaffinity=0,
+            )
 
     def _jnt(self, name: str) -> int:
         return mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, name)

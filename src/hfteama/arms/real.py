@@ -203,6 +203,14 @@ class LeRobotDriver:
         pct = self._gripper_pct()
         return Grasp(holding=pct >= self._min_pct, position=float(self.read_joints()[5]))
 
+    def gripper_pct(self) -> float:
+        """Measured gripper reading, LeRobot 0..100 (for the check tool and the threshold)."""
+        return self._gripper_pct()
+
+    def tcp(self) -> tuple[np.ndarray, np.ndarray]:
+        """Measured tool-centre position and tool z axis, table frame (forward kinematics)."""
+        return self._kin.fk(self.read_joints()[:5])
+
     def holding(self) -> bool:
         """Closed and stalled short of fully closed: something is between the fingers."""
         return self._closed and self._gripper_pct() >= self._min_pct

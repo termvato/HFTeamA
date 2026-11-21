@@ -188,3 +188,12 @@ def test_move_to_with_yaw_turns_the_gripper(table: SimTable) -> None:
     err = (kin.tool_heading(d.read_joints()[:5]) - 1.0 + np.pi / 2) % np.pi - np.pi / 2
     assert abs(err) < 0.08
     assert d.reachable(np.array([0.2, 0.0, 0.05]), yaw=1.0)
+
+
+def test_bins_are_drawn_as_floor_markers_that_never_collide(table: SimTable) -> None:
+    m = table._model
+    names = [m.geom(i).name for i in range(m.ngeom)]
+    for marker in ("marker_input_bin", "marker_out"):
+        assert marker in names, names
+        g = m.geom(marker)
+        assert g.contype == 0 and g.conaffinity == 0  # decoration only: a block can be set on it

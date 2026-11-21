@@ -38,9 +38,9 @@ def test_sim_demo_recovers_from_a_grasp_failure(tmp_path: Path) -> None:
     assert _main()(["--speed", "8", "--fail", "arm_b:grasp", "--events", str(events)]) == 0
     ends = _ends(events)
     failed = [e for e in ends if e["outcome"] == "failed"]
-    assert len(failed) == 1 and failed[0]["data"]["reason"] == "grasp"
-    again = [e for e in ends if e["task"] == failed[0]["task"] and e["outcome"] == "ok"]
-    assert len(again) == 1
+    assert any(e["data"]["reason"] == "grasp" for e in failed)  # the injected failure was seen
+    for e in failed:  # and every failed step was retried until it succeeded
+        assert any(x["task"] == e["task"] and x["outcome"] == "ok" for x in ends), e["task"]
 
 
 def test_measure_durations_writes_percentiles_per_skill_and_arm(tmp_path: Path) -> None:

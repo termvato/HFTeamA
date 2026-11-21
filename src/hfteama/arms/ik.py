@@ -9,7 +9,7 @@ weighted well below the position (0.01: a 0.5 rad tilt costs as much as 5 mm). D
 squares on the MuJoCo Jacobian, adapted from so101-nexus `kinematics.py` (Apache-2.0).
 
 Measured reach with the tool pointing down (base at the origin, arm facing +x): x about 0.10 to
-0.30 m for table-height targets (z 0 to 0.03), |y| up to 0.2 m, and up to z about 0.13 m at
+0.30 m for table-height targets (z 0 to 0.03), |y| up to 0.2 m, and up to z about 0.12 m at
 x = 0.2 (tool alignment stays above 0.9). Nothing behind the base. Plan poses inside that band.
 
 Frames: the table frame is the shared world frame; an `ArmBase` places the arm in it. Only
@@ -29,7 +29,9 @@ from hfteama.arms.model import ARM_JOINTS, MODEL_XML, TCP_SITE
 _DAMPING = 0.05
 _ORIENT_WEIGHT = 0.01
 _MAX_ITERS = 200
-_N_RANDOM_SEEDS = 4
+_N_RANDOM_SEEDS = 10
+_LIMIT_MARGIN = 0.05  # rad: solutions stay this far inside the joint limits (a joint on its
+# limit cannot settle on the target, so the move would stall)
 _DOWN = np.array([0.0, 0.0, -1.0])
 
 
@@ -70,8 +72,8 @@ class Kinematics:
         jids = [mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, j) for j in ARM_JOINTS]
         self._qadr = np.array([self._model.jnt_qposadr[j] for j in jids])
         self._dadr = np.array([self._model.jnt_dofadr[j] for j in jids])
-        self._lo = np.array([LIMITS_RAD[j][0] for j in ARM_JOINTS])
-        self._hi = np.array([LIMITS_RAD[j][1] for j in ARM_JOINTS])
+        self._lo = np.array([LIMITS_RAD[j][0] for j in ARM_JOINTS]) + _LIMIT_MARGIN
+        self._hi = np.array([LIMITS_RAD[j][1] for j in ARM_JOINTS]) - _LIMIT_MARGIN
         self._rng = np.random.default_rng(0)
         self._rot_inv = self.base._rot().T
 
@@ -156,7 +158,8 @@ class Kinematics:
         starts = [np.zeros(len(ARM_JOINTS))]
         if seed is not None:
             starts.insert(0, np.asarray(seed, float))
-        starts += [self._rng.uniform(self._lo, self._hi) for _ in range(_N_RANDOM_SEEDS)]
+        rng = np.random.default_rng(0)  # per call: the answer must not depend on earlier calls
+        starts += [rng.uniform(self._lo, self._hi) for _ in range(_N_RANDOM_SEEDS)]
         best: tuple[float, np.ndarray, float] | None = None
         for q0 in starts:
             q, err = self._iterate(q0, target, down)

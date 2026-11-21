@@ -137,18 +137,25 @@ def _place_waypoints(p: np.ndarray) -> list[Waypoint]:
 
 
 def _retreat_on_failure(
-    arm: ArmDriver, p: np.ndarray, run: Callable[[], None], yaw: float | None = None
+    arm: ArmDriver,
+    p: np.ndarray,
+    run: Callable[[], None],
+    yaw: float | None = None,
+    safe: np.ndarray | None = None,
 ) -> None:
-    """Run a motion sequence; if it fails part-way, lift clear of the shared area first.
+    """Run a motion sequence; if it fails part-way, get clear of the shared area first.
 
-    A stopped or lost arm is left alone: the stop is what the caller asked for.
+    Clear means the arm's own `carry` pose when it has one, else straight up. A stopped or lost
+    arm is left alone: the stop is what the caller asked for.
     """
     try:
         run()
     except MotionError as exc:
         if exc.reason != "stopped":
             try:
-                _move(arm, _above(p, APPROACH_DZ), yaw)
+                _move(arm, _above(p, APPROACH_DZ), yaw)  # straight up first: a sweep from a low
+                if safe is not None:  # pose clips the table
+                    _move(arm, safe)
             except (MotionError, ArmDown):
                 pass
         raise
@@ -159,11 +166,17 @@ def _do_pick(
 ) -> None:
     def run() -> None:
         arm.open_gripper()
+        if carry is not None:
+            # Stage over the arm's own side first: a joint-space sweep from wherever the arm
+            # rests straight to the bin would pass through other arms' areas.
+            _move(arm, carry)
         _move(arm, _above(p, APPROACH_DZ), yaw)
         _move(arm, _above(p, GRASP_DZ), yaw)
         if not arm.close_gripper().holding:
             arm.open_gripper()  # missed: leave the shared area before reporting
-            _move(arm, _above(p, APPROACH_DZ), yaw)
+            _move(arm, _above(p, APPROACH_DZ), yaw)  # straight up first,
+            if carry is not None:  # then out of the shared area
+                _move(arm, carry)
             raise SkillFailed("grasp")
         _move(arm, _above(p, LIFT_DZ), yaw)
         if not arm.holding():
@@ -172,7 +185,7 @@ def _do_pick(
             # The executor frees the shared area lock when this step returns: be out by then.
             _move(arm, carry)
 
-    _retreat_on_failure(arm, p, run, yaw)
+    _retreat_on_failure(arm, p, run, yaw, safe=carry)
 
 
 def _do_place(arm: ArmDriver, p: np.ndarray) -> None:
