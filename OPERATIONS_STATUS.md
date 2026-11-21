@@ -70,6 +70,14 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 16:16 (Vato), answers to Aravind's three asks, on `orchestrator`:
+  (1) `Executor.update_graph(graph)`: pass `rescan(...).graph` after `registry.resolve`; done and
+  running steps are kept even if left out, new steps join, dropped pending steps go, changed args
+  apply, then a forced re-plan (also works after the batch finished).
+  (2) `Executor(catalog=[...all arm ids...])`: the what-if row adds the catalog's unplugged arms
+  (with their reach) before any virtual arm.
+  (3) Fake-arm tests now run at 10x, so Windows' ~15.6 ms timer tick no longer breaks them.
+
 - 16:14 (Vato): Demo adds an RTX rehearsal: the plan plays in Isaac Sim first, then on the real arms. Operations builds it; Isaac Sim runs on a second machine. Arm motions in the sim should come from Action's skills (MuJoCo track) so sim and real move the same way.
 
 - 16:09 (Vato): Real-arm adapter withdrawn: Action already plans it (Vivek's `SkillWorker` + `LeRobotDriver` on `action-arm-skills`). Operations posted LeRobot safety notes and offered to take his Task 8 (#20).
