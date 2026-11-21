@@ -615,6 +615,15 @@ class Executor:
         if method == "auto":
             method = "cpsat" if force and len(p.pending()) <= 40 else "heft"
         new = solve(p, method, self.time_limit)
+        previous = self._plan.makespan if self._plan is not None else None
+        considered: dict[str, float] = {}
+        if force:  # for the screen: the plans that were compared (cheap: milliseconds)
+            for name in ("greedy", "heft"):
+                try:
+                    considered[name] = solve(p, name).makespan
+                except Exception:
+                    pass
+            considered[new.solver] = new.makespan
         chosen, committed = new, True
         if not force and self._plan is not None:
             old = retime(self._plan, p)
@@ -658,6 +667,8 @@ class Executor:
                 ).items()
             },
             "solve_time": chosen.info.get("solve_time", 0.0),
+            "previous_makespan": previous,
+            "considered": considered,
             "done": sum(s is TaskState.DONE for s in self._status.values()),
             "total": len(self._status),
         }
