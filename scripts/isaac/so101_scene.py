@@ -250,11 +250,57 @@ def to_scene(x, y, z=0.0):
     return (x - OFFSET[0], y - OFFSET[1], TABLE_Z + z)
 
 
+# The table top is 0.8 m deep. In the real layout the arms sit at its back edge, so the table is
+# shifted until that edge is just behind the arm bases.
+TABLE_Y = 0.0
+if LAYOUT:
+    back = max(a["base_pose_m"][1] for a in LAYOUT["arms"]) - OFFSET[1] + 0.07
+    TABLE_Y = back - 0.4
+
+LIBRARY = "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac"
+
+
+def library_prop(path, name, pos, scale=1.0, rot=(0.0, 0.0, 0.0), material=None):
+    """A ready-made model from the Isaac Sim asset library, as a visual prop (no physics, so it
+    cannot push the arms). Returns False if the library cannot be reached."""
+    try:
+        prim = add_reference_to_stage(usd_path=f"{LIBRARY}/{name}", prim_path=path)
+    except Exception as e:
+        print(f"[so101_scene] library asset {name} not loaded: {e}", flush=True)
+        return False
+    if not prim or not prim.IsValid() or not list(prim.GetChildren()):
+        print(f"[so101_scene] library asset {name} is empty", flush=True)
+        return False
+    xf_ = UsdGeom.Xformable(prim)
+    xf_.ClearXformOpOrder()
+    move = xf_.AddTranslateOp()
+    move.Set(Gf.Vec3d(*pos))
+    xf_.AddRotateXYZOp().Set(Gf.Vec3f(*rot))
+    xf_.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
+    # rest it on the surface: lift (or lower) it until its lowest point is at pos z
+    box = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_]).ComputeWorldBound(
+        prim
+    )
+    low = box.ComputeAlignedRange().GetMin()[2]
+    if math.isfinite(low):
+        move.Set(Gf.Vec3d(pos[0], pos[1], pos[2] + (pos[2] - low)))
+    for p_ in Usd.PrimRange(prim):
+        for attr, value in (
+            ("physics:rigidBodyEnabled", False),
+            ("physics:collisionEnabled", False),
+        ):
+            if p_.HasAttribute(attr):
+                p_.GetAttribute(attr).Set(value)
+    if material is not None:
+        bind(path, material)
+    return True
+
+
 # Visual only (no collider): during kinematic playback the arms must not be pushed by contacts.
 VisualCuboid(
     "/World/table",
     name="table",
-    position=np.array([0.0, 0.0, TABLE_Z - 0.02]),
+    position=np.array([0.0, TABLE_Y, TABLE_Z - 0.02]),
     scale=np.array([1.4, 0.8, 0.04]),
     color=np.array([0.55, 0.42, 0.30]),
 )
@@ -267,7 +313,7 @@ if PHOTOREAL:
     for n, (lx, ly) in enumerate([(-0.64, -0.34), (0.64, -0.34), (-0.64, 0.34), (0.64, 0.34)]):
         VisualCuboid(
             f"/World/leg_{n}",
-            position=np.array([lx, ly, (TABLE_Z - 0.04) / 2]),
+            position=np.array([lx, ly + TABLE_Y, (TABLE_Z - 0.04) / 2]),
             scale=np.array([0.04, 0.04, TABLE_Z - 0.04]),
         )
         bind(f"/World/leg_{n}", steel)
@@ -342,11 +388,24 @@ def cylinder(path, pos, radius, height, material=None, axis="Z", rot=None):
         bind(path, material)
 
 
+# The library's YCB models are each aligned to their own axes: the bowl and the can need tipping
+# upright for a z-up stage, the marker and the foam brick already lie flat.
+YCB_UP = (-90.0, 0.0, 0.0)
 if LAYOUT:
     paper = pbr("kraft_paper", (0.36, 0.22, 0.10), 0.92)
     for b in LAYOUT.get("bins", []):  # a round paper bowl: a floor disc and a ring of thin walls
         bx, by, _ = to_scene(*b["xyz"][:2])
         r, h, n = float(b.get("radius_m", 0.1)), 0.055, 40
+        # the library's bowl (YCB 024, about 16 cm across), scaled to this bowl, in kraft paper
+        if PHOTOREAL and library_prop(
+            f"/World/{b['id']}",
+            "Props/YCB/Axis_Aligned/024_bowl.usd",
+            (bx, by, TABLE_Z),
+            scale=r / 0.08,
+            rot=YCB_UP,
+            material=paper,
+        ):
+            continue
         cylinder(f"/World/{b['id']}/floor", (bx, by, TABLE_Z + 0.002), r, 0.004, paper)
         for k in range(n):
             ang = 2 * math.pi * k / n
@@ -378,38 +437,38 @@ if LAYOUT:
         )
         bind(f"/World/marker_{k}/sheet", white)
         bind(f"/World/marker_{k}/ink", ink)
-    # small everyday objects like the ones on the real table
-    cylinder(
-        "/World/obj_balm",
-        to_scene(0.08, 0.12, 0.011),
-        0.011,
-        0.065,
-        pbr("balm", (0.05, 0.12, 0.6), 0.3),
-        axis="X",
-        rot=(0, 0, 70),
-    )
-    cylinder(
-        "/World/obj_tube",
-        to_scene(0.20, 0.03, 0.009),
-        0.009,
-        0.06,
-        pbr("tube", (0.9, 0.9, 0.92), 0.35),
-        axis="X",
-        rot=(0, 0, 95),
-    )
-    cylinder(
-        "/World/obj_tape",
-        to_scene(0.30, 0.31, 0.012),
-        0.024,
-        0.024,
-        pbr("tape", (0.85, 0.82, 0.75), 0.25),
-    )
-    VisualCuboid(
-        "/World/obj_bar",
-        position=np.array(to_scene(0.40, 0.30, 0.006)),
-        scale=np.array([0.022, 0.05, 0.012]),
-    )
-    bind("/World/obj_bar", pbr("foil", (0.75, 0.76, 0.78), 0.25, metallic=1.0))
+    # everyday objects from the library (YCB scans); simple shapes if it cannot be reached
+    props = [  # name, file, table x y, tip (degrees about x), turn (degrees about z)
+        ("obj_marker", "040_large_marker.usd", (0.08, 0.12), 0.0, 25.0),
+        ("obj_brick", "061_foam_brick.usd", (0.50, 0.06), 0.0, 15.0),
+        ("obj_can", "007_tuna_fish_can.usd", (0.30, 0.31), YCB_UP[0], 0.0),
+    ]
+    loaded = 0
+    if PHOTOREAL:
+        for name, file, (ox, oy), tip, yaw in props:
+            pos = to_scene(ox, oy, 0.0)
+            ok = library_prop(
+                f"/World/{name}", f"Props/YCB/Axis_Aligned/{file}", pos, rot=(tip, 0.0, yaw)
+            )
+            loaded += int(ok)
+    print(f"[so101_scene] library props loaded: {loaded}", flush=True)
+    if not loaded:
+        cylinder(
+            "/World/obj_balm",
+            to_scene(0.08, 0.12, 0.011),
+            0.011,
+            0.065,
+            pbr("balm", (0.05, 0.12, 0.6), 0.3),
+            axis="X",
+            rot=(0, 0, 70),
+        )
+        cylinder(
+            "/World/obj_tape",
+            to_scene(0.30, 0.31, 0.012),
+            0.024,
+            0.024,
+            pbr("tape", (0.85, 0.82, 0.75), 0.25),
+        )
 else:
     # Cubes in front of the arms, bins between them.
     CUBE_COLORS = [
