@@ -5,6 +5,33 @@ For Diego and Om (#19). From Vivek (Action, #20). Branch `action-arm-skills`; st
 MuJoCo arms (24/24 sort steps on 3 arms, `scripts/sim_demo.py`) and on a fake robot in unit tests.
 The first real motion is yours, in the order of the checklist.
 
+## Read this first (status, Sat 21 Nov, 17:50)
+
+**Ready:** stage 0 and 1 below (config, conversion, read-only). **Not yet proven:** any motion on a real
+arm. The code path is proven only on MuJoCo and a fake robot, so the first motion is a supervised,
+staged one: Diego or Om at the rig, one arm, `speed_scale` 0.3, hand at the power.
+
+What is proven (199 -> 248 tests green, all without hardware):
+- Operations' real `Executor` runs sort12 on 3 simulated arms through our `SkillWorker`: 24/24 steps ok
+  (`tests/test_executor_with_sim_arms.py`). Contract, timeouts, resource locks and retries all work end to end.
+- An independent review found real-arm problems (stop forgotten, sagging commands, bus races, idle
+  heartbeat); all fixed with tests. The sim run also exposed that `pick` must leave the shared area
+  before it returns (the executor releases the lock then): `pick` now ends at a per-arm `carry` pose.
+
+What we still need from you before stage 2 (nothing here is guessable):
+1. `configs/real_arms.json`, **keyed by catalog id** (`rakesh_follower`, `vato_follower`), not `arm_a`:
+   Aravind's reach graph and the executor use that id. Template: `configs/real_arms.example.json`.
+2. A real poses file for the table: copy `tasks/sort/poses_real.example.json` (its numbers are the SIM
+   layout and are wrong): input bin, each arm's `own_output_bin` and `carry` (above its own bin, clear of
+   the shared input area), object spots. Pass it as `Poses.load(...)` in stage 4 and `--poses` in stage 5.
+3. Base poses from Aravind's marker touch (touch two table markers with each gripper) in the same frame.
+4. A parked-pose and gripper threshold per arm (table below).
+
+Known gaps: the grasp angle is not controlled (the tool points straight down, wrist roll is not solved), so
+cubes are fine and long objects are not (Operations' blocker #4: `pick_yaw_deg`, not built). Windows
+laptop: the driver uses no Linux paths itself; ports come from `hfteama.hardware.pairs`. LeRobot import
+names are checked against 0.6.2 source only.
+
 ## What you get
 
 `hfteama.arms.real.LeRobotDriver`: the same primitives the simulator implements
@@ -78,7 +105,7 @@ Connecting enables torque and the arm holds its current pose: **support it as yo
 1. **Read only.** Connect, print, compare against what you see:
    ```python
    from hfteama.arms.real import from_config
-   d = from_config("arm_a")
+   d = from_config("rakesh_follower")
    print(d.read_joints(), d.alive())
    ```
    To compare against the real arm, move it by hand: **support the arm with one hand, then** switch torque
@@ -100,14 +127,14 @@ Connecting enables torque and the arm holds its current pose: **support it as yo
    from hfteama.arms.poses import Poses
    from hfteama.arms.worker import SkillWorker
    from hfteama.taskgraph import Task
-   w = SkillWorker("arm_a", d, Poses.load("tasks/sort/poses.json"), "real")
+   w = SkillWorker("rakesh_follower", d, Poses.load("tasks/sort/poses_real.json"), "real")
    print(w.execute(Task(id="t1", skill="pick", args={"object": "block_01", "from": "input_bin"})))
    print(w.execute(Task(id="t2", skill="place", args={"to": "own_output_bin"})))
    ```
    Expect `outcome=ok`. A miss returns `failed` with reason `grasp` and the arm lifts clear; any other
    motion failure also lifts back to approach height before returning. Keep `speed_scale` at 0.3 for this stage.
    After a `park` step or `worker.park()` the arm is limp: reconnect it before the next step.
-5. **Durations.** `python scripts/measure_durations.py --backend real --arms arm_a --cycles 3`
+5. **Durations.** `python scripts/measure_durations.py --backend real --arms rakesh_follower --poses tasks/sort/poses_real.json --cycles 3`
    asks you to type `yes`, then to put the block at its spot before every cycle. Send us
    `runs/durations/sort_real.json`; Operations plans with the p80 numbers.
 

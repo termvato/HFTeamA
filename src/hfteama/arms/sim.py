@@ -49,8 +49,9 @@ OBJECT_HALF_M = 0.015
 # Folded sideways rest/park pose (pan, lift, elbow, wrist flex, wrist roll). The zero pose stretches
 # every arm toward the bin, so arms that face each other interpenetrate; this one keeps all
 # arm geometry >= 0.2 m from the bin centre with no self or arm-arm contact (checked for the sort
-# layout in tasks/sort/poses.json).
-REST_Q = np.array([1.85, -1.6, 1.6, 1.0, 0.0])
+# layout in tasks/sort/poses.json). Pan is negative so each arm rests on the side of its OWN output
+# bin; +1.85 pointed every arm at its neighbour's bin and arms collided there under the executor.
+REST_Q = np.array([-1.85, -1.6, 1.6, 1.0, 0.0])
 PARK_Q = REST_Q
 
 # MuJoCo collision bits: the model's arm geoms use bit 1. Objects use bit 2 and the floor both, so

@@ -22,7 +22,7 @@ def test_sort_poses_reachable_by_every_arm() -> None:
     assert len(poses.arms) == 3
     for arm, cfg in poses.arms.items():
         kin = Kinematics(ArmBase(tuple(cfg["base"]), cfg["yaw"]))
-        names = ["input_bin", "own_output_bin", *poses.objects]
+        names = ["input_bin", "own_output_bin", "carry", *poses.objects]
         for name in names:
             p = poses.point(name, arm)
             for dz in (0.0, APPROACH_DZ, LIFT_DZ):

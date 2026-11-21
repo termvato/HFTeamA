@@ -189,3 +189,26 @@ def test_a_stopped_motion_does_not_retreat() -> None:
     with pytest.raises(MotionError, match="stopped"):
         REGISTRY["pick"](d, _task("pick", object="block_01"), POSES)
     assert len(_targets(d)) == 2
+
+
+def test_pick_carries_the_part_out_of_the_shared_area_before_returning() -> None:
+    # The executor releases the area's lock when pick returns: the arm must already be clear of it.
+    poses = Poses(
+        locations={"input_bin": [0.20, 0.00, 0.02]},
+        per_arm={"arm_a": {"carry": [0.05, 0.20, 0.12]}},
+        objects={"block_01": [0.21, 0.01, 0.015]},
+    )
+    d = FakeDriver()
+    REGISTRY["pick"](d, _task("pick", object="block_01"), poses)
+    assert _targets(d)[-1] == (0.05, 0.20, 0.12)
+    assert _names(d)[-2:] == ["holding", "move_to"]  # the grasp is re-checked before carrying
+
+
+def test_unreachable_carry_pose_is_refused_before_any_motion() -> None:
+    poses = Poses(
+        objects={"block_01": [0.21, 0.01, 0.015]}, per_arm={"arm_a": {"carry": [0, 0, 0.5]}}
+    )
+    d = FakeDriver(unreachable_above=0.2)
+    with pytest.raises(MotionError, match="unreachable"):
+        REGISTRY["pick"](d, _task("pick", object="block_01"), poses)
+    assert d.calls == []

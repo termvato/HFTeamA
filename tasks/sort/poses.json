@@ -1,5 +1,5 @@
 {
- "note": "sort12 table, table frame, metres. Bin at the origin; 12 blocks in a 4x3 grid (35 mm pitch); 3 arms 0.26 m from the bin at 90/210/330 deg facing it; each arm's own output bin is 0.3 m from the bin centre at +60 deg from its arm. Simulator layout: on the real table Hardware's measured base poses replace 'arms'.",
+ "note": "sort12 table, table frame, metres. Bin at the origin; 12 blocks in a 4x3 grid (35 mm pitch); 3 arms 0.26 m from the bin at 90/210/330 deg facing it; each arm's own output bin is 0.3 m from the bin centre at +60 deg from its arm. Simulator layout: on the real table Hardware's measured base poses replace 'arms'. 'carry' is where pick leaves each arm (above its own output bin, outside the shared input area) so the area's lock can be released when pick returns.",
  "table_z": 0.0,
  "locations": {
   "input_bin": [
@@ -14,6 +14,11 @@
     -0.2598,
     0.15,
     0.02
+   ],
+   "carry": [
+    -0.2598,
+    0.15,
+    0.12
    ]
   },
   "arm_b": {
@@ -21,6 +26,11 @@
     -0.0,
     -0.3,
     0.02
+   ],
+   "carry": [
+    -0.0,
+    -0.3,
+    0.12
    ]
   },
   "arm_c": {
@@ -28,6 +38,11 @@
     0.2598,
     0.15,
     0.02
+   ],
+   "carry": [
+    0.2598,
+    0.15,
+    0.12
    ]
   }
  },

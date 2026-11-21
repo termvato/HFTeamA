@@ -63,3 +63,9 @@ Regenerate: `python scripts/measure_durations.py` (writes `runs/durations/sort_s
   with tests (stop latch, commands on the last command, bus lock, idle heartbeat, validate before moving,
   park/execute races, handoff doc). 8 minors deferred (list in the ledger / final report). 199 tests green.
   Not run on hardware.
+- 2026-11-21 ~17:50: Merged latest main (Aravind: registry, perception, markers, reach; Vato: planner, executor,
+  Isaac spike) and origin/action. Operations' real Executor now drives our SkillWorker on 3 sim arms: sort12
+  24/24 ok (`tests/test_executor_with_sim_arms.py`). That run found two real bugs, both fixed: pick left the arm
+  in the shared area when the executor released its lock (now ends at a per-arm `carry` pose), and the sim rest
+  pose pointed each arm at its neighbour's bin (mirrored). Handoff rewritten with a status section; real arm
+  ids must be catalog ids (`rakesh_follower`, `vato_follower`). 248 tests green. No real arm run yet.

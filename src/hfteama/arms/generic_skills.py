@@ -69,8 +69,14 @@ def _validate(arm: ArmDriver, waypoints: list[np.ndarray]) -> None:
             raise MotionError("unreachable")
 
 
-def _pick_waypoints(p: np.ndarray) -> list[np.ndarray]:
-    return [_above(p, APPROACH_DZ), _above(p, GRASP_DZ), _above(p, LIFT_DZ)]
+def _carry_point(poses: Poses, arm_id: str) -> np.ndarray | None:
+    """Where pick leaves the arm: a per-arm `carry` pose outside the shared area, if defined."""
+    return poses.point("carry", arm_id) if poses.has("carry", arm_id) else None
+
+
+def _pick_waypoints(p: np.ndarray, carry: np.ndarray | None = None) -> list[np.ndarray]:
+    points = [_above(p, APPROACH_DZ), _above(p, GRASP_DZ), _above(p, LIFT_DZ)]
+    return points + ([carry] if carry is not None else [])
 
 
 def _place_waypoints(p: np.ndarray) -> list[np.ndarray]:
@@ -93,7 +99,7 @@ def _retreat_on_failure(arm: ArmDriver, p: np.ndarray, run: Callable[[], None]) 
         raise
 
 
-def _do_pick(arm: ArmDriver, p: np.ndarray) -> None:
+def _do_pick(arm: ArmDriver, p: np.ndarray, carry: np.ndarray | None = None) -> None:
     def run() -> None:
         arm.open_gripper()
         arm.move_to(_above(p, APPROACH_DZ))
@@ -105,6 +111,9 @@ def _do_pick(arm: ArmDriver, p: np.ndarray) -> None:
         arm.move_to(_above(p, LIFT_DZ))
         if not arm.holding():
             raise SkillFailed("dropped")
+        if carry is not None:
+            # The executor frees the shared area lock when this step returns: be out by then.
+            arm.move_to(carry)
 
     _retreat_on_failure(arm, p, run)
 
@@ -121,9 +130,9 @@ def _do_place(arm: ArmDriver, p: np.ndarray) -> None:
 
 @_register("pick")
 def pick(arm: ArmDriver, task: Task, poses: Poses) -> None:
-    p = pick_point(task, poses, arm.arm_id)
-    _validate(arm, _pick_waypoints(p))
-    _do_pick(arm, p)
+    p, carry = pick_point(task, poses, arm.arm_id), _carry_point(poses, arm.arm_id)
+    _validate(arm, _pick_waypoints(p, carry))
+    _do_pick(arm, p, carry)
 
 
 @_register("place")
@@ -136,8 +145,9 @@ def place(arm: ArmDriver, task: Task, poses: Poses) -> None:
 @_register("pick_place")
 def pick_place(arm: ArmDriver, task: Task, poses: Poses) -> None:
     pp, qq = pick_point(task, poses, arm.arm_id), place_point(task, poses, arm.arm_id)
-    _validate(arm, _pick_waypoints(pp) + _place_waypoints(qq))  # before a part is in the gripper
-    _do_pick(arm, pp)
+    carry = _carry_point(poses, arm.arm_id)
+    _validate(arm, _pick_waypoints(pp, carry) + _place_waypoints(qq))  # before a part is held
+    _do_pick(arm, pp, carry)
     _do_place(arm, qq)
 
 
