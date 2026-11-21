@@ -466,7 +466,7 @@ JOG_HELP = """Commands (directions as seen from BEHIND the arm, looking where it
   f / b   forward (away from the arm) / back      l / r   left / right
   u / d   up / down                                add a number for several steps: f3
   s N     step size in mm (now {step:.0f})          y N     turn the jaws by N deg
-  o [N] / c  open (to N) / close the gripper                g       grasp here: down to grasp_z, close, up
+  o [N] / c  open (to N) / close the gripper    g       grasp here: down to grasp_z, close, up
   g N     grasp going down exactly N cm             z N     the tip is really N cm above the table
   box     over the box and open (drop)             scan    home, look again, renumber
   log     the last grasp DID hold the piece (if `g` said empty): log it for fit-grasps
