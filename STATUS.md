@@ -36,7 +36,6 @@ States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 |---|---|---|
 | Who owns arm detection (`vla/detect_arms.py` on `action` overlaps Hardware's scope) | Hardware, Action | #19, #20 |
 | Top-down camera: mounting and calibration to the table | Hardware, Operations | #19 |
-| Step timeout (1.5x, 2x or 3x the estimate) | Vato, Aravind | #21 |
 
 Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-locked-sat-21-nov-vato-and-aravind).
 
