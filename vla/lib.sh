@@ -6,21 +6,50 @@ fi
 set -euo pipefail
 source "$VLA_DIR/config.sh"
 
-CALIB_DIR="${HF_LEROBOT_CALIBRATION:-$HOME/.cache/huggingface/lerobot/calibration}"
+FOLLOWER_CALIB="$CALIB_DIR/robots/so_follower"     # passed as --robot.calibration_dir
+LEADER_CALIB="$CALIB_DIR/teleoperators/so_leader"  # passed as --teleop.calibration_dir
 
-need_port() {  # fail early with a useful hint instead of a LeRobot stack trace
-    [[ "${SKIP_CHECKS:-0}" == 1 ]] && return 0
-    for p in "$@"; do
-        [[ -e "$p" ]] || { echo "missing $p: plugged in? udev rules installed? (python vla/detect_arms.py list)" >&2; exit 1; }
+# port_of <usb serial> -> /dev/ttyACM* of that board now (empty if it is not plugged in)
+port_of() {
+    local tty
+    for tty in /sys/class/tty/ttyACM* /sys/class/tty/ttyUSB*; do
+        [[ -e "$tty/device" ]] || continue
+        [[ "$(cat "$(readlink -f "$tty/device")/../serial" 2>/dev/null)" == "$1" ]] && { echo "/dev/${tty##*/}"; return; }
     done
 }
 
-need_calib() {  # kind=robots/so_follower or teleoperators/so_leader, then ids
-    local kind=$1; shift
+# arm_port <ID var prefix, e.g. FOLLOWER_A> -> the port, or exit with what is missing
+arm_port() {
+    local id_var="${1}_ID" serial_var="${1}_SERIAL" port
+    port="$(port_of "${!serial_var}")"
+    if [[ -z "$port" ]]; then
+        # studio.py looks "serial:<n>" up again on every connect, so arms can be plugged in later
+        [[ "${SKIP_CHECKS:-0}" == 1 ]] && { echo "serial:${!serial_var}"; return; }
+        echo "${!id_var} (USB serial ${!serial_var}) is not plugged in. Follower: is its 12 V supply on?" \
+             "(python vla/detect_arms.py list)" >&2
+        exit 1
+    fi
+    [[ "${SKIP_CHECKS:-0}" == 1 ]] && { echo "serial:${!serial_var}"; return; }
+    if [[ ! -w "$port" ]]; then
+        if id -nG "$USER" | grep -qw dialout; then  # added to the group, but this session predates it
+            echo "${!id_var} is on $port. You are in the dialout group, but this terminal started" \
+                 "before that: run 'newgrp dialout' here (or log out and back in), then try again" >&2
+        else
+            echo "${!id_var} is on $port, but you may not open it: sudo usermod -aG dialout $USER," \
+                 "then log out and back in" >&2
+        fi
+        exit 1
+    fi
+    echo "$port"
+}
+
+need_calib() {  # dir, then ids
+    local dir=$1; shift
     [[ "${SKIP_CHECKS:-0}" == 1 ]] && return 0
     for id in "$@"; do
-        [[ -e "$CALIB_DIR/$kind/$id.json" ]] || {
-            echo "no calibration $CALIB_DIR/$kind/$id.json: run ./vla/calibrate.sh <arm> for each arm" >&2; exit 1; }
+        [[ -e "$dir/$id.json" ]] || {
+            echo "no calibration $dir/$id.json: run ./vla/sync_calibration.sh (never recalibrate these arms)" >&2
+            exit 1; }
     done
 }
 
@@ -40,10 +69,10 @@ cameras_for() {
         [[ "$devices" != *" $dev "* ]] || { echo "camera device $dev is listed twice" >&2; exit 1; }
         names+="$name "; devices+="$dev "
         CAMERA_ARMS+=("$name:$arms")
-        [[ $mode == single && $arms == b ]] && continue
+        [[ $mode == single && $arms != both && $arms != "${SINGLE_ARM,,}" ]] && continue  # other arm's wrist
         local w=$CAM_W h=$CAM_H  # LeRobot's width/height are after rotation: a sideways camera is portrait
         [[ $rot == 90 || $rot == -90 ]] && { w=$CAM_H; h=$CAM_W; }
-        entries+=("$name: {type: opencv, index_or_path: $dev, width: $w, height: $h, fps: $CAM_FPS, fourcc: $CAM_FOURCC, rotation: $rot}")
+        entries+=("$name: {type: opencv, index_or_path: $dev, width: $w, height: $h, fps: $CAM_FPS, fourcc: $CAM_FOURCC, rotation: $rot, warmup_s: $CAM_WARMUP_S}")
     done <<<"$CAMERA_TABLE"
     (( ${#entries[@]} )) || { echo "no cameras for $mode mode in CAMERA_TABLE (config.sh)" >&2; exit 1; }
     local IFS=,
@@ -53,16 +82,22 @@ cameras_for() {
 # robot_args single|dual -> lerobot CLI flags for the follower side (cameras included)
 robot_args() {
     cameras_for "$1"
+    local a b s id_var
     if [[ $1 == single ]]; then
-        need_port "$FOLLOWER_A_PORT"; need_calib robots/so_follower follower_a
-        ROBOT_ARGS=(--robot.type=so101_follower --robot.id=follower_a --robot.port="$FOLLOWER_A_PORT"
+        s="FOLLOWER_$(single_arm)"; id_var="${s}_ID"
+        a="$(arm_port "$s")"
+        need_calib "$FOLLOWER_CALIB" "${!id_var}"
+        ROBOT_ARGS=(--robot.type=so101_follower --robot.id="${!id_var}" --robot.port="$a"
+                    --robot.calibration_dir="$FOLLOWER_CALIB"
                     --robot.max_relative_target="$MAX_RELATIVE_TARGET" --robot.cameras="$CAMERAS")
     else
-        need_port "$FOLLOWER_A_PORT" "$FOLLOWER_B_PORT"
-        need_calib robots/so_follower "${BI_FOLLOWER_ID}_left" "${BI_FOLLOWER_ID}_right"
+        a="$(arm_port FOLLOWER_A)"
+        b="$(arm_port FOLLOWER_B)"
+        need_calib "$FOLLOWER_CALIB" "${BI_FOLLOWER_ID}_left" "${BI_FOLLOWER_ID}_right"
         ROBOT_ARGS=(--robot.type=bi_so_follower --robot.id="$BI_FOLLOWER_ID"
-                    --robot.left_arm_config.port="$FOLLOWER_A_PORT"
-                    --robot.right_arm_config.port="$FOLLOWER_B_PORT"
+                    --robot.calibration_dir="$FOLLOWER_CALIB"
+                    --robot.left_arm_config.port="$a"
+                    --robot.right_arm_config.port="$b"
                     --robot.left_arm_config.max_relative_target="$MAX_RELATIVE_TARGET"
                     --robot.right_arm_config.max_relative_target="$MAX_RELATIVE_TARGET"
                     --robot.cameras="$CAMERAS")
@@ -71,16 +106,26 @@ robot_args() {
 
 # teleop_args single|dual -> lerobot CLI flags for the leader side
 teleop_args() {
+    local a b s id_var
     if [[ $1 == single ]]; then
-        need_port "$LEADER_A_PORT"; need_calib teleoperators/so_leader leader_a
-        TELEOP_ARGS=(--teleop.type=so101_leader --teleop.id=leader_a --teleop.port="$LEADER_A_PORT")
+        s="LEADER_$(single_arm)"; id_var="${s}_ID"
+        a="$(arm_port "$s")"
+        need_calib "$LEADER_CALIB" "${!id_var}"
+        TELEOP_ARGS=(--teleop.type=so101_leader --teleop.id="${!id_var}" --teleop.port="$a"
+                     --teleop.calibration_dir="$LEADER_CALIB")
     else
-        need_port "$LEADER_A_PORT" "$LEADER_B_PORT"
-        need_calib teleoperators/so_leader "${BI_LEADER_ID}_left" "${BI_LEADER_ID}_right"
+        a="$(arm_port LEADER_A)"
+        b="$(arm_port LEADER_B)"
+        need_calib "$LEADER_CALIB" "${BI_LEADER_ID}_left" "${BI_LEADER_ID}_right"
         TELEOP_ARGS=(--teleop.type=bi_so_leader --teleop.id="$BI_LEADER_ID"
-                     --teleop.left_arm_config.port="$LEADER_A_PORT"
-                     --teleop.right_arm_config.port="$LEADER_B_PORT")
+                     --teleop.calibration_dir="$LEADER_CALIB"
+                     --teleop.left_arm_config.port="$a"
+                     --teleop.right_arm_config.port="$b")
     fi
+}
+
+single_arm() {  # SINGLE_ARM from config.sh -> A or B
+    case "${SINGLE_ARM,,}" in a) echo A ;; b) echo B ;; *) echo "SINGLE_ARM must be a or b" >&2; exit 1 ;; esac
 }
 
 mode_arg() {

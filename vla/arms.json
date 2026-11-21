@@ -1,0 +1,8 @@
+{
+  "arms": [
+    {"id": "rakesh_follower", "role": "follower", "serial": "5B79014975", "pair": "rakesh", "side": "a"},
+    {"id": "rakesh_leader", "role": "leader", "serial": "5B8E115290", "pair": "rakesh", "side": "a"},
+    {"id": "vato_follower", "role": "follower", "serial": "5A7A015861", "pair": "hacklab", "side": "b"},
+    {"id": "hacklab_leader", "role": "leader", "serial": "5A7A015820", "pair": "hacklab", "side": "b"}
+  ]
+}
