@@ -393,7 +393,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="lab">Team of 6 &middot; 48 hours</div>
     </div>
   </div>
-  <div class="pagenum lemon">01 / 08</div>
+  <div class="pagenum lemon">01 / 09</div>
   <aside class="notes">We're HFTeamA. One idea: finish a batch of work sooner just by plugging in more robot arms, and see the new finish time live. (~15 s)</aside>
 </section>
 
@@ -424,7 +424,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div><div class="ch" style="margin-bottom:14px">More arms</div><p class="body">The speed-up flattens, and nothing tells you why.</p></div>
     </div>
   </div>
-  <div class="pagenum">02 / 08</div>
+  <div class="pagenum">02 / 09</div>
   <aside class="notes">Robot cells are programmed per arm. Add one: re-program. Lose one: the line waits. And more arms rarely means N times faster. Integrators quote integration at 1.5 to 3 times the arm price. (~30 s)</aside>
 </section>
 
@@ -459,19 +459,19 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       </div>
     </div>
     <div class="p ink between" style="grid-column:10/span 3;grid-row:1/span 8">
-      <div class="lab">Predicted finish &middot; example</div>
-      <div class="clock-time" id="clockTime">12:00</div>
+      <div class="lab">Predicted finish &middot; our planner</div>
+      <div class="clock-time" id="clockTime">2:00</div>
       <div class="chip yes limit-tag" id="clockLimit">Limit: arms</div>
       <div class="lanes">
         <div class="lane on" data-lane="1"><span class="lab">Arm 1</span><div class="bar"><i style="width:30%"></i><i style="width:22%"></i><i style="width:26%"></i></div></div>
         <div class="lane" data-lane="2"><span class="lab">Arm 2</span><div class="bar"><i class="l" style="width:28%"></i><i class="l" style="width:24%"></i></div></div>
         <div class="lane" data-lane="3"><span class="lab">Arm 3</span><div class="bar"><i style="width:34%"></i></div></div>
       </div>
-      <div class="lab-sm">12 min of work &middot; 5 min critical path</div>
+      <div class="lab-sm">Sort 12 objects &middot; planner output on today's code</div>
     </div>
   </div>
-  <div class="pagenum invert">03 / 08</div>
-  <aside class="notes">Three moves. See: a camera VLM reads the table and writes the steps. Split: the planner assigns steps and predicts the finish. Re-split: when an arm joins, leaves or fails, we re-plan the rest live. Watch the clock on the right: 12, 6, then 5, not 4, because the step order binds. (~35 s)</aside>
+  <div class="pagenum invert">03 / 09</div>
+  <aside class="notes">Three moves. See: a camera VLM reads the table and writes the steps. Split: the planner assigns steps and predicts the finish. Re-split: when an arm joins, leaves or fails, we re-plan the rest live. The clock on the right is our planner's real output for the 12-object sort: watch it drop as arms join, then stop when a shared bin binds. (~35 s)</aside>
 </section>
 
 <!-- =========================================================
@@ -491,21 +491,21 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     <div class="p between" style="grid-column:1/span 3;grid-row:3/span 3">
       <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
       <div class="lab">Ops &middot; 01</div>
-      <div><div class="h3" style="margin-bottom:10px">Camera + VLM</div><p class="bsm">Picks the categories and writes the task graph.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Camera + VLM</div><p class="bsm">Qwen3-VL points at each object; ArUco markers map pixels onto the table.</p></div>
     </div>
     <div class="p lemon between" style="grid-column:4/span 3;grid-row:3/span 3">
       <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
       <div class="lab">Ops &middot; 02</div>
-      <div><div class="h3" style="margin-bottom:10px">Planner</div><p class="bsm">HEFT live, CP-SAT when it fits, greedy fallback. Lower bound every re-plan.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Planner</div><p class="bsm">HEFT live, CP-SAT when it fits. Reach-aware: the nearer arm wins.</p></div>
     </div>
     <div class="p between" style="grid-column:7/span 3;grid-row:3/span 3">
       <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
       <div class="lab">Ops &middot; 03</div>
-      <div><div class="h3" style="margin-bottom:10px">Executor</div><p class="bsm">Shared-area locks, retries, heartbeat, re-plan on every event.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Executor</div><p class="bsm">Locks, retries, heartbeat, re-plan on every event; camera checks each place.</p></div>
     </div>
     <div class="p ink between" style="grid-column:10/span 3;grid-row:3/span 3">
       <div class="lab">Action &middot; 04</div>
-      <div><div class="h3" style="margin-bottom:10px">Arm workers</div><p class="bsm">Scripted IK skills today; a learned SmolVLA policy behind the same call.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Arm workers</div><p class="bsm">SkillWorker: IK skills on MuJoCo and LeRobot; SmolVLA behind the same call.</p></div>
     </div>
 
     <div class="p lemon between" style="grid-column:1/span 4;grid-row:6/span 3">
@@ -521,7 +521,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div><div class="h3" style="margin-bottom:10px">Live screen</div><p class="bsm">Countdown, what-if for 1&ndash;4 arms, the limit in words, plan vs actual.</p></div>
     </div>
   </div>
-  <div class="pagenum invert">04 / 08</div>
+  <div class="pagenum invert">04 / 09</div>
   <aside class="notes">Left to right: VLM writes the steps, the planner schedules them, the executor runs them and re-plans on every event, and each arm is a worker behind one call. Plugging in an arm is just an event. The screen only reads the event log. (~35 s)</aside>
 </section>
 
@@ -539,15 +539,16 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     <div class="p ink pad-lg" style="grid-column:7/span 6;grid-row:1/span 8;justify-content:center">
       <ol class="beats">
         <li><span class="n">01</span><span class="t"><b>One arm.</b> The VLM groups the objects; the estimate shows 1&ndash;4 arms.</span></li>
-        <li><span class="n">02</span><span class="t"><b>Go.</b> Plug in arm 2: detected, work re-splits, the countdown drops.</span></li>
-        <li><span class="n">03</span><span class="t"><b>Arm 3.</b> A smaller drop, and the screen names the limit.</span></li>
-        <li><span class="n">04</span><span class="t"><b>Break it.</b> Unplug an arm or drop a part: its work flows to the others.</span></li>
-        <li><span class="n">05</span><span class="t"><b>New object.</b> The re-scan finds it and it gets sorted too.</span></li>
+        <li><span class="n">02</span><span class="t"><b>Go.</b> The plan plays first in Isaac Sim, then on the real arms.</span></li>
+        <li><span class="n">03</span><span class="t"><b>Arm 2.</b> Plugged in, detected, work re-splits, the countdown drops.</span></li>
+        <li><span class="n">04</span><span class="t"><b>Arm 3.</b> A smaller drop, and the screen names the limit.</span></li>
+        <li><span class="n">05</span><span class="t"><b>Break it.</b> Unplug an arm or drop a part: its work flows to the others.</span></li>
+        <li><span class="n">06</span><span class="t"><b>New object.</b> The re-scan finds it and it gets sorted too.</span></li>
       </ol>
     </div>
   </div>
-  <div class="pagenum invert">05 / 08</div>
-  <aside class="notes">Switch to the live screen. Narrate each beat; let the countdown do the talking. If the rig misbehaves, cut to the backup video. (~2 min)</aside>
+  <div class="pagenum invert">05 / 09</div>
+  <aside class="notes">Switch to the live screen. Narrate each beat; let the countdown do the talking. The Isaac Sim rehearsal runs on the second machine. If the rig misbehaves, cut to the backup video. (~2 min)</aside>
 </section>
 
 <!-- =========================================================
@@ -565,30 +566,77 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="chips"><span class="chip yes">arms</span><span class="chip yes">order</span><span class="chip yes">resource:&lt;name&gt;</span></div>
     </div>
     <div class="p" style="grid-column:1/span 8;grid-row:4/span 5;gap:16px">
-      <div class="legend lab"><span><i class="sw a"></i>Ideal 1/N</span><span><i class="sw b"></i>Best possible</span><span style="margin-left:auto">Example &middot; minutes</span></div>
-      <div class="chart" style="margin-top:40px">
-        <div class="grp"><div class="bar-v a" style="height:100%"><span>12</span></div><div class="bar-v b" style="height:100%"><span>12</span></div></div>
-        <div class="grp"><div class="bar-v a" style="height:50%"><span>6</span></div><div class="bar-v b" style="height:50%"><span>6</span></div></div>
-        <div class="grp"><div class="bar-v a" style="height:33.3%"><span>4</span></div><div class="bar-v b" style="height:41.7%"><span>5</span></div></div>
-        <div class="grp"><div class="bar-v a" style="height:25%"><span>3</span></div><div class="bar-v b" style="height:41.7%"><span>5</span></div></div>
+      <div class="legend lab"><span><i class="sw a"></i>Ideal 1/N</span><span><i class="sw b"></i>Our plan</span><span style="margin-left:auto">Sort 12 objects &middot; seconds</span></div>
+      <div class="chart" id="scaleChart" style="margin-top:40px">
+        <div class="grp"><div class="bar-v a" style="height:100%"><span>120</span></div><div class="bar-v b" style="height:100%"><span>120</span></div></div>
+        <div class="grp"><div class="bar-v a" style="height:50%"><span>60</span></div><div class="bar-v b" style="height:53.3%"><span>64</span></div></div>
+        <div class="grp"><div class="bar-v a" style="height:33.3%"><span>40</span></div><div class="bar-v b" style="height:45%"><span>54</span></div></div>
+        <div class="grp"><div class="bar-v a" style="height:25%"><span>30</span></div><div class="bar-v b" style="height:45%"><span>54</span></div></div>
       </div>
-      <div class="xaxis lab-sm"><div>1 arm</div><div>2 arms</div><div>3 arms</div><div>4 arms</div></div>
+      <div class="xaxis lab-sm" id="scaleAxis"><div>1 arm<br>limit: arms</div><div>2 arms<br>limit: arms</div><div>3 arms<br>limit: input bin</div><div>4 arms<br>limit: input bin</div></div>
     </div>
     <div class="p lemon between" style="grid-column:9/span 4;grid-row:4/span 3">
-      <div class="lab">Speed-up with 2&ndash;4 arms in published multi-arm systems</div>
-      <div class="stat">1.5&ndash;3&times;</div>
+      <div class="lab">Our planned speed-up, sort 12 objects, <span data-fact="scaling.best_arms">3</span> arms</div>
+      <div class="stat" data-fact="scaling.best_speedup">2.2&times;</div>
     </div>
     <div class="p ink between" style="grid-column:9/span 4;grid-row:7/span 2">
-      <div class="lab">So the screen says it</div>
-      <p class="body">Not N&times;. We name the limit, in words.</p>
+      <div class="lab">Published multi-arm systems: 1.5&ndash;3&times;</div>
+      <p class="body">Not N&times;. The screen names the limit, in words.</p>
     </div>
   </div>
-  <div class="pagenum invert">06 / 08</div>
-  <aside class="notes">Speed-up is never N times. The finish time can't beat the work split across arms, the longest chain of ordered steps, or the busiest shared area. We compute that bound live and say which one binds. Here: 12 minutes of work, a 5-minute chain, so the third arm helps less and the fourth not at all. (~35 s)</aside>
+  <div class="pagenum invert">06 / 09</div>
+  <aside class="notes">Speed-up is never N times. The finish time can't beat the work split across arms, the longest chain of ordered steps, or the busiest shared area. We compute that bound on every re-plan and say which one binds. This chart is our planner on today's code for the 12-object sort: the second arm nearly halves it, the third helps less, and the fourth adds nothing because everyone queues at the shared input bin. (~35 s)</aside>
 </section>
 
 <!-- =========================================================
-     07 / UNDER THE HOOD + TEAM
+     07 / BUILT THIS WEEKEND (numbers filled by update_deck.py)
+     ========================================================= -->
+<section class="slide" aria-label="Built this weekend">
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 6;grid-row:1/span 3">
+      <div class="lab">Where we are</div>
+      <h2 class="title" style="font-size:80px">Built this<br><mark>weekend</mark></h2>
+      <div class="lab-sm">From the repo &middot; main @ <span data-fact="main_sha">ec9f69e</span> &middot; <span data-fact="generated">Sat 21 Nov</span></div>
+    </div>
+    <div class="p lemon between" style="grid-column:7/span 3;grid-row:1/span 3">
+      <div class="lab">Tests across team branches</div>
+      <div class="stat" data-fact="show.tests">199</div>
+    </div>
+    <div class="p ink between" style="grid-column:10/span 3;grid-row:1/span 3">
+      <div class="lab">Commits, all teams</div>
+      <div class="stat" style="color:var(--lemon)" data-fact="show.commits">91</div>
+    </div>
+    <div class="p between" style="grid-column:1/span 3;grid-row:4/span 3">
+      <div class="lab">Operations backlog done</div>
+      <div class="stat-sm" data-fact="show.ops_backlog">16/22</div>
+    </div>
+    <div class="p ink between" style="grid-column:4/span 3;grid-row:4/span 3">
+      <div class="lab">Action workstreams done</div>
+      <div class="stat-sm" style="color:var(--lemon)" data-fact="show.action_work">12/13</div>
+    </div>
+    <div class="p between" style="grid-column:7/span 3;grid-row:4/span 3">
+      <div class="lab">Arm pairs calibrated, teleoperating</div>
+      <div class="stat-sm" data-fact="show.pairs">2</div>
+    </div>
+    <div class="p lemon between" style="grid-column:10/span 3;grid-row:4/span 3">
+      <div class="lab">Teleop episodes on the Hub</div>
+      <div class="stat-sm" data-fact="show.episodes">20</div>
+    </div>
+    <div class="p ink between" style="grid-column:1/span 6;grid-row:7/span 2">
+      <div class="lab">Simulation</div>
+      <p class="body">Sort 12 objects: <span data-fact="show.sim_steps">24/24</span> steps on <span data-fact="show.sim_arms">3</span> MuJoCo arms; a failed grasp recovers.</p>
+    </div>
+    <div class="p between" style="grid-column:7/span 6;grid-row:7/span 2">
+      <div class="lab">Real camera to plan, no motion yet</div>
+      <p class="body">1 arm <span data-fact="show.dry_1">53 s</span>, 2 arms <span data-fact="show.dry_2">37 s</span>. Qwen finds <span data-fact="show.vlm_found">6/6</span> objects, <span data-fact="show.vlm_error">0.6 cm</span> error.</p>
+    </div>
+  </div>
+  <div class="pagenum">07 / 09</div>
+  <aside class="notes">Where we are, straight from the repo: the core loop, the camera and the planner work end to end; the simulated arms run the whole sort; the real arms teleoperate and the real-arm driver is ready for its first run. (~20 s)</aside>
+</section>
+
+<!-- =========================================================
+     08 / UNDER THE HOOD + TEAM
      ========================================================= -->
 <section class="slide" aria-label="Under the hood">
   <div class="frame">
@@ -605,38 +653,38 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="stat" style="font-size:128px;color:var(--lemon)">0</div>
     </div>
     <div class="p between" style="grid-column:10/span 3;grid-row:1/span 3">
-      <div class="lab">Steps in every slow stop: freeze, lower, then torque off</div>
-      <div class="stat" style="font-size:128px">3</div>
+      <div class="lab">Camera check per place step, Qwen3-VL on one laptop GPU</div>
+      <div class="stat" style="font-size:128px">2.8&nbsp;s</div>
     </div>
 
     <div class="p ink between" style="grid-column:1/span 4;grid-row:4/span 5">
       <div class="lab">Hardware</div>
       <div>
         <div class="sub" style="margin-bottom:16px">Diego &amp; Om</div>
-        <p class="bsm">Rig, calibration, safe motion, arm detection. Leader&ndash;follower pairs teleoperating, wrist cameras.</p>
+        <p class="bsm">Rig, calibration, safe motion. Two leader&ndash;follower pairs teleoperating, three cameras.</p>
       </div>
     </div>
     <div class="p between" style="grid-column:5/span 4;grid-row:4/span 5">
       <div class="lab">Action</div>
       <div>
         <div class="sub" style="margin-bottom:16px">Vivek &amp; Sahil</div>
-        <p class="bsm">Skills on real and MuJoCo arms: IK, primitives, pick and place. Teleop datasets for a SmolVLA policy.</p>
+        <p class="bsm">IK skills behind one worker, sort on 3 MuJoCo arms, LeRobot driver. Teleop data for SmolVLA.</p>
       </div>
     </div>
     <div class="p lemon between" style="grid-column:9/span 4;grid-row:4/span 5">
       <div class="lab">Operations</div>
       <div>
         <div class="sub" style="margin-bottom:16px">Vato &amp; Aravind</div>
-        <p class="bsm">Task format, planners, executor with live re-split, live screen, VLM front end.</p>
+        <p class="bsm">Planners, live re-split, live screen. Qwen3-VL reads the table; Isaac Sim rehearsal.</p>
       </div>
     </div>
   </div>
-  <div class="pagenum lemon">07 / 08</div>
-  <aside class="notes">Under the hood: CP-SAT proves optimal plans in under 2 s at 4 to 8 arms, with HEFT as the live default. We never move a running step, and we only switch plans when it's clearly better. Three teams, one contract between them. (~25 s)</aside>
+  <div class="pagenum lemon">08 / 09</div>
+  <aside class="notes">Under the hood: CP-SAT proves optimal plans in under 2 s at 4 to 8 arms, with HEFT as the live default. We never move a running step, we only switch plans when it's clearly better, and the camera checks every place. Three teams, one contract between them. (~25 s)</aside>
 </section>
 
 <!-- =========================================================
-     08 / CLOSE
+     09 / CLOSE
      ========================================================= -->
 <section class="slide" aria-label="Thank you">
   <div class="frame">
@@ -660,7 +708,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <p class="body">Diego &middot; Om &middot; Vivek &middot; Sahil &middot; Vato &middot; Aravind</p>
     </div>
   </div>
-  <div class="pagenum invert">08 / 08</div>
+  <div class="pagenum invert">09 / 09</div>
   <aside class="notes">Plug in an arm, watch the clock drop. Thanks. Happy to take questions. (~10 s)</aside>
 </section>
 
@@ -673,7 +721,93 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <div class="edit-hotzone" id="editHotzone"></div>
 <button class="edit-toggle" id="editToggle" title="Edit mode (E)">Edit</button>
 
+<!-- Repo facts: regenerate with `python presentation/update_deck.py --fetch` -->
+<!-- FACTS:START -->
+<script type="application/json" id="deck-facts">
+{
+ "generated": "Sat 21 Nov 17:50",
+ "main_sha": "ec9f69e",
+ "show": {
+  "tests": 199,
+  "commits": 91,
+  "ops_backlog": "16/22",
+  "action_work": "12/13",
+  "followers": 2,
+  "pairs": 2,
+  "episodes": 20,
+  "sim_steps": "24/24",
+  "sim_arms": "3",
+  "dry_1": "53 s",
+  "dry_2": "37 s",
+  "vlm_found": "6/6",
+  "vlm_error": "0.6 cm"
+ },
+ "scaling": {
+  "task": "sort12",
+  "rows": [
+   {
+    "n": 1,
+    "planned": 120.0,
+    "bound": 120.0,
+    "ideal": 120.0,
+    "limit": "arms"
+   },
+   {
+    "n": 2,
+    "planned": 64.0,
+    "bound": 60.0,
+    "ideal": 60.0,
+    "limit": "arms"
+   },
+   {
+    "n": 3,
+    "planned": 54.0,
+    "bound": 48.0,
+    "ideal": 40.0,
+    "limit": "input bin"
+   },
+   {
+    "n": 4,
+    "planned": 54.0,
+    "bound": 48.0,
+    "ideal": 30.0,
+    "limit": "input bin"
+   }
+  ],
+  "best_speedup": "2.2×",
+  "best_arms": 3
+ }
+}
+</script>
+<!-- FACTS:END -->
+
 <script>
+/* ===========================================
+   REPO FACTS (written by presentation/update_deck.py)
+   Missing facts leave the slide's own text in place
+   =========================================== */
+const FACTS = (() => {
+    try { return JSON.parse(document.getElementById('deck-facts').textContent); }
+    catch { return null; }
+})();
+const fact = (path) => path.split('.').reduce((o, k) => (o == null ? null : o[k]), FACTS);
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+function applyFacts() {
+    document.querySelectorAll('[data-fact]').forEach((el) => {
+        const v = fact(el.dataset.fact);
+        if (v != null) el.textContent = v;
+    });
+    const rows = fact('scaling.rows');
+    if (!rows || !rows.length) return;
+    const top = Math.max(...rows.map((r) => Math.max(r.planned, r.ideal)));
+    const bar = (cls, v) => `<div class="bar-v ${cls}" style="height:${(100 * v / top).toFixed(1)}%"><span>${Math.round(v)}</span></div>`;
+    const arms = (n) => `${n} arm${n > 1 ? 's' : ''}`;
+    document.getElementById('scaleChart').innerHTML = rows.map((r) => `<div class="grp">${bar('a', r.ideal)}${bar('b', r.planned)}</div>`).join('');
+    document.getElementById('scaleAxis').innerHTML = rows.map((r) => `<div>${arms(r.n)}<br>limit: ${r.limit}</div>`).join('');
+}
+applyFacts();
+
 /* ===========================================
    SLIDE PRESENTATION CONTROLLER
    Keys: arrows / space / PgUp / PgDn / Home / End; N = notes; E = edit; Ctrl+S = save HTML
@@ -688,6 +822,11 @@ class SlidePresentation {
         this.timers = [];
         this.editing = false;
         this.current = 0;
+        this.slides.forEach((s, i) => {
+            const pn = s.querySelector('.pagenum');
+            const pad = (n) => String(n).padStart(2, '0');
+            if (pn) pn.textContent = `${pad(i + 1)} / ${pad(this.slides.length)}`;
+        });
         this.setupStageScale();
         this.setupKeyboardNav();
         this.setupTouchNav();
@@ -759,7 +898,7 @@ class SlidePresentation {
         this.runCountdown(this.slides[this.current]);
     }
 
-    /* Slide 3 widget: arms light up one by one and the example finish time drops */
+    /* Slide 3 widget: arms light up one by one and the planned finish time drops */
     runCountdown(slide) {
         this.timers.forEach(clearTimeout);
         this.timers = [];
@@ -767,7 +906,10 @@ class SlidePresentation {
         const time = slide.querySelector('#clockTime');
         const limit = slide.querySelector('#clockLimit');
         const lanes = slide.querySelectorAll('.lane');
-        const steps = [['12:00', 'Limit: arms'], ['06:00', 'Limit: arms'], ['05:00', 'Limit: order']];
+        const rows = fact('scaling.rows');
+        const steps = rows && rows.length >= 3
+            ? rows.slice(0, 3).map((r) => [mmss(r.planned), `Limit: ${r.limit}`])
+            : [['2:00', 'Limit: arms'], ['1:04', 'Limit: arms'], ['0:54', 'Limit: input bin']];
         const apply = (n) => {
             lanes.forEach((l, i) => l.classList.toggle('on', i <= n));
             [time.textContent, limit.textContent] = steps[n];
