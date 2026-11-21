@@ -141,6 +141,11 @@ class Executor:
         even if the new graph leaves them out. Re-plans at once."""
         self._submit(("graph", graph))
 
+    def arm_lost(self, arm_id: str, reason: str = "unplugged") -> None:
+        """The arm vanished (USB unplugged, process died): drop it now, without waiting for its
+        heartbeat to go stale. Its running step and any part it held go back to the pool."""
+        self._submit(("lost", arm_id, reason))
+
     def remove_arm(self, arm_id: str, abort: bool = False) -> None:
         """Slow stop: no new steps; finish (abort=True: cancel) the current one, then park."""
         self._submit(("remove", arm_id, abort))
@@ -236,6 +241,9 @@ class Executor:
             self._on_remove(msg[1], msg[2])
         elif kind == "result":
             self._on_result(msg[1], msg[2])
+        elif kind == "lost":
+            if msg[1] in self._active:
+                self._lose_arm(msg[1], msg[2])
         elif kind == "graph":
             self._on_graph(msg[1])
         elif kind == "verified":

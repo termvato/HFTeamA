@@ -89,6 +89,31 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 17:59 (Vato): **Plug-in detection built** (`src/hfteama/discovery.py`, extra `arms` = pyserial):
+  `ArmWatcher(executor, followers_from_pairs("configs/teleop_pairs.json"), factory)` polls USB
+  serial numbers; a known follower appearing -> `factory(arm_id)` -> `executor.add_arm(worker)`;
+  disappearing -> new `executor.arm_lost(arm_id)` (drops it at once). Debounced; a failed scan or a
+  worker that refuses to start is survived. `plug(arm_id)` / `unplug(arm_id)` are the manual stage
+  fallback. Tested on fake arms; the real factory is Action's worker, wired once Hardware has run it.
+- 17:59 (Vato): **One file for arm positions, Action's format:** `registry.load_real_arms(
+  "configs/real_arms.json")` builds the planner's catalog from the file Vivek's driver reads
+  (`base` metres, `yaw` radians, same convention as `base_yaw_deg`). Use it instead of the `arms`
+  list in `hacklab_table.json` for real runs, with arm ids = follower ids (`rakesh_follower`,
+  `vato_follower`). Aravind: the marker-touch poses should be written into `real_arms.json`.
+- 17:59 (Vato): **Proposal for blocker 3 (real run on the Windows laptop):**
+  1. 15-minute test first, before anything else is moved: on the laptop, `pip install -e ".[arms]"`,
+     `python -c "from hfteama.discovery import connected_serials as c; print(c())"` with one
+     follower plugged in (must print its serial), then Hardware's `hfteama --pair rakesh teleop`.
+  2. What is already Windows-safe: plug-in detection and Hardware's port lookup both go by USB
+     serial number through pyserial (COM ports, no `/dev` paths, no udev, no dialout group); the
+     top camera through ffmpeg/DirectShow as Aravind runs it.
+  3. What is not: `teleop_pairs.json` names the wrist cameras by `/dev/v4l/by-id/...` (Linux only;
+     the orchestrated run does not need wrist cameras unless a VLA skill is used), and LeRobot on
+     Windows is untested by us.
+  4. If the test fails, fallback without new hardware: arms, top camera and executor on a
+     Hardware Linux machine; Qwen stays on the laptop as a small HTTP service (frame in, JSON out;
+     about 200 KB per frame), as in Aravind's earlier option.
+
 - 17:20 (Aravind): Real top camera tested end to end. The C920 is on Aravind's laptop (Windows:
   frames through ffmpeg/DirectShow; OpenCV could not open it by index). Calibration comes from the
   ArUco markers already on the table, every run, so moving the camera only needs a new frame.
