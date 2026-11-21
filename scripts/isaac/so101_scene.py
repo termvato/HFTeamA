@@ -43,7 +43,9 @@ import time
 T0 = time.time()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--mjcf", default=os.environ.get("SO101_MJCF", ""), help="path to robotstudio_so101/so101.xml")
+parser.add_argument(
+    "--mjcf", default=os.environ.get("SO101_MJCF", ""), help="path to robotstudio_so101/so101.xml"
+)
 parser.add_argument("--out", default="/tmp/isaac_frames")
 parser.add_argument("--cache", default=os.path.expanduser("~/.cache/hfteama_isaac"))
 parser.add_argument("--gui", action="store_true")
@@ -62,7 +64,9 @@ def gpu_mem_mib():
     try:
         out = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         ).stdout
         return int(out.strip().splitlines()[0])
     except Exception:
@@ -73,12 +77,14 @@ GPU_BEFORE = gpu_mem_mib()
 
 from isaacsim import SimulationApp  # noqa: E402
 
-simulation_app = SimulationApp({
-    "headless": not args.gui,
-    "renderer": "RaytracedLighting",
-    "width": args.width,
-    "height": args.height,
-})
+simulation_app = SimulationApp(
+    {
+        "headless": not args.gui,
+        "renderer": "RaytracedLighting",
+        "width": args.width,
+        "height": args.height,
+    }
+)
 T_APP = time.time()
 
 import numpy as np  # noqa: E402
@@ -104,7 +110,11 @@ if not os.path.isfile(usd_path):
     cfg.set_create_physics_scene(False)
     cfg.set_self_collision(False)
     omni.kit.commands.execute(
-        "MJCFCreateAsset", mjcf_path=args.mjcf, import_config=cfg, prim_path="/so101", dest_path=usd_path
+        "MJCFCreateAsset",
+        mjcf_path=args.mjcf,
+        import_config=cfg,
+        prim_path="/so101",
+        dest_path=usd_path,
     )
     print(f"[so101_scene] converted MJCF -> {usd_path}", flush=True)
 T_IMPORT = time.time()
@@ -126,8 +136,13 @@ UsdGeom.Xformable(sun.GetPrim()).AddRotateXYZOp().Set(Gf.Vec3f(-40, 20, 0))
 
 TABLE_Z = 0.75  # table top height (m)
 # Visual only (no collider): during kinematic playback the arms must not be pushed by contacts.
-VisualCuboid("/World/table", name="table", position=np.array([0.0, 0.0, TABLE_Z - 0.02]),
-             scale=np.array([1.4, 0.8, 0.04]), color=np.array([0.55, 0.42, 0.30]))
+VisualCuboid(
+    "/World/table",
+    name="table",
+    position=np.array([0.0, 0.0, TABLE_Z - 0.02]),
+    scale=np.array([1.4, 0.8, 0.04]),
+    color=np.array([0.55, 0.42, 0.30]),
+)
 
 # Arm bases: (x, y, yaw in degrees). Arms sit along the back edge and face the front of the table.
 ARM_POSES = [(-0.45, 0.25, -90.0), (0.0, 0.28, -90.0), (0.45, 0.25, -90.0)]
@@ -142,13 +157,25 @@ for i, (x, y, yaw) in enumerate(ARM_POSES):
     root_joint = stage.GetPrimAtPath(f"/World/arm_{i}/joints/rootJoint_base")
     root_joint.GetAttribute("physics:localPos0").Set(Gf.Vec3f(x, y, TABLE_Z))
     half = math.radians(yaw) / 2
-    root_joint.GetAttribute("physics:localRot0").Set(Gf.Quatf(math.cos(half), 0.0, 0.0, math.sin(half)))
+    root_joint.GetAttribute("physics:localRot0").Set(
+        Gf.Quatf(math.cos(half), 0.0, 0.0, math.sin(half))
+    )
 
 # Cubes in front of the arms, bins between them.
-CUBE_COLORS = [(0.85, 0.15, 0.15), (0.15, 0.6, 0.2), (0.15, 0.3, 0.85), (0.9, 0.75, 0.1), (0.6, 0.2, 0.7)]
+CUBE_COLORS = [
+    (0.85, 0.15, 0.15),
+    (0.15, 0.6, 0.2),
+    (0.15, 0.3, 0.85),
+    (0.9, 0.75, 0.1),
+    (0.6, 0.2, 0.7),
+]
 for k, c in enumerate(CUBE_COLORS):
-    VisualCuboid(f"/World/cube_{k}", position=np.array([-0.5 + 0.25 * k, 0.0, TABLE_Z + 0.0125]),
-                 scale=np.array([0.025, 0.025, 0.025]), color=np.array(c))
+    VisualCuboid(
+        f"/World/cube_{k}",
+        position=np.array([-0.5 + 0.25 * k, 0.0, TABLE_Z + 0.0125]),
+        scale=np.array([0.025, 0.025, 0.025]),
+        color=np.array(c),
+    )
 
 
 def make_bin(name, cx, cy, w=0.14, d=0.10, h=0.05, t=0.004, color=(0.25, 0.25, 0.28)):
@@ -161,7 +188,9 @@ def make_bin(name, cx, cy, w=0.14, d=0.10, h=0.05, t=0.004, color=(0.25, 0.25, 0
         "wall_w": ((cx - w / 2, cy, TABLE_Z + h / 2), (t, d, h)),
     }
     for part, (pos, size) in parts.items():
-        VisualCuboid(f"/World/{name}/{part}", position=np.array(pos), scale=np.array(size), color=col)
+        VisualCuboid(
+            f"/World/{name}/{part}", position=np.array(pos), scale=np.array(size), color=col
+        )
 
 
 make_bin("bin_a", -0.22, 0.12)
