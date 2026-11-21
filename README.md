@@ -51,6 +51,20 @@ hfteama
 python -m hfteama
 ```
 
+### Real arms (Hardware, #19)
+
+Calibrate, teleoperate and record with leader/follower pairs (needs LeRobot, see the guide):
+
+```bash
+hfteama pairs                          # pairs in configs/teleop_pairs.json and which arms are connected
+hfteama --pair hacklab calibrate leader
+hfteama --pair rakesh teleop
+hfteama --pair rakesh record --episodes 5 --task "..."
+```
+
+Guide: [`docs/hardware/so101_setup.md`](docs/hardware/so101_setup.md).
+Calibrations: [`configs/calibration/`](configs/calibration/README.md).
+
 ## Development
 
 ```bash

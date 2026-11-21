@@ -1,0 +1,55 @@
+{
+  "note": "Leader/follower pairs for teleoperation and data recording. Committed: serials and calibration ids belong to the physical arms. Ports are found from each arm's USB serial; 'port' is only the fallback. See docs/hardware/so101_setup.md.",
+  "default_pair": "rakesh",
+  "pairs": {
+    "rakesh": {
+      "follower": {
+        "type": "so101_follower",
+        "id": "rakesh_follower",
+        "serial": "5B79014975",
+        "port": "/dev/ttyACM1"
+      },
+      "leader": {
+        "type": "so101_leader",
+        "id": "rakesh_leader",
+        "serial": "5B8E115290",
+        "port": "/dev/ttyACM0"
+      },
+      "cameras": {
+        "wrist": {
+          "type": "opencv",
+          "index_or_path": "/dev/v4l/by-id/usb-Sonix_Technology_Co.__Ltd._USB2.0_CAM1_USB2.0_CAM1-video-index0",
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "fourcc": "MJPG",
+          "warmup_s": 3
+        }
+      }
+    },
+    "hacklab": {
+      "follower": {
+        "type": "so101_follower",
+        "id": "vato_follower",
+        "serial": "5A7A015861",
+        "port": "/dev/ttyACM0"
+      },
+      "leader": {
+        "type": "so101_leader",
+        "id": "hacklab_leader",
+        "serial": "5A7A015820",
+        "port": "/dev/ttyACM1"
+      },
+      "cameras": {}
+    }
+  },
+  "record": {
+    "repo_id": "diegoloayza789/hfteam_rakesh_so101",
+    "single_task": "Pick up the object and place it in the box",
+    "num_episodes": 10,
+    "episode_time_s": 60,
+    "reset_time_s": 30,
+    "fps": 30,
+    "push_to_hub": false
+  }
+}
