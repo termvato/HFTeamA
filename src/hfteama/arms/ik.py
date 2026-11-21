@@ -1,19 +1,19 @@
 """Inverse kinematics for one SO-101 on the vendored MuJoCo model.
 
-Sim and real arms share this solver, so a sim run predicts the joint angles of the real arm (the real
-backend adds only the LeRobot calibration offsets in `kinematics.ArmFrame`).
+Sim and real arms share this solver, so a sim run predicts the joint angles of the real arm (the
+real backend adds only the LeRobot calibration offsets in `kinematics.ArmFrame`).
 
-The arm has 5 body joints, so a 3-D position is solved exactly and the tool direction is best effort:
-with `down=True` the tool z axis (wrist toward fingertips) is pulled toward straight down, weighted
-well below the position (0.01: a 0.5 rad tilt costs as much as 5 mm). Damped least squares on the MuJoCo Jacobian, adapted from so101-nexus
-`kinematics.py` (Apache-2.0).
+The arm has 5 body joints, so a 3-D position is solved exactly and the tool direction is best
+effort: with `down=True` the tool z axis (wrist toward fingertips) is pulled toward straight down,
+weighted well below the position (0.01: a 0.5 rad tilt costs as much as 5 mm). Damped least
+squares on the MuJoCo Jacobian, adapted from so101-nexus `kinematics.py` (Apache-2.0).
 
-Measured reach with the tool pointing down (base at the origin, arm facing +x): x about 0.10 to 0.30 m
-for table-height targets (z 0 to 0.03), |y| up to 0.2 m, and up to z about 0.13 m at x = 0.2 (tool
-alignment stays above 0.9). Nothing behind the base. Plan poses inside that band.
+Measured reach with the tool pointing down (base at the origin, arm facing +x): x about 0.10 to
+0.30 m for table-height targets (z 0 to 0.03), |y| up to 0.2 m, and up to z about 0.13 m at
+x = 0.2 (tool alignment stays above 0.9). Nothing behind the base. Plan poses inside that band.
 
-Frames: the table frame is the shared world frame; an `ArmBase` places the arm in it. Only `mj_kinematics`
-and `mj_jacSite` are used, never `mj_step`.
+Frames: the table frame is the shared world frame; an `ArmBase` places the arm in it. Only
+`mj_kinematics` and `mj_jacSite` are used, never `mj_step`.
 """
 
 from __future__ import annotations
