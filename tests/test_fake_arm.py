@@ -7,7 +7,8 @@ from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
 from hfteama.taskgraph import Task
 
-FAST = Clock(scale=1000.0)
+# 10x: a 4 s step sleeps 0.4 s; timer ticks (~15.6 ms on Windows) stay small next to it
+FAST = Clock(scale=10.0)
 
 
 def task(tid: str = "t1", skill: str = "pick") -> Task:
@@ -43,7 +44,7 @@ def test_cancel_interrupts() -> None:
 
 
 def test_go_down_stops_heartbeat_and_reports_arm_down() -> None:
-    clock = Clock(scale=1000.0)
+    clock = Clock(scale=10.0)
     arm = FakeArm("a", clock=clock, default_duration=1.0)
     arm.go_down()
     beat = arm.heartbeat()

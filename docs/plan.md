@@ -46,7 +46,8 @@ The per-person branches are kept for now; new work goes on the team branch:
   `timeout`, `arm_down`, with start and end times. A dispatcher-level `execute(arm_id, ...)` may wrap it.
 - **Screen**: live countdown, what-if estimate, the binding limit in words, plus steps unblocked by a new arm.
 - **Code** in `src/hfteama/`. Task format, arm contract and event log change only with all teams.
-- Still open: step timeout (see `OPERATIONS_STATUS.md` on `orchestrator`).
+- **Step timeout**: 3x the estimate while durations are guesses, then 1.5x the arm's measured
+  80th-percentile time.
 
 ## Where teams meet
 
@@ -79,9 +80,10 @@ Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
 | Estimate before Go | Approximate time for the arms plugged in now, plus a what-if row for 1 / 2 / 3 / 4 arms. |
 | Live countdown | Predicted finish time, updated whenever an arm joins, leaves or a step fails. |
 | Why it stops speeding up | The binding limit in words (arms, step order, or a shared area), plus steps that only became possible because a new arm can reach them. |
-| Failures | Says what happened ("grasp failed, retrying", "arm lost, moving its work", "too slow") and recovers; a camera check confirms every step. |
+| Failures | Says what happened ("grasp failed, retrying", "arm lost, moving its work", "too slow") and recovers; a camera check confirms every place step (decided 21 Nov: one GPU, ~2.8 s per check; a failed pick shows up as a grasp failure). |
 | Scene changes | New or moved objects mid-run: the camera notices, the VLM re-reads the table, the plan and countdown update. |
 | Simulated arms | Only in the what-if estimate; they do not execute in the live run. |
+| RTX rehearsal (sim first, then real) | On Go, the batch first plays in a photoreal Isaac Sim scene of the same table (same plan, same arms), then the identical plan runs on the real arms; sim and real side by side. Built by Operations; runs on a second machine (GPU: Isaac Sim and the VLM do not share one 8 GB laptop). |
 
 ## Demo
 

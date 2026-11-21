@@ -10,12 +10,15 @@ Runs a plan as a partial order and re-plans the remaining work whenever somethin
   it finishes more than 10% sooner, unless the arm set changed or something failed (hysteresis).
 - An arm holding a part (its `same_arm_as` partner just finished) places it before anything else.
   If that arm is lost, the part's pick is redone.
-- Failures: a failed step is retried (same or another arm) up to `max_retries`; a step past
-  `timeout_factor` x its estimate is cancelled and counted as a timeout; an arm whose heartbeat
-  goes stale is dropped and its running step goes back to the pool.
+- Failures: a failed step is retried (same or another arm) up to `max_retries`; an arm whose
+  heartbeat goes stale is dropped and its running step goes back to the pool.
+- Timeout (decided 21 Nov, adaptive): a step is cancelled and counted as a timeout after
+  `timeout_guess` x its estimate while durations are still guesses (default 3x), or
+  `timeout_measured` x the arm's measured 80th-percentile time once it has one (default 1.5x).
 - Removing an arm is a slow stop: it finishes its step (and places a held part), then parks.
 - Step check: an optional `verifier(task, result)` (e.g. the VLM looking at the camera) confirms
-  each successful step before it counts as done.
+  a successful step before it counts as done; `verify_skills=PLACE_SKILLS` limits it to placing
+  steps (the demo setting).
 
 Every plan, start, end, arm change and re-plan goes to the event log; the screen reads only that.
 """
@@ -42,6 +45,9 @@ from hfteama.taskgraph import Task, TaskGraph
 Verifier = Callable[[Task, Result], "bool | tuple[bool, str]"]
 
 
+PLACE_SKILLS = frozenset({"place", "pick_place"})  # steps the demo's camera check confirms
+
+
 class TaskState(str, Enum):
     PENDING = "pending"  # waiting to be dispatched (planned, or blocked until an arm can reach)
     RUNNING = "running"
@@ -57,6 +63,7 @@ class _Run:
     token: int
     start: float  # run seconds
     estimate: float
+    limit: float = 0.0  # seconds after start before the step counts as a timeout
     timed_out: bool = False
     overrun: bool = False
     aborted: bool = False
@@ -70,13 +77,16 @@ class Executor:
         clock: Clock | None = None,
         method: str = "heft",
         time_limit: float = 1.0,
-        timeout_factor: float = 3.0,  # open decision (#21): 1.5x, 2x or 3x
+        timeout_guess: float = 3.0,  # x estimate while durations are guesses
+        timeout_measured: float = 1.5,  # x measured 80th percentile once measured
         hysteresis: float = 0.10,
         max_retries: int = 2,
         heartbeat_timeout: float = 1.5,
         verifier: Verifier | None = None,
+        verify_skills: frozenset[str] | None = None,
         durations: DurationModel | None = None,
         whatif_counts: tuple[int, ...] = (1, 2, 3, 4),
+        catalog: list[str] | None = None,  # every known arm id (for the what-if row)
         poll: float = 0.02,
     ) -> None:
         graph.validate()
@@ -85,13 +95,18 @@ class Executor:
         self.clock = clock or Clock()
         self.method = method
         self.time_limit = time_limit
-        self.timeout_factor = timeout_factor
+        self.timeout_guess = timeout_guess
+        self.timeout_measured = timeout_measured
         self.hysteresis = hysteresis
         self.max_retries = max_retries
         self.heartbeat_timeout = heartbeat_timeout
         self.verifier = verifier
+        # Which skills the camera confirms; None = every step. The demo passes PLACE_SKILLS
+        # (decided 21 Nov: only placing steps; a failed pick shows up as a grasp failure).
+        self.verify_skills = verify_skills
         self.durations = durations or DurationModel()
         self.whatif_counts = whatif_counts
+        self.catalog = list(catalog or [])
         self.poll = poll
 
         self._lock = threading.RLock()
@@ -119,6 +134,12 @@ class Executor:
     def add_arm(self, worker: ArmWorker) -> None:
         """An arm became available (plugged in and ready). Re-splits the remaining work."""
         self._submit(("add", worker))
+
+    def update_graph(self, graph: TaskGraph) -> None:
+        """Replace the batch mid-run (e.g. after a camera re-scan): new steps join, dropped
+        pending steps go, changed steps take their new args. Done and running steps are kept
+        even if the new graph leaves them out. Re-plans at once."""
+        self._submit(("graph", graph))
 
     def remove_arm(self, arm_id: str, abort: bool = False) -> None:
         """Slow stop: no new steps; finish (abort=True: cancel) the current one, then park."""
@@ -215,10 +236,46 @@ class Executor:
             self._on_remove(msg[1], msg[2])
         elif kind == "result":
             self._on_result(msg[1], msg[2])
+        elif kind == "graph":
+            self._on_graph(msg[1])
         elif kind == "verified":
             self._on_verified(*msg[1:])
 
     # ------------------------------------------------------------------ arms
+
+    def _on_graph(self, new: TaskGraph) -> None:
+        started = {
+            t
+            for t, s in self._status.items()
+            if s in (TaskState.RUNNING, TaskState.VERIFYING, TaskState.DONE)
+        }
+        tasks = dict(new.tasks)
+        for t in started - set(tasks):
+            tasks[t] = self.graph.tasks[t]  # never drop work that ran or is running
+        merged = TaskGraph(new.name, tasks)
+        merged.validate()
+        added = sorted(set(tasks) - set(self.graph.tasks))
+        dropped = sorted(set(self.graph.tasks) - set(tasks))
+        changed = sorted(
+            t
+            for t in set(tasks) & set(self.graph.tasks) - started
+            if tasks[t] != self.graph.tasks[t]
+        )
+        self.graph = merged
+        self._status = {t: self._status.get(t, TaskState.PENDING) for t in tasks}
+        self._retries = {t: self._retries.get(t, 0) for t in tasks}
+        for arm, f in list(self._held.items()):
+            if f not in tasks:
+                del self._held[arm]
+        self._finished.clear()
+        self._replan(
+            "graph_updated",
+            force=True,
+            extra={"added": added, "dropped": dropped, "changed": changed},
+        )
+        if self._thread is not None and not self._thread.is_alive():  # batch had finished
+            self._thread = threading.Thread(target=self._loop, name="executor", daemon=True)
+            self._thread.start()
 
     def _on_add(self, worker: ArmWorker) -> None:
         arm = worker.arm_id
@@ -304,7 +361,9 @@ class Executor:
             self._locks[r] = tid
         token = next(self._tokens)
         est = self.durations.estimate(task, arm)
-        self._runs[tid] = _Run(tid, arm, token, self.now(), est)
+        measured = self.durations.measured(arm, task.skill) is not None
+        factor = self.timeout_measured if measured else self.timeout_guess
+        self._runs[tid] = _Run(tid, arm, token, self.now(), est, limit=factor * max(est, 1e-3))
         self._busy[arm] = tid
         self._status[tid] = TaskState.RUNNING
         planned = self._planned(tid)
@@ -364,7 +423,9 @@ class Executor:
         )
         if outcome is Outcome.OK:
             self.durations.record(arm, task.skill, res.duration)
-            if self.verifier is None:
+            if self.verifier is None or (
+                self.verify_skills is not None and task.skill not in self.verify_skills
+            ):
                 self._done(tid, arm)
                 self._replan("task_done", force=False)
             else:
@@ -467,8 +528,7 @@ class Executor:
                 self._lose_arm(arm, "heartbeat lost")
         now = self.now()
         for run in list(self._runs.values()):
-            limit = run.start + self.timeout_factor * max(run.estimate, 1e-3)
-            if not run.timed_out and now > limit:
+            if not run.timed_out and now > run.start + run.limit:
                 run.timed_out = True
                 self._workers[run.arm_id].cancel(run.task_id)
             elif not run.overrun and now > run.start + run.estimate * 1.5 + 1.0:
@@ -544,7 +604,12 @@ class Executor:
             "binding": chosen.binding,
             "blocked": list(chosen.blocked),
             "arms": {a: self._workers[a].backend for a in sorted(self._active)},
-            "whatif": {str(k): v for k, v in whatif(p, self.whatif_counts).items()},
+            "whatif": {
+                str(k): v
+                for k, v in whatif(
+                    p, self.whatif_counts, [a for a in self.catalog if a not in self._active]
+                ).items()
+            },
             "solve_time": chosen.info.get("solve_time", 0.0),
             "done": sum(s is TaskState.DONE for s in self._status.values()),
             "total": len(self._status),

@@ -93,3 +93,11 @@ def test_event_log_roundtrip(tmp_path: Path) -> None:
     log.write(Event(kind="task_end", arm="arm_a", task="pick_01", outcome="ok"))
     (e,) = log.read()
     assert e.kind == "task_end" and e.outcome == "ok"
+
+
+def test_event_log_skips_a_line_still_being_written(tmp_path: Path) -> None:
+    log = EventLog(tmp_path / "events.jsonl")
+    log.write(Event(kind="task_start", task="a"))
+    with log.path.open("a") as f:
+        f.write('{"kind": "task_end", "task": "a", "outc')  # writer mid-line
+    assert [e.kind for e in log.read()] == ["task_start"]
