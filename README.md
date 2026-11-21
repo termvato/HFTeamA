@@ -51,68 +51,81 @@ hfteama
 python -m hfteama
 ```
 
-### Real arms: teleoperate a pair (Hardware, #19)
+### Real arms, step by step (Hardware, #19)
 
-All arms are already calibrated; the calibration files are in the repo
-([`configs/calibration/`](configs/calibration/README.md)). **Do not calibrate them again.**
+From a fresh computer to a recorded dataset. Everything below runs from the repo root.
 
-**1. Once per computer**, from the repo root on the `hardware` branch:
+**What we have.** Two leader/follower pairs of SO-101 arms, **already calibrated**; the
+calibration files are committed in [`configs/calibration/`](configs/calibration/README.md).
+**Do not calibrate them again.**
+
+| Pair | Follower (USB serial) | Leader (USB serial) | Camera |
+|---|---|---|---|
+| `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` (Sonix USB2.0_CAM1) |
+| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | `wrist` (Autodarts DIY Cam) |
+
+Pairs, cameras and recording settings live in [`configs/teleop_pairs.json`](configs/teleop_pairs.json).
+
+#### Step 1. Install (once per computer)
 
 ```bash
-git fetch && git switch hardware && git pull
-uv venv --python 3.13 .venv && source .venv/bin/activate      # LeRobot needs Python 3.12+
-uv pip install -e ".[dev]" "lerobot[feetech,core-scripts]>=0.7"
+git clone https://github.com/termvato/HFTeamA.git && cd HFTeamA
+git switch hardware && git pull
+
+uv venv --python 3.13 .venv && source .venv/bin/activate          # LeRobot needs Python 3.12+
+uv pip install -e ".[dev]" "lerobot[feetech,core-scripts]>=0.7"     # or the same with pip
+
+sudo usermod -aG dialout $USER     # access to the arms' serial ports; then log out and back in
+hf auth login                      # optional: only to push datasets to the Hugging Face Hub
 ```
 
-If you already have a venv with LeRobot, you still need `uv pip install -e ".[dev]"`
-(or `pip install -e ".[dev]"`) inside this repo, or `hfteama: command not found`.
+Already have a venv with LeRobot? You still need `uv pip install -e ".[dev]"` inside this
+repo, or you get `hfteama: command not found`.
 
-**2. Every time:** plug in both arms by USB and switch on the follower's 12 V supply, then:
+#### Step 2. Connect and check (every time)
+
+1. Plug in every arm by USB and **switch on each follower's 12 V supply**.
+2. Plug in the wrist cameras (spread them over different USB ports, or use a powered hub).
+3. Check:
 
 ```bash
 source .venv/bin/activate
-hfteama pairs                     # both arms of your pair must say "connected at /dev/ttyACM*"
-hfteama --pair rakesh teleop      # or: --pair hacklab
+hfteama pairs
 ```
 
-Put the leader in roughly the follower's pose before starting (the follower jumps to the
-leader's pose), move slowly at first, stop with `Ctrl+C`.
+Every arm you need must say `connected at /dev/ttyACM*`. The `/dev/ttyACM*` numbers change
+each time you plug in; that's fine: `hfteama` finds each arm by its USB serial and each
+camera by its `/dev/v4l/by-id/` name, so you never set ports by hand. "Not connected"
+means the USB cable is out or (follower) the 12 V supply is off. Keep each servo board on
+its own arm: the serial belongs to the board, not the arm.
+
+To see a pair's cameras: `hfteama --pair rakesh camera` (black image = lens covered).
+
+#### Step 3. Teleoperate one pair
+
+```bash
+hfteama --pair rakesh teleop               # or --pair hacklab; add --cameras to see them in Rerun
+```
+
+Put the leader in roughly the follower's pose first (the follower jumps to the leader's
+pose), move slowly at first, stop with `Ctrl+C`. If the follower moves erratically,
+check its power supply first.
 
 **If LeRobot asks** `Press ENTER to use provided calibration file associated with the id ...`:
 
 | id in the message | What to do |
 |---|---|
-| `rakesh_leader` | Press **ENTER**. Expected once: it writes the base adjustment from the file into the leader. |
+| `rakesh_leader` | Press **ENTER**. Expected once per arm: it writes the base adjustment from the file into the leader. |
 | anything else | Don't press anything; stop with `Ctrl+C` and ask the Hardware team. |
 
-Never type `c`: it starts a new calibration and overwrites the one that works.
+Never type `c`: it starts a new calibration and overwrites the one that works. If it
+starts calibrating without asking (it shows the "middle of the range" diagram), it did
+not find the files: stop with `Ctrl+C` and make sure you run `hfteama` (not
+`lerobot-teleoperate` by hand) on the `hardware` branch.
 
-If it starts calibrating without asking (it shows the "middle of the range" diagram),
-it did not find the files: stop with `Ctrl+C` and make sure you ran it with `hfteama` (not
-`lerobot-teleoperate` by hand) on the `hardware` branch. `hfteama -n --pair rakesh teleop`
-prints the exact LeRobot command; it must contain `--robot.calibration_dir=.../configs/calibration/...`.
+#### Step 4. Teleoperate both pairs at once
 
-| Pair | Follower (USB serial) | Leader (USB serial) | Cameras |
-|---|---|---|---|
-| `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` |
-| `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | `wrist` |
-
-#### Ports change when you plug in: that's fine
-
-`/dev/ttyACM0`, `ttyACM1`, ... are assigned in plug-in order, so they change every time.
-`hfteama` finds each arm by its **USB serial** (table above) and each camera by its
-`/dev/v4l/by-id/` name, so you never set ports by hand. Always check first:
-
-```bash
-hfteama pairs     # every arm you need must say "connected at /dev/ttyACM*", and show its cameras
-```
-
-If an arm says "not connected": its USB cable is out, or (follower) its 12 V supply is off.
-Keep each servo board on its own arm: the serial belongs to the board, not the arm.
-
-#### Run both pairs at once (with cameras)
-
-Two ways, depending on what you want to record later:
+Two ways, depending on what you want to record:
 
 | | **A. Pairs in parallel** | **B. Bimanual** |
 |---|---|---|
@@ -121,78 +134,76 @@ Two ways, depending on what you want to record later:
 | Dataset | one per pair | one with both arms (12 joints, cameras `left_wrist`, `right_wrist`) |
 | Command | `hfteama --pair rakesh,hacklab teleop --cameras` | `hfteama bimanual teleop --cameras` |
 
-**A. Pairs in parallel**, one command:
+- **A** prefixes each pair's output with its name and hides LeRobot's per-loop status
+  lines; `Ctrl+C` stops both. It first checks, read-only, that every arm's calibration
+  matches its servos; if one doesn't, it stops and asks you to run that pair alone once
+  (Step 3) to answer LeRobot's prompt. One terminal per pair also works.
+- **B** uses the `bimanual` section of `configs/teleop_pairs.json`: left = `rakesh`,
+  right = `hacklab`, as seen by the operator. **Each leader must stay with its own
+  follower** (the calibrations are matched per pair); to swap sides, swap whole pairs
+  there. LeRobot wants the calibrations as `hfteam_bi_left/right.json`; `hfteama` links
+  them to the committed files under `~/.cache/hfteama/bimanual/`.
+
+Both stream to the same Rerun window (pick a recording in its left panel).
+
+#### Step 5. Record a dataset
 
 ```bash
-hfteama --pair rakesh,hacklab teleop --cameras
+# first, a quick test: 1 episode of 10 s into a throwaway dataset
+hfteama bimanual record --episodes 1 --episode-time 10 --reset-time 2 --task "test" \
+    --repo-id diegoloayza789/hfteam_bimanual_test
+
+# then the real thing (describe the task in --task: a learned policy uses it as its instruction)
+hfteama bimanual record --episodes 10 --task "Hand the cube from the left arm to the right arm"
+hfteama --pair rakesh,hacklab record --episodes 10 --task "..."      # A: one dataset per pair
+hfteama --pair rakesh record --episodes 10 --task "..."              # a single pair
 ```
 
-Output of each pair is prefixed with its name (`[rakesh] ...`); LeRobot's per-loop status
-lines are hidden. `Ctrl+C` stops both. Before starting it checks, read-only, that every
-arm's calibration matches its servos; if not, it stops and tells you to run that pair
-alone once (LeRobot's ENTER prompt can't be answered for two arms in one terminal).
-You can still use one terminal per pair instead (`hfteama --pair rakesh teleop --cameras`
-and `hfteama --pair hacklab teleop --cameras`).
+Each episode: **record** (do the task with the leader) → **reset** (put the objects back)
+→ next episode. Keys: `→` ends the episode early, `←` discards it and records it again,
+`Esc` stops and saves. Defaults: 10 episodes, 60 s each, 30 s reset, 30 fps; change them
+with `--episodes`, `--episode-time`, `--reset-time`.
 
-**B. Bimanual**, set up in the `bimanual` section of
-[`configs/teleop_pairs.json`](configs/teleop_pairs.json): left = `rakesh`,
-right = `hacklab` (as seen by the operator; swap them there if the table is set up the
-other way).
-
-```bash
-hfteama bimanual teleop --cameras
-```
-
-LeRobot wants the four calibrations as `hfteam_bi_left.json` / `hfteam_bi_right.json`;
-`hfteama` links them to the committed files under `~/.cache/hfteama/bimanual/`, so there
-is still only one calibration file per arm.
-
-Either way, both stream to the same Rerun window. With 4 arms and 2 cameras on one
-laptop, plug the cameras into different USB ports (or a powered hub); camera timeouts or
-dropped fps usually mean too much on one port.
-
-#### Record a dataset
-
-Each pair records to its own dataset (`record.repo_id` per pair in
-[`configs/teleop_pairs.json`](configs/teleop_pairs.json)):
-
-| Pair | Dataset |
+| Mode | Dataset (`repo_id`) |
 |---|---|
 | `rakesh` | `diegoloayza789/hfteam_rakesh_so101` |
 | `hacklab` | `diegoloayza789/hfteam_hacklab_so101` |
-| bimanual (both) | `diegoloayza789/hfteam_bimanual_so101` |
+| bimanual | `diegoloayza789/hfteam_bimanual_so101` |
 
-Defaults (shared `record` section): 10 episodes, 60 s each, 30 s to reset between
-episodes, 30 fps, not pushed to the Hub. Datasets are saved under
-`~/.cache/huggingface/lerobot/<repo_id>`.
+**Each session creates a new dataset** `<repo_id>_<date>_<time>` under
+`~/.cache/huggingface/lerobot/` (LeRobot 0.7 adds the stamp so nothing is overwritten).
+To add episodes to a session, pass its full name:
 
 ```bash
-hf auth login     # once, only to push datasets to the Hub (push_to_hub: true)
-
-# one pair
-hfteama --pair rakesh record --episodes 10 --task "Pick up the cube and place it in the box"
-
-# both pairs, A (parallel): one command, one dataset per pair
-hfteama --pair rakesh,hacklab record --episodes 10 --task "..."
-
-# both pairs, B (bimanual): one dataset with both arms
-hfteama bimanual record --episodes 10 --task "Hand the cube from the left arm to the right arm"
-
-# add more episodes to an existing dataset later
-hfteama --pair rakesh record --resume --episodes 5 --task "..."
+ls ~/.cache/huggingface/lerobot/diegoloayza789/
+hfteama bimanual record --resume --episodes 5 --task "..." \
+    --repo-id diegoloayza789/hfteam_bimanual_so101_20261121_152406
 ```
 
-Flow of each episode: record (move the leader to do the task) → reset time (put the
-objects back) → next episode. Keys while recording: `→` ends the episode early, `←`
-discards it and records it again, `Esc` stops and saves.
+Datasets stay local; to upload, run `hf auth login` and set `"push_to_hub": true` in
+`configs/teleop_pairs.json`. With A (parallel) on a normal desktop (X11), LeRobot reads
+the keyboard globally, so **a key press goes to both recordings**; record one pair at a
+time if each needs its own control.
 
-**Two pairs recording in parallel (A):** on a normal desktop (X11) LeRobot listens to the
-keyboard globally, so **a key press goes to both recordings** (`Esc` stops both, `→` ends
-the episode in both). That keeps them in step; record one pair at a time if each needs
-its own control. In bimanual mode (B) there is only one recording, so keys act on it.
+Tested on 21 Nov: `hfteama bimanual record` gave 1 episode, 240 frames at 29.9 Hz,
+12 joints (`left_*`, `right_*`) and both wrist videos.
 
-`-n` prints the LeRobot command without running it, e.g. `hfteama -n --pair hacklab record`.
-Calibrating a new arm, camera setup and troubleshooting:
+#### Command reference
+
+| Command | What it does |
+|---|---|
+| `hfteama pairs` | Pairs, which arms are connected and on which port, cameras |
+| `hfteama --pair P camera [names]` | Live view of a pair's cameras in Rerun |
+| `hfteama --pair P teleop [--cameras]` | Teleoperate one pair |
+| `hfteama --pair P1,P2 teleop [--cameras]` | Teleoperate several pairs in parallel |
+| `hfteama bimanual teleop [--cameras]` | Teleoperate both pairs as one two-arm robot |
+| `hfteama [--pair P \| --pair P1,P2 \| bimanual] record [--episodes N] [--task T] [--episode-time S] [--reset-time S] [--repo-id R] [--resume]` | Record a dataset |
+| `hfteama --pair P calibrate follower\|leader` | Calibrate an arm (new arms only) |
+| `hfteama --pair P setup-motors follower\|leader` | Set motor IDs on a new arm |
+| `hfteama find-port`, `hfteama find-cameras` | Find a new arm's port, list cameras |
+| `hfteama -n ...` | Print the LeRobot command without running it |
+
+Adding a new arm or pair, cameras and troubleshooting:
 [`docs/hardware/so101_setup.md`](docs/hardware/so101_setup.md).
 
 ## Development

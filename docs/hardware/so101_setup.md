@@ -1,7 +1,10 @@
 # SO-101 leader/follower pairs: setup, calibration, teleop, recording
 
-Hardware team (#19). How to calibrate, teleoperate and record with a leader/follower pair.
-Run every command from the repo root with the virtual environment active.
+Hardware team (#19). **For day-to-day use (install, teleoperate one or both pairs,
+bimanual, record) follow the step-by-step section of the [README](../../README.md).**
+This page has the details: calibrating new arms, matching a leader to its follower,
+cameras and troubleshooting. Run every command from the repo root with the virtual
+environment active.
 
 Files:
 
@@ -27,6 +30,7 @@ Tested with LeRobot 0.7.0. The serial ports need the `dialout` group:
 |---|---|---|---|---|
 | `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` | Calibrated, teleop verified 21 Nov |
 | `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | `wrist` | Calibrated, teleop verified 21 Nov |
+| bimanual | left `rakesh`, right `hacklab` | | `left_wrist`, `right_wrist` | Teleop and recording verified 21 Nov |
 
 ```bash
 hfteama pairs            # which arms are connected, and on which port
