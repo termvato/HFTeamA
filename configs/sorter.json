@@ -143,7 +143,7 @@
     "rate_hz": 50,
     "max_tilt_deg": 30.0,
     "drop_max_tilt_deg": 60.0,
-    "gripper_open": 90.0,
+    "gripper_open": 100.0,
     "gripper_closed": 2.0,
     "gripper_wait_s": 0.6,
     "gripper_timeout_s": 3.0,
