@@ -104,3 +104,15 @@ confirming in that moment. Prefer fake or MuJoCo arms for any development and te
   Open design questions on re-split policy live in #18.
 - Checkpoints: Sat evening (live screen on fake arms, one real arm does a step), Sun midday (adding
   an arm re-splits on screen), Sun evening (full demo), Sun night (code freeze + backup video).
+
+## Action branch (`action/arm-skills`, issue #20)
+
+- Read `STATUS.md` first; update it when a task changes state, and add a dated line to its log.
+- Design: `docs/superpowers/specs/2026-11-21-action-arm-skills-design.md`. Follow it; if the code
+  needs to differ, update the design doc in the same commit and say why.
+- Our scope: skills, primitives, IK, sim arms, `SkillWorker`, durations, real backend + handoff.
+  Not ours: executor, scheduler, view, fake arm (#14), arm detection.
+- Skills call only `ArmDriver` primitives and never branch on sim vs real.
+- Commits: author `VivekSai07 <viveksaisurya07@gmail.com>` (or Sahil's own identity), no
+  AI attribution or `Co-Authored-By` trailers. Do not push; a human pushes.
+- Keep `CLAUDE.md` and `AGENTS.md` in sync: same rules, different tools read each.
