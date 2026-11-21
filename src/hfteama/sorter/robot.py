@@ -50,6 +50,7 @@ class ArmDriver:
         # set from another thread to freeze the arm: every motion loop checks it each tick and
         # raises Stopped, leaving the arm holding its last commanded pose
         self.stop_event = threading.Event()
+        self.last_io = 0.0  # wall time of the last bus read/write that worked
         self.gripper_target = motion.get("gripper_open", 60.0)
 
     # --- connection -------------------------------------------------------------------------
@@ -123,7 +124,12 @@ class ArmDriver:
 
     def read(self) -> dict:
         obs = self.robot.get_observation()
+        self.last_io = time.time()
         return {k: float(v) for k, v in obs.items() if k.endswith(".pos")}
+
+    def _send(self, action: dict) -> None:
+        self.robot.send_action(action)
+        self.last_io = time.time()  # the bus answered: the arm is alive (heartbeat mid-motion)
 
     def q(self) -> np.ndarray:
         """Body joint angles (rad, model convention)."""
@@ -151,16 +157,14 @@ class ArmDriver:
             s = s * s * (3 - 2 * s)  # smoothstep: no jerk at the ends
             act = {k: start[k] + d[m] * s for m, k in enumerate(keys)}
             act["gripper.pos"] = self.gripper_target
-            self.robot.send_action(act)
+            self._send(act)
             time.sleep(max(0.0, t0 + i / rate - time.perf_counter()))
         deadline = time.perf_counter() + settle
         while time.perf_counter() < deadline:
             now = self.read()
             if max(abs(now[k] - goal[k]) for k in keys) < 3.0:
                 break
-            self.robot.send_action(
-                {**{k: goal[k] for k in keys}, "gripper.pos": self.gripper_target}
-            )
+            self._send({**{k: goal[k] for k in keys}, "gripper.pos": self.gripper_target})
             time.sleep(1 / rate)
 
     def move_q(self, q, speed: float | None = None) -> None:
@@ -220,7 +224,7 @@ class ArmDriver:
             pos = np.array([np.interp(d, cum, pts[:, m]) for m in range(len(keys))])
             act = {k: float(pos[m]) for m, k in enumerate(keys)}
             act["gripper.pos"] = self.gripper_target
-            self.robot.send_action(act)
+            self._send(act)
             time.sleep(max(0.0, t0 + i / rate - time.perf_counter()))
         goal = {k: float(pts[-1][m]) for m, k in enumerate(keys)}
         deadline = time.perf_counter() + settle
@@ -228,7 +232,7 @@ class ArmDriver:
             cur = self.read()
             if max(abs(cur[k] - goal[k]) for k in keys) < 3.0:
                 break
-            self.robot.send_action({**goal, "gripper.pos": self.gripper_target})
+            self._send({**goal, "gripper.pos": self.gripper_target})
             time.sleep(1 / rate)
 
     def gripper(self, value: float, wait: float | None = None) -> float:
@@ -248,9 +252,7 @@ class ArmDriver:
         deadline = time.perf_counter() + timeout
         while time.perf_counter() < deadline and abs(value - g) > 1.0:
             self._check_stop()
-            self.robot.send_action(
-                {**hold, "gripper.pos": g + float(np.clip(value - g, -cap, cap))}
-            )
+            self._send({**hold, "gripper.pos": g + float(np.clip(value - g, -cap, cap))})
             time.sleep(1 / rate)
             g = self.read()["gripper.pos"]
             if abs(value - g) < abs(value - best) - 0.3:
