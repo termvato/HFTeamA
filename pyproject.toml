@@ -33,6 +33,7 @@ addopts = "-ra"
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["*.md"]  # never reformat code blocks inside docs
 target-version = "py310"
 src = ["src", "tests"]
 
