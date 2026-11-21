@@ -1,6 +1,6 @@
 """Executor: runs the plan and re-splits the remaining work when something changes.
 
-Owner: executor and glue (E).
+Owner: Operations (#21, backlog #10, #11).
 
 - Keeps the solver's decisions (which arm, per-arm order, per-zone order), not its timestamps.
 - Starts a task the moment its deps are done, its arm is free and its zones are free.

@@ -1,6 +1,6 @@
 """Task graph: the work to do, as JSON. Interface 1 of 3 (frozen; change only with team agreement).
 
-Owner: planner (P). Done when: the demo batch loads, validates, and bad graphs are rejected.
+Owner: Operations (#21, backlog #2).
 
 Task-agnostic: any job that splits into skills, order and shared zones fits.
 Examples: tasks/sort/sort12.json (independent units), tasks/assemble/assemble3.json (ordered).

@@ -1,6 +1,6 @@
 """Scheduler: assign every remaining task to an arm and a start time, minimising finish time.
 
-Owner: planner (P).
+Owner: Operations (#21, backlog #6 to #9, #12, #16).
 
 Contract used by the executor:
     solve(graph, arms, now, fixed) -> Plan

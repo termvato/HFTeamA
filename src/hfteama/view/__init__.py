@@ -1,6 +1,6 @@
 """Live view for judges (Plotly/Dash) and engineers (Rerun). Reads only the event log.
 
-Owner: sim and view (S).
+Owner: Operations (#21, backlog #17).
 
 - Gantt per arm: planned bars faint, actual bars solid, zone waits hatched, failures red,
   every lane labelled REAL or SIM.

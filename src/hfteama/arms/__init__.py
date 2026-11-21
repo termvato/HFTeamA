@@ -1,24 +1,14 @@
 """Arm workers: one process per arm, same contract for every backend. Interface 2 of 3 (frozen).
 
 Task-agnostic: a worker runs whatever skill a task names, looked up in arms.skills.REGISTRY.
-Tasks bring their own skills and poses (see tasks/README.md); nothing here knows about a task.
+Tasks can bring their own skills (see tasks/README.md); nothing here knows about a task.
 
-Owners: hardware (H1, H2) for real.py, primitives, discovery.py; sim (S) for mujoco_arm.py.
-fake.py is shared and used by everyone for tests.
+Owners:
+- Hardware (#19): real arms, safe operation, detecting arms plugged in or out.
+- Action (#20): the skills, on real and simulated arms. Scripted, learned or both is their call.
+- Operations (#21): the contract in base.py and a fake arm for testing (backlog #4, #14).
 
-Backends, all implementing arms.base.ArmWorker:
-- fake.py        sleeps for the predicted duration; optional random failures. Lets the planner,
-                 executor and view run with no hardware.
-                 Done when: the executor runs any task graph on 3 fakes.
-- mujoco_arm.py  MuJoCo SO-101 copy at 1x wall clock. Done when: pick_place runs in sim.
-- real.py        LeRobot SOFollower on its own USB port.
-                 Done when: pick_place on 1 real arm, durations logged.
-- skills.py      skill registry (done) + generic primitives every task can reuse: move_to(pose),
-                 grip, release, grasp check (gripper position + Present_Current, thresholds
-                 from 10 empty / 10 loaded closes per arm), park.
-- discovery.py   polls /dev/serial/by-id; known serial -> start worker -> safety check ->
-                 slow home -> READY -> event arm_added. Port gone or heartbeat lost ->
-                 arm_removed. Done when: plugging arm 2 mid-run triggers a re-plan.
+Every backend implements arms.base.ArmWorker: state(), execute(task) -> Result, park().
 """
 
 from hfteama.arms.base import ArmState, ArmWorker, Outcome, Result
