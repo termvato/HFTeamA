@@ -1,0 +1,52 @@
+{
+  "note": "Copy to configs/real_arms.json. Key each arm by its catalog id (rakesh_follower, vato_follower): the executor, the reach graph and the planner all use that id. Numbers are placeholders: base pose in the shared table frame (metres), a safe park pose measured by hand, gripper threshold measured per arm.",
+  "arms": {
+    "rakesh_follower": {
+      "pair": "rakesh",
+      "base": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "yaw": 0.0,
+      "table_z": 0.0,
+      "park_q": [
+        -0.226,
+        -1.658,
+        1.536,
+        0.058,
+        -1.572
+      ],
+      "grip_holding_min_pct": 3.5,
+      "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
+      "offsets_deg": {
+        "wrist_roll": 90.0
+      },
+      "limits_deg": {
+        "shoulder_pan": [
+          -123.2,
+          83.0
+        ],
+        "shoulder_lift": [
+          -99.9,
+          99.5
+        ],
+        "elbow_flex": [
+          -100.5,
+          90.1
+        ],
+        "wrist_flex": [
+          -97.5,
+          72.4
+        ],
+        "wrist_roll": [
+          -162.6,
+          3.7
+        ]
+      },
+      "limits_note": "hand-measured range 2026-11-21 (runs/stage1/mirror_rakesh_follower_20261121_183702.log), minus 3 deg; model degrees with offsets_deg applied; the driver also never exceeds the model limits"
+    }
+  }
+}

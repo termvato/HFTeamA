@@ -29,13 +29,17 @@ from typing import Any
 import numpy as np
 
 from hfteama.arms.ik import ArmBase, Kinematics
-from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, LIMITS_RAD, ArmFrame
-from hfteama.arms.primitives import ArmDown, Grasp, MotionError, check_joints, check_point
+from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, JOINTS, LIMITS_RAD, ArmFrame
+from hfteama.arms.primitives import ArmDown, Grasp, MotionError, check_point
 
 OPEN_PCT = 70.0  # gripper opening for approach and release, LeRobot 0..100
 SETTLE_TOL_RAD = 0.1  # STS3215 under arm load sits a few degrees off its goal
 SETTLE_TIMEOUT_S = 1.5
 PARK_SPEED = 0.3
+GRIP_STEP_PCT = 5.0  # gripper ramp step per tick; below LeRobot's max_relative_target (10)
+GRIP_SETTLE_TIMEOUT_S = 1.5
+GRIP_DONE_PCT = 2.0  # within this of the goal: reached
+GRIP_STILL_PCT = 0.3  # reading changed less than this in one tick: stalled (on an object)
 HEARTBEAT_POLL_S = 0.5  # an idle arm does no bus traffic, so alive() reads the bus after this long
 DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "configs" / "real_arms.json"
 
@@ -56,6 +60,7 @@ class LeRobotDriver:
         speed_scale: float = 1.0,
         settle_tol_rad: float = SETTLE_TOL_RAD,
         settle_timeout_s: float = SETTLE_TIMEOUT_S,
+        limits_rad: dict | None = None,
     ) -> None:
         self.arm_id = arm_id
         self.table_z = table_z
@@ -69,6 +74,11 @@ class LeRobotDriver:
         self._gripper_wait = gripper_wait_s
         self._speed_scale = speed_scale  # global slow-down for first runs (0.3 = 30 % speed)
         self._settle_tol = settle_tol_rad
+        # per-arm limits (measured on the real arm), never wider than the model's
+        self._limits = dict(LIMITS_RAD)
+        for name, (lo, hi) in (limits_rad or {}).items():
+            mlo, mhi = LIMITS_RAD[name]
+            self._limits[name] = (max(lo, mlo), min(hi, mhi))
         self._settle_timeout = settle_timeout_s
         self._bus_lock = threading.RLock()  # re-entrant: a callback inside a bus call may stop()
         self._torque_off = False
@@ -88,9 +98,29 @@ class LeRobotDriver:
             self._last_ok = time.time()
         return obs
 
+    def _check(self, q: np.ndarray, ref: np.ndarray | None = None) -> None:
+        """Raise MotionError("joint limit: <name>") for a joint outside this arm's limits.
+
+        With `ref` (the pose the command starts from), a joint that is already outside may still
+        move back toward its range: the arm rests on its mechanical stop slightly beyond the
+        model's limit (shoulder_lift reads about -102 deg folded), and must be able to leave it.
+        """
+        for i, (name, value) in enumerate(zip(JOINTS, np.asarray(q, float), strict=False)):
+            if name == "gripper":
+                continue  # the gripper stalls on objects; its command range is fixed (0..100 %)
+            lo, hi = self._limits[name]
+            if lo <= value <= hi:
+                continue
+            if ref is not None and i < len(ref):
+                r = float(ref[i])
+                if (value < lo and r <= value) or (value > hi and r >= value):
+                    continue  # outside, but not further out than where it starts
+            raise MotionError(f"joint limit: {name}")
+
     def _send(self, q6: np.ndarray) -> None:
         q6 = np.asarray(q6, float)
-        check_joints(q6)
+        ref = self._target if self._target is not None else self.read_joints()
+        self._check(q6, ref)
         with self._bus_lock:
             try:
                 self._robot.send_action(self._frame.to_lerobot(q6, clip=False))
@@ -129,17 +159,17 @@ class LeRobotDriver:
         base = self._base()
         goal = base.copy()
         goal[: len(q)] = q
-        check_joints(goal)
+        self._check(goal, base)
         step = np.clip(goal - base, -self._max_step, self._max_step)
         self._send(base + step)
 
     def move_joints(self, q: np.ndarray, speed: float = 1.0) -> None:
         self._begin()
         q = np.asarray(q, float)
-        check_joints(q)
         start = self._base()
         goal = start.copy()
         goal[: len(q)] = q
+        self._check(goal, start)  # a joint resting beyond its limit may stay there or move back
         step = self._max_step * min(max(speed, 0.05), 1.0) * self._speed_scale
         n = max(1, int(np.ceil(np.abs(goal - start)[: len(q)].max() / step)))
         for k in range(1, n + 1):
@@ -158,7 +188,14 @@ class LeRobotDriver:
             check_point(xyz, self.table_z)
         except MotionError:
             return False
-        return self._kin.solve(xyz, seed=self.read_joints()[:5], down=True).ok
+        result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True)
+        if not result.ok:
+            return False
+        try:
+            self._check(result.q)
+        except MotionError:
+            return False
+        return True
 
     def move_to(self, xyz: np.ndarray, speed: float = 1.0) -> None:
         self._begin()
@@ -170,11 +207,34 @@ class LeRobotDriver:
         self.move_joints(result.q, speed)  # re-checks the stop latch: a stop during IK is kept
 
     def _set_gripper(self, pct: float) -> None:
-        q = self._base()
+        """Ramp the gripper to `pct` (LeRobot 0..100), then wait until it stops moving.
+
+        One big jump does not work on the real arm: LeRobot's `max_relative_target` (10) clips every
+        command to 10 units from the present position, so a single "open to 70" opened it by 10.
+        The ramp sends steps of GRIP_STEP_PCT, one per tick, like `move_joints` does for the body.
+        """
         lo, hi = LIMITS_RAD["gripper"]
-        q[5] = lo + (hi - lo) * pct / 100.0
-        self._send(q)
-        time.sleep(self._gripper_wait)
+        q = self._base()
+        start = (q[5] - lo) / (hi - lo) * 100.0
+        n = max(1, int(np.ceil(abs(pct - start) / GRIP_STEP_PCT)))
+        for k in range(1, n + 1):
+            self._tick()
+            q[5] = lo + (hi - lo) * (start + (pct - start) * k / n) / 100.0
+            self._send(q)
+        # settle: done when it reaches the goal, or stalls on an object (reading stops changing).
+        # The goal is re-sent every tick: the ramp is faster than the gripper, so the last ramp
+        # command was clipped to 10 units from where the gripper was then, short of the goal.
+        waited, prev = 0.0, None
+        while waited < GRIP_SETTLE_TIMEOUT_S:
+            self._tick()
+            self._send(q)
+            waited += self._dt
+            cur = self._gripper_pct()
+            if abs(cur - pct) < GRIP_DONE_PCT:
+                break
+            if prev is not None and waited >= self._gripper_wait and abs(cur - prev) < GRIP_STILL_PCT:
+                break
+            prev = cur
 
     def _gripper_pct(self) -> float:
         return float(self._observe()["gripper.pos"])
@@ -260,4 +320,5 @@ def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver
         grip_holding_min_pct=float(cfg["grip_holding_min_pct"]),
         speed_scale=float(cfg.get("speed_scale", 0.3)),
         settle_tol_rad=float(np.radians(cfg.get("settle_tol_deg", 5.7))),
+        limits_rad={k: tuple(np.radians(v)) for k, v in cfg.get("limits_deg", {}).items()},
     )
