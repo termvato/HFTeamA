@@ -530,7 +530,12 @@ class Jog:
             self.arm.placement.to_arm(target), yaw=yaw, seed=self.q, limits=self.drv.limits
         )
         if not sol.ok:
-            print(f"  can't reach ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f})")
+            d = np.hypot(*self.arm.placement.to_arm(target)[:2]) * 100
+            print(
+                f"  can't reach ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f}):"
+                f" {d:.0f} cm from the base (the gripper reaches about 30 cm pointing down)."
+                " Move the piece closer to the arm."
+            )
             return False
         self.drv.move_q(sol.q)
         self.q, self.target, self.yaw = sol.q, np.asarray(target, float), yaw
