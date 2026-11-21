@@ -30,7 +30,14 @@ import numpy as np
 
 from hfteama.arms.ik import ArmBase, Kinematics
 from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, LIMITS_RAD, ArmFrame
-from hfteama.arms.primitives import ArmDown, Grasp, MotionError, check_joints, check_point
+from hfteama.arms.primitives import (
+    ArmDown,
+    Grasp,
+    MotionError,
+    check_joints,
+    check_path,
+    check_point,
+)
 
 OPEN_PCT = 70.0  # gripper opening for approach and release, LeRobot 0..100
 SETTLE_TOL_RAD = 0.1  # STS3215 under arm load sits a few degrees off its goal
@@ -140,6 +147,7 @@ class LeRobotDriver:
         start = self._base()
         goal = start.copy()
         goal[: len(q)] = q
+        check_path(self._kin, start[:5], goal[:5], self.table_z)  # before the first command
         step = self._max_step * min(max(speed, 0.05), 1.0) * self._speed_scale
         n = max(1, int(np.ceil(np.abs(goal - start)[: len(q)].max() / step)))
         for k in range(1, n + 1):
@@ -246,6 +254,7 @@ def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver
             id=pair.follower.id,
             calibration_dir=pair.follower.calibration_dir,
             use_degrees=True,
+            disable_torque_on_disconnect=False,  # never cut torque on exit: park() does it, lowered
             max_relative_target=float(cfg.get("max_relative_target_deg", 10.0)),
         )
     )

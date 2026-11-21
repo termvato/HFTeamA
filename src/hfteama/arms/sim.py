@@ -33,6 +33,7 @@ from hfteama.arms.primitives import (
     Grasp,
     MotionError,
     check_joints,
+    check_path,
     check_point,
 )
 
@@ -208,6 +209,8 @@ class SimTable:
             raise RuntimeError("SimTable is not running; use `with SimTable(...) as table:`")
         end = self.sim_time() + seconds
         while self.sim_time() < end:
+            if self._thread is None or not self._thread.is_alive() or self._quit.is_set():
+                raise RuntimeError("SimTable is not running; use `with SimTable(...) as table:`")
             if check is not None:
                 check()
             time.sleep(0.001)
@@ -357,6 +360,7 @@ class MujocoDriver:
         origin = self._target.copy()
         goal = origin.copy()
         goal[: len(q)] = q
+        check_path(self._kin, self.read_joints()[:5], goal[:5], self.table_z)
         dist = float(np.abs(goal[:5] - self.read_joints()[:5]).max())
         duration = max(dist / (JOINT_SPEED * max(speed, 1e-3) * self._slow), 0.1)
         n = int(duration / TICK_S) + 1

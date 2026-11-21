@@ -316,3 +316,22 @@ def test_settle_tolerance_is_configurable(robot: FakeRobot) -> None:
     with pytest.raises(MotionError, match="stall"):
         tight.move_joints(GOAL)
     make_driver(robot, settle_tol_rad=0.1).move_joints(GOAL)
+
+
+def _q_with_tcp_below(z: float) -> np.ndarray:
+    kin = Kinematics()
+    rng = np.random.default_rng(3)
+    for _ in range(2000):
+        q = rng.uniform(-1.2, 1.2, 5)
+        if kin.fk(q)[0][2] < z:
+            return q
+    raise AssertionError("no joint pose below the table found")
+
+
+def test_a_joint_move_whose_path_dips_below_the_table_is_refused(
+    driver: LeRobotDriver, robot: FakeRobot
+) -> None:
+    goal = _q_with_tcp_below(-0.03)  # the end pose itself is under the table
+    with pytest.raises(MotionError, match="below table"):
+        driver.move_joints(goal)
+    assert robot.actions == []

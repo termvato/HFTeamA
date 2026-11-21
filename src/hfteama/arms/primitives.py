@@ -12,7 +12,7 @@ Positions are metres in the shared table frame; joint angles are radians in the 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -107,6 +107,15 @@ def check_joints(q: np.ndarray) -> None:
         lo, hi = LIMITS_RAD[name]
         if not lo <= value <= hi:
             raise MotionError(f"joint limit: {name}")
+
+
+PATH_CLEARANCE_M = 0.005  # the tool centre may not dip closer than this to the table mid-move
+
+
+def check_path(kin: Any, start: np.ndarray, goal: np.ndarray, table_z: float) -> None:
+    """Raise MotionError("below table") if a joint-space move dips under the table on the way."""
+    if kin.min_tcp_z(start, goal) < table_z + PATH_CLEARANCE_M:
+        raise MotionError("below table (path)")
 
 
 def check_point(xyz: np.ndarray, table_z: float, clearance: float = 0.01) -> None:

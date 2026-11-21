@@ -161,3 +161,21 @@ def test_a_stop_during_ik_is_not_forgotten(table: SimTable) -> None:
     assert box["r"] == "stopped"
     d.resume()
     d.move_to(np.array([0.2, 0.05, 0.05]))  # and the latch clears on resume
+
+
+def test_wait_stops_spinning_if_the_physics_thread_dies(table: SimTable) -> None:
+    box: dict = {}
+
+    def run() -> None:
+        try:
+            table.wait(30.0)
+            box["r"] = "finished"
+        except RuntimeError as exc:
+            box["r"] = str(exc)
+
+    th = threading.Thread(target=run, daemon=True)
+    th.start()
+    time.sleep(0.1)
+    table._quit.set()  # the physics thread exits
+    th.join(3.0)
+    assert not th.is_alive() and "not running" in box["r"]

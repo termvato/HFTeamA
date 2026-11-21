@@ -90,6 +90,11 @@ class Kinematics:
         pos, z_axis = self._tcp_base()
         return self.base.to_table(pos), self.base._rot() @ z_axis
 
+    def min_tcp_z(self, q_from: np.ndarray, q_to: np.ndarray, samples: int = 20) -> float:
+        """Lowest tool-centre height (table frame) along the straight joint-space path."""
+        a, b = np.asarray(q_from, float)[:5], np.asarray(q_to, float)[:5]
+        return min(float(self.fk(a + (b - a) * k / samples)[0][2]) for k in range(samples + 1))
+
     def _iterate(self, q0: np.ndarray, target: np.ndarray, down: bool) -> tuple[np.ndarray, float]:
         q = np.clip(q0, self._lo, self._hi)
         jacp = np.zeros((3, self._model.nv))

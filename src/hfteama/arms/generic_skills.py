@@ -8,6 +8,7 @@ the task's args: table coordinates (`pick_xyz`, `place_xyz`) first, else a name 
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 
@@ -22,6 +23,11 @@ APPROACH_DZ = 0.08  # hover height above the point before descending, m
 LIFT_DZ = 0.10  # height to lift a grasped part to, m
 GRASP_DZ = 0.0  # tool-centre offset at the point itself, m
 INSPECT_HOLD_S = 0.5
+WARN_DISAGREE_M = (
+    0.02  # pick_xyz this far from the named object's pose is probably a bad coordinate
+)
+
+log = logging.getLogger(__name__)
 
 
 def _register(name: str) -> Callable[[SkillFn], SkillFn]:
@@ -34,10 +40,29 @@ def _register(name: str) -> Callable[[SkillFn], SkillFn]:
     return deco
 
 
+def _xyz(value: object, what: str) -> np.ndarray:
+    """Three finite numbers, or SkillFailed before anything moves."""
+    try:
+        arr = np.asarray(value, float)
+    except (TypeError, ValueError):
+        raise SkillFailed(f"bad coordinates: {what}={value!r}") from None
+    if arr.shape != (3,) or not np.all(np.isfinite(arr)):
+        raise SkillFailed(f"bad coordinates: {what}={value!r}")
+    return arr
+
+
 def pick_point(task: Task, poses: Poses, arm_id: str) -> np.ndarray:
     args = task.args
     if "pick_xyz" in args:
-        return np.asarray(args["pick_xyz"], float)
+        xyz = _xyz(args["pick_xyz"], "pick_xyz")
+        name = args.get("object")
+        if name is not None and poses.has(name, arm_id):
+            gap = float(np.linalg.norm(xyz - poses.point(name, arm_id)))
+            if gap > WARN_DISAGREE_M:
+                log.warning(
+                    "pick_xyz is %.3f m from %s's known pose: check the coordinate", gap, name
+                )
+        return xyz
     for key in ("object", "from"):
         if key in args and poses.has(args[key], arm_id):
             return poses.point(args[key], arm_id)
@@ -50,11 +75,14 @@ def pick_point(task: Task, poses: Poses, arm_id: str) -> np.ndarray:
 def place_point(task: Task, poses: Poses, arm_id: str) -> np.ndarray:
     args = task.args
     if "place_xyz" in args:
-        return np.asarray(args["place_xyz"], float)
+        return _xyz(args["place_xyz"], "place_xyz")
+    for key in ("target", "to"):
+        if key in args and poses.has(args[key], arm_id):
+            return poses.point(args[key], arm_id)
     name = args.get("target") or args.get("to")
     if name is None:
         raise SkillFailed("no place location in args (place_xyz, target or to)")
-    return poses.point(name, arm_id)
+    raise SkillFailed(f"unknown location: {name}")
 
 
 def _above(p: np.ndarray, dz: float) -> np.ndarray:

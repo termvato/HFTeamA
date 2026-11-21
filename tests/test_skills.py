@@ -212,3 +212,37 @@ def test_unreachable_carry_pose_is_refused_before_any_motion() -> None:
     with pytest.raises(MotionError, match="unreachable"):
         REGISTRY["pick"](d, _task("pick", object="block_01"), poses)
     assert d.calls == []
+
+
+@pytest.mark.parametrize(
+    "bad", [[0.2, 0.0], [0.2, 0.0, 0.1, 0.5], "abc", None, [float("nan"), 0, 0.1]]
+)
+def test_malformed_coordinates_fail_cleanly_before_any_motion(bad: object) -> None:
+    d = FakeDriver()
+    with pytest.raises(SkillFailed, match="bad coordinates"):
+        REGISTRY["pick"](d, _task("pick", pick_xyz=bad), POSES)
+    with pytest.raises(SkillFailed, match="bad coordinates"):
+        REGISTRY["place"](d, _task("place", place_xyz=bad), POSES)
+    assert d.calls == []
+
+
+def test_place_falls_through_to_the_next_name_like_pick_does() -> None:
+    d = FakeDriver()
+    REGISTRY["place"](d, _task("place", target="zzz", to="input_bin"), POSES)
+    assert _targets(d)[1][:2] == (0.2, 0.0)
+    with pytest.raises(SkillFailed, match="unknown location: zzz"):
+        REGISTRY["place"](FakeDriver(), _task("place", target="zzz", to="yyy"), POSES)
+
+
+def test_pick_warns_when_coordinates_and_object_disagree(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING"):
+        REGISTRY["pick"](
+            FakeDriver(), _task("pick", object="block_01", pick_xyz=[0.3, 0.1, 0.015]), POSES
+        )
+    assert "block_01" in caplog.text and "pick_xyz" in caplog.text
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        REGISTRY["pick"](
+            FakeDriver(), _task("pick", object="block_01", pick_xyz=[0.21, 0.01, 0.015]), POSES
+        )
+    assert caplog.text == ""
