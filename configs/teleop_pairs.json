@@ -66,5 +66,14 @@
     "reset_time_s": 30,
     "fps": 30,
     "push_to_hub": false
+  },
+  "bimanual": {
+    "note": "`hfteama bimanual teleop|record`: these two pairs as one LeRobot bi_so_follower/bi_so_leader robot. Left/right = the arms' places on the table, seen from the operator.",
+    "id": "hfteam_bi",
+    "left": "rakesh",
+    "right": "hacklab",
+    "record": {
+      "repo_id": "diegoloayza789/hfteam_bimanual_so101"
+    }
   }
 }

@@ -96,3 +96,55 @@ def test_each_pair_records_to_its_own_dataset() -> None:
     assert len(repos) == len(set(repos))
     hacklab = cmd("--pair", "hacklab", "record")
     assert "--dataset.repo_id=diegoloayza789/hfteam_hacklab_so101" in hacklab
+
+
+def test_several_pairs_run_in_parallel(capsys: pytest.CaptureFixture[str]) -> None:
+    from hfteama.hardware.cli import dispatch
+
+    assert dispatch(parser().parse_args(["-n", "--pair", "rakesh,hacklab", "teleop"])) == 0
+    out = capsys.readouterr().out
+    assert "[rakesh] $ " in out and "--robot.id=rakesh_follower" in out
+    assert "[hacklab] $ " in out and "--robot.id=vato_follower" in out
+
+
+def test_several_pairs_only_for_teleop_and_record() -> None:
+    from hfteama.hardware.cli import dispatch
+
+    with pytest.raises(SystemExit):
+        dispatch(parser().parse_args(["--pair", "rakesh,hacklab", "calibrate", "leader"]))
+
+
+def test_parallel_output_drops_status_lines() -> None:
+    import io
+
+    from hfteama.hardware.multi import _pump
+
+    src = io.BytesIO(b"hello\nTeleop loop time: 16.7ms (60 Hz)\x1b[1A\nshoulder_pan.pos |  1.0\n")
+    out = io.StringIO()
+    _pump("rakesh", src, out)
+    assert out.getvalue() == "[rakesh] hello\n"
+
+
+def test_bimanual_command(tmp_path: Path) -> None:
+    from hfteama.hardware.bimanual import bimanual_args, load_bimanual
+
+    bi = load_bimanual()
+    args = bimanual_args(bi, with_cameras=True, root=tmp_path)
+    assert "--robot.type=bi_so_follower" in args and "--teleop.type=bi_so_leader" in args
+    assert any(a.startswith("--robot.left_arm_config.cameras=") for a in args)
+    assert any(a.startswith("--teleop.right_arm_config.port=") for a in args)
+    left = tmp_path / bi.id / "followers" / f"{bi.id}_left.json"
+    assert left.resolve().name == f"{bi.left.follower.id}.json"
+    right = tmp_path / bi.id / "leaders" / f"{bi.id}_right.json"
+    assert right.resolve().name == f"{bi.right.leader.id}.json"
+
+
+def test_bimanual_record_has_its_own_dataset(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    import hfteama.hardware.bimanual as bimanual
+    from hfteama.hardware.cli import build_bimanual
+
+    monkeypatch.setattr(bimanual, "LINK_ROOT", tmp_path)
+    monkeypatch.setattr(bimanual.bimanual_args, "__defaults__", (tmp_path,))
+    c = build_bimanual(parser().parse_args(["bimanual", "record", "--episodes", "2"]))
+    assert "--dataset.repo_id=diegoloayza789/hfteam_bimanual_so101" in c
+    assert "--dataset.num_episodes=2" in c
