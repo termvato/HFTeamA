@@ -255,7 +255,8 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
         b = scene.box
         label([b.x, b.y, cfg["box"]["height"]], f"box ({b.x:.3f}, {b.y:.3f})", (255, 0, 255))
     for i, pc in enumerate(scene.pieces, 1):
-        label([pc.x, pc.y, 0], f"   ({pc.x:.3f}, {pc.y:.3f}) {piece_angle(pc):.0f}deg")
+        tag = "" if pc.tag_id is None else f" tag {pc.tag_id}"
+        label([pc.x, pc.y, 0], f"  {tag} ({pc.x:.3f}, {pc.y:.3f})")
         # the piece number, big, just beside the piece: what `sort jog` takes
         u, v = np.round(project([[pc.x, pc.y, 0]], pose, intr)[0]).astype(int)
         org = (u - int(40 * k), v - int(20 * k))
@@ -332,13 +333,14 @@ def report(scene, plan: Plan, arms) -> None:
     print("\nBox:", "not found" if b is None else f"centre x {b.x:.3f}  y {b.y:.3f}")
     side_of = {id(pk.piece): pk for pk in plan.picks}
     print(f"\nPieces: {len(scene.pieces)}")
-    print("   #      x      y   angle   length x width   area  arm    dist")
+    print("   #  tag      x      y   angle   length x width   area  arm    dist")
     for i, p in enumerate(scene.pieces, 1):
         pk = side_of.get(id(p))
         who = pk.side if pk else "-"
         dist = f"{np.hypot(*pk.target_arm[:2]) * 100:.0f} cm" if pk else "unreachable"
         print(
-            f"  {i:2}  {p.x:.3f}  {p.y:.3f}  {piece_angle(p):5.0f}   "
+            f"  {i:2}  {'-' if p.tag_id is None else p.tag_id:>3}  {p.x:.3f}  {p.y:.3f}"
+            f"  {piece_angle(p):5.0f}   "
             f"{p.length * 100:5.1f} x {p.width * 100:4.1f} cm  {p.area_cm2:5.1f}  {who:5}  {dist}"
         )
     for n in plan.notes:
@@ -587,9 +589,10 @@ class Jog:
         print("box:", "not found" if b is None else f"({b.x:.3f}, {b.y:.3f})")
         for i, p in enumerate(self.scene.pieces, 1):
             d = np.hypot(*self.arm.placement.to_arm([p.x, p.y])[:2])
+            tag = "" if p.tag_id is None else f" tag {p.tag_id},"
             print(
-                f"  {i}: ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f} cm,"
-                f" {d * 100:.0f} cm from the base"
+                f"  {i}:{tag} ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f}"
+                f" cm, {d * 100:.0f} cm from the base"
             )
         if not self.scene.pieces:
             print("  no pieces seen")

@@ -45,6 +45,7 @@ class Piece:
     yaw: float  # rad, table frame: direction of the short side (the closing direction)
     area_cm2: float
     outline: np.ndarray = field(repr=False, default_factory=lambda: np.zeros((0, 2)))  # table xy
+    tag_id: int | None = None  # the tag on its top, if found by tag
 
 
 @dataclass
@@ -379,7 +380,7 @@ def pieces_from_tags(dets, pose: CameraPose, intr: Intrinsics, pc: dict, extent)
     L, W = pc.get("object_length", pc["object_width"]), pc["object_width"]
     x0, x1, y0, y1 = extent
     out = []
-    for _, c in dets:
+    for tag_id, c in dets:
         # centre = crossing of the diagonals (exact under perspective, unlike the mean)
         P = pixel_to_table(np.vstack([c, [centre_pixel(c)]]), pose, intr, H)[:, :2]
         corners, centre = P[:4], P[4]
@@ -403,6 +404,7 @@ def pieces_from_tags(dets, pose: CameraPose, intr: Intrinsics, pc: dict, extent)
                 yaw=yaw,
                 area_cm2=L * W * 1e4,
                 outline=np.array(base),
+                tag_id=tag_id,
             )
         )
     return out
