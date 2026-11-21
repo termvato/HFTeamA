@@ -28,7 +28,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | Executor and re-split | Vato | #10, #11 |
 | Fake arms, durations | Vato | #13, #14 |
 | Countdown screen, what-if estimate, named limit | Vato | #12, #17 |
-| Real-arm adapter: real follower as an arm worker (from Hardware's pairs config), safety checks, slow moves and park, heartbeat, runs Action's skills | Vato | #4, #19, #20 |
+| RTX rehearsal: Isaac Sim scene of the table and arms, plays the plan before the real run, side by side with the real arms; second machine | Vato | #33 |
 | Task format, arm contract, event log | both | #2, #4, #5 |
 
 ## Architecture: locked Sat 21 Nov (Vato and Aravind)
@@ -70,10 +70,15 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 16:14 (Vato): Demo adds an RTX rehearsal: the plan plays in Isaac Sim first, then on the real arms. Operations builds it; Isaac Sim runs on a second machine. Arm motions in the sim should come from Action's skills (MuJoCo track) so sim and real move the same way.
+
+- 16:09 (Vato): Real-arm adapter withdrawn: Action already plans it (Vivek's `SkillWorker` + `LeRobotDriver` on `action-arm-skills`). Operations posted LeRobot safety notes and offered to take his Task 8 (#20).
+
 - 21 Nov (Aravind): First real Qwen run on the RTX 4060 passed (numbers in the backlog). Watch
   the step check: one GPU, one call at a time, 2.8 s each. With 3 arms finishing a step every
   ~5 s, checking every pick and place asks ~1.7 s of GPU per second and the checks queue up.
   Checking only places (or only when the camera sees a change) halves that.
+
 - 21 Nov (Aravind): Built and on `orchestrator`: `src/hfteama/registry/` (#3) and
   `src/hfteama/perception/` (VLM). Objects: Qwen points at each one (0..1000 coords), the camera
   ray through that pixel meets the table plane at the objects' top height. Needs from Hardware's
