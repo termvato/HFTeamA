@@ -1,14 +1,39 @@
 # Action team design: arm skills on MuJoCo, then real arms
 
-Team: Action (Vivek `VivekSai07`, Sahil `sahilrajpurkar03`). Issue #20. Branch `action/arm-skills`.
-Status: draft for approval, 21 Nov 2026.
+Owner: Vivek (`VivekSai07`), Action team, issue #20. Branch `action-arm-skills` (merges into the
+team branch `action`). Sahil works separately on a learned policy (SmolVLA, `vla/`); this design is
+the scripted path, which is also his baseline and fallback.
+Status: approved 21 Nov 2026; updated after the 14:50 team sync (see "Changes after team sync").
+
+## Changes after team sync (21 Nov, 14:50)
+
+Operations locked the architecture and product in `docs/plan.md` on `main`. Effects here:
+
+- **Sim arms do not run in the live demo** ("only in the what-if estimate"). The sim is our
+  development and proof environment and the source of duration numbers, not a demo feature. Dropped:
+  plugging sim arms in at runtime. Kept: several arms in one scene to prove parallel runs.
+- **Task args carry table coordinates.** The worker reads only `task.id`, `task.skill`, `task.args`;
+  args hold object id, target bin and table coordinates (the VLM and camera fill them). Skills take
+  coordinates from args first and fall back to named poses in `tasks/<name>/poses.json`. Proposed
+  arg names to agree with Operations: `object`, `target`, `pick_xyz`, `place_xyz` (metres).
+  VLM output uses one `pick_place` step with `object` / `target`; sort12 uses separate `pick` /
+  `place` with `from` / `to`. Skills accept both.
+- **Step timeout is still open** (1.5x or 3x the estimate, Operations deciding): the worker takes the
+  factor as a parameter.
+- **Real arms are configured by Hardware** in `configs/teleop_pairs.json` (serials, calibration ids,
+  calibration files in `configs/calibration/`), loaded by `hfteama.hardware.pairs`. The real driver
+  reuses that loader instead of `configs/arms.json`.
+- **Learned policy (Sahil):** plans a `VLAArmWorker` behind the same contract. To make a policy
+  pluggable as just another skill, primitives gain a non-blocking `set_joint_target(q)` and
+  `read_joints()` at control rate.
+- One person on this track: no team split.
 
 ## Intent
 
 The executor (Operations, #10) hands an arm one step at a time: `worker.execute(task) -> Result`.
 Our job is everything behind that call: turning a step like `pick block_01 from input_bin` into
 arm motion, saying whether it worked, and how long it took. It has to work the same way on
-simulated arms and on the real SO-101s, so the demo can mix 3 real arms with extra sim arms.
+simulated arms and on the real SO-101s.
 
 We prove it end to end on MuJoCo first, then hand a real-arm backend to Hardware (Diego, Om) to
 test on the rig with a written checklist.
@@ -19,7 +44,7 @@ test on the rig with a written checklist.
    on sim and real arms.
 2. A small set of arm primitives (the Action <-> Hardware interface) that every backend implements.
 3. IK: table-frame target point -> joint angles, shared by sim and real.
-4. A MuJoCo table with up to 8 SO-101 arms in one scene, real-time paced, viewable.
+4. A MuJoCo table with several SO-101 arms (default 3) in one scene, real-time paced, viewable.
 5. One generic worker class that implements the frozen `ArmWorker` contract over any backend:
    outcomes, timeouts, heartbeat, cancel, park.
 6. Measured per-skill, per-arm durations (p50 / p80) that Operations can plan with (#13).
@@ -112,6 +137,8 @@ in the model's convention (real backends convert with `kinematics.ArmFrame`).
 - `open_gripper()`, `close_gripper() -> Grasp` (`holding: bool`, gripper position, effort).
 - `stop()`: freeze in place. `park()`: slow stop to the parked pose, then torque off.
 - `alive() -> float`: time of the last good read (feeds `heartbeat()`).
+- `set_joint_target(q)`: non-blocking, limit-checked, rate-limited target for streaming control
+  (a learned policy at 30 Hz); `move_joints` is built on the same path.
 
 Failures are exceptions: `MotionError(reason)` (unreachable, limit, blocked) and
 `ArmDown(reason)` (bus error, lost). Safety checks live in the driver, so no skill can bypass them.
@@ -142,11 +169,9 @@ positions (blocks placed by hand at marked spots).
 
 ### Sim (`arms/sim.py`)
 
-- `SimTable`: builds one MuJoCo scene with `MjSpec.attach_body`: a table, up to `max_arms` SO-101s
-  at the `base_pose_m` from the arm config, and the objects from `poses.json`. One physics thread
+- `SimTable`: builds one MuJoCo scene with `MjSpec.attach_body`: a table, N SO-101s at base poses
+  given in the scene config (default: 0.45 m apart, as in `configs/arms.example.json`), and the objects from `poses.json`. One physics thread
   steps at real time (speed factor option for fast tests). Optional passive viewer.
-- Arms that are not "plugged in" sit parked; plugging in a sim arm = activating it (no recompile),
-  which is what the demo's "add sim arm" button needs.
 - `MujocoDriver(table, arm_id)`: implements the primitives by setting that arm's actuator targets
   and waiting until reached (with a stall timeout).
 - Option B grasp: on `close_gripper`, if an object's centre is within a radius of the tool site,
@@ -194,18 +219,11 @@ injected grasp failure returns `FAILED("grasp")`, and `measure_durations.py` pro
   parallel; injected failure.
 - Real driver: limit and table checks, ArmFrame conversion, with a mocked bus.
 
-## Split between Vivek and Sahil (proposal; your call)
-
-- Track 1: model vendoring, `SimTable`, `MujocoDriver`, IK.
-- Track 2: primitives protocol, `SkillWorker`, generic skills, `poses.json`, durations script.
-- Together: sim demo, real backend, Hardware handoff.
-Track 2 can start at once against the in-memory driver; the two meet at the primitives protocol.
-
 ## To agree with other teams (we propose, they decide)
 
 - Hardware (#19): the primitives list above, posted today, before the handoff.
 - Operations (#21): skill convention change (raise `SkillFailed`), adding the `sim` extra to CI,
-  `poses.json` per task, and whether they want our worker + a no-motion driver as the fake arm (#14).
+  `poses.json` per task, the coordinate arg names (`pick_xyz`, `place_xyz`), and whether they want our worker + a no-motion driver as the fake arm (#14).
 
 ## Left to the builder
 

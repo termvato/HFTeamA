@@ -105,7 +105,7 @@ confirming in that moment. Prefer fake or MuJoCo arms for any development and te
 - Checkpoints: Sat evening (live screen on fake arms, one real arm does a step), Sun midday (adding
   an arm re-splits on screen), Sun evening (full demo), Sun night (code freeze + backup video).
 
-## Action branch (`action/arm-skills`, issue #20)
+## Action branch (`action-arm-skills`, issue #20)
 
 - Read `ACTION_STATUS.md` first; update it when a task changes state, and add a dated line to its
   log. Team-wide `STATUS.md` (on `main`) holds one block per person; update Vivek's block there.
