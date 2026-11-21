@@ -215,32 +215,53 @@ def report(scene, plan: Plan, arms) -> None:
 
 
 def cmd_preview(args) -> int:
-    """Camera only: detect, plan, print, and save (or show) the annotated frame."""
+    """Camera only: detect, plan, print, and save the annotated frame; with --live, stream it
+    to Rerun (the venv's OpenCV is headless: no windows)."""
     cfg = load_config(args.sorter_config)
     sides = _sides(args, cfg)
     arms = arm_models(cfg, sides)
     with Eye(cfg, args.image) as eye:
+        if not args.live:
+            frame, pose, scene = eye.look()
+            plan = make_plan(scene, arms, cfg)
+            report(scene, plan, arms)
+            print(
+                "saved", save_image(draw(frame, pose, eye.intr, scene, plan, cfg, arms), "preview")
+            )
+            return 0
+        return _preview_live(eye, arms, cfg)
+
+
+def _preview_live(eye, arms, cfg) -> int:
+    import contextlib
+    import io
+
+    import rerun as rr
+
+    rr.init("hfteama_sort_preview", spawn=True)
+    print("Streaming to Rerun (camera, top-down view, piece mask, poses). Ctrl+C to stop.")
+    text = ""
+    try:
         while True:
             frame, pose, scene = eye.look()
             plan = make_plan(scene, arms, cfg)
             img = draw(frame, pose, eye.intr, scene, plan, cfg, arms)
-            if not args.live:
+            rr.log("camera", rr.Image(img[..., ::-1]).compress(jpeg_quality=80))
+            if scene.top_down is not None:
+                rr.log("top_down", rr.Image(scene.top_down[..., ::-1]).compress(jpeg_quality=80))
+                rr.log("piece_mask", rr.Image(scene.mask))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
                 report(scene, plan, arms)
-                print("saved", save_image(img, "preview"))
-                return 0
-            import cv2
-
-            cv2.imshow("hfteama sort preview (q to quit)", _fit_screen(img))
-            if cv2.waitKey(200) & 0xFF in (ord("q"), 27):
-                cv2.destroyAllWindows()
-                return 0
-
-
-def _fit_screen(img, width=1280):
-    import cv2
-
-    s = width / img.shape[1]
-    return cv2.resize(img, None, fx=s, fy=s) if s < 1 else img
+            text = buf.getvalue()
+            rr.log("poses", rr.TextDocument(f"```\n{text}```", media_type=rr.MediaType.MARKDOWN))
+            if eye.image:  # a saved frame does not change
+                break
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        pass
+    print(text)
+    return 0
 
 
 def _sides(args, cfg) -> list[str]:
@@ -445,7 +466,7 @@ def add_parser(sub) -> None:
     p = ss.add_parser("preview", help="Camera only: detect pieces and box, show the plan")
     p.add_argument("--arms", help="Arms to plan for, e.g. left,right (default: all)")
     p.add_argument("--image", help="Use a saved frame instead of the camera")
-    p.add_argument("--live", action="store_true", help="Live window instead of one saved image")
+    p.add_argument("--live", action="store_true", help="Stream to Rerun instead of one saved image")
 
     t = ss.add_parser("touch", help="Fit an arm's placement by touching tags (torque off)")
     t.add_argument("arm", help="left or right")

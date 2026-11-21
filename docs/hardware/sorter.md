@@ -52,7 +52,7 @@ Leave both arms folded at rest before every command: that pose is "home", and th
 back to it before torque is released. The calibration is never touched. If the calibration
 file and the servos differ, the command stops instead of letting LeRobot prompt.
 
-1. `hfteama sort preview` (or `--live`). Check that the box circle sits on the rim, that every
+1. `hfteama sort preview` (or `--live`, which streams to Rerun: camera, top-down view, piece mask and the pose table). Check that the box circle sits on the rim, that every
    piece is outlined and coloured by arm (blue = left, green = right, red = unreachable), and
    that the white jaw lines cross each piece's short side. The image is saved in
    `outputs/sorter/`.
