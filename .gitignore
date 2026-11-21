@@ -1,6 +1,4 @@
 
-# Per-rig arm registry (USB serials)
-vla/arms.json
 __pycache__/
 *.py[cod]
 vla/camera_check.jpg

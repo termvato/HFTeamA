@@ -1,8 +1,0 @@
-{
-  "arms": [
-    {"id": "follower_a", "role": "follower", "serial": "FILL_ME", "vid": "1a86", "pid": "55d3"},
-    {"id": "leader_a", "role": "leader", "serial": "FILL_ME", "vid": "1a86", "pid": "55d3"},
-    {"id": "follower_b", "role": "follower", "serial": "FILL_ME", "vid": "1a86", "pid": "55d3"},
-    {"id": "leader_b", "role": "leader", "serial": "FILL_ME", "vid": "1a86", "pid": "55d3"}
-  ]
-}

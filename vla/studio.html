@@ -111,7 +111,7 @@
         <button id="start" class="rec">Start<kbd>Space</kbd></button>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="save">Save<kbd>→</kbd></button>
+        <button id="save">Stop &amp; save<kbd>→</kbd></button>
         <button id="discard">Discard<kbd>←</kbd></button>
       </div>
       <label><input type="checkbox" id="auto"> Auto-start next episode after the reset time</label>
@@ -155,9 +155,12 @@ function render(s) {
   renderSlots(s.slots);
 
   const rec = s.state === "recording";
-  $("elapsed").textContent = rec ? `${s.elapsed} / ${s.episode_time_s} s`
-                           : (s.reset_left ? `reset ${s.reset_left} s` : `0 / ${s.episode_time_s} s`);
-  $("progress").style.width = rec ? `${Math.min(100, 100 * s.elapsed / s.episode_time_s)}%` : "0";
+  const limit = s.episode_time_s > 0;  // 0 = no limit: the clock counts up until Stop & save
+  const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  $("elapsed").textContent = rec ? (limit ? `${fmt(s.elapsed)} / ${fmt(s.episode_time_s)}` : fmt(s.elapsed))
+                           : (s.reset_left ? `reset ${s.reset_left} s` : (limit ? `limit ${fmt(s.episode_time_s)}` : "no limit"));
+  $("progress").parentElement.style.display = limit ? "" : "none";
+  $("progress").style.width = rec && limit ? `${Math.min(100, 100 * s.elapsed / s.episode_time_s)}%` : "0";
   $("frames").textContent = s.frames;
   $("episodes").textContent = s.episodes;
   $("session").textContent = s.session_saved;

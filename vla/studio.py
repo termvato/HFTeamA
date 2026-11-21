@@ -15,8 +15,10 @@ Buttons are also on the keyboard (in the page): Space start, Right arrow save, L
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -51,6 +53,37 @@ from lerobot.utils.feature_utils import build_dataset_frame, combine_feature_dic
 
 PAGE = Path(__file__).with_name("studio.html")
 log = logging.getLogger("studio")
+ARMS = Path(__file__).with_name("arms.json")
+
+
+def resolve_ports(cfg):
+    """A copy of a robot/teleop config with every "serial:<n>" port replaced by that board's
+    /dev/tty* now. Done on each connect, so arms plugged in after the page started are found."""
+    import detect_arms  # same folder
+
+    cfg = copy.deepcopy(cfg)
+    names = {a["serial"]: a["id"] for a in json.loads(ARMS.read_text())["arms"]} if ARMS.exists() else {}
+    now = {i["serial"]: p for p, i in detect_arms.ports().items()}
+    for holder in (cfg, getattr(cfg, "left_arm_config", None), getattr(cfg, "right_arm_config", None)):
+        port = getattr(holder, "port", None)
+        if not (isinstance(port, str) and port.startswith("serial:")):
+            continue
+        serial = port.removeprefix("serial:")
+        name = names.get(serial, f"arm with USB serial {serial}")
+        if serial not in now:
+            raise RuntimeError(f"{name} is not plugged in (follower: is its 12 V supply on?)")
+        if not os.access(now[serial], os.R_OK | os.W_OK):
+            import grp
+            import getpass
+
+            if getpass.getuser() in grp.getgrnam("dialout").gr_mem:  # joined after this session began
+                raise RuntimeError(f"{name} is on {now[serial]}. You are in the dialout group, but the "
+                                   "studio was started before that: stop it, run 'newgrp dialout' in "
+                                   "that terminal (or log out and back in), and start it again")
+            raise RuntimeError(f"{name} is on {now[serial]}, but you may not open it: "
+                               "sudo usermod -aG dialout $USER, then log out and back in")
+        holder.port = now[serial]
+    return cfg
 
 
 @dataclass
@@ -122,7 +155,8 @@ class Studio:
             if name not in self.configured:
                 why = "Not set up yet: add its line to CAMERA_TABLE in vla/config.sh"
             elif name not in self.hw.robot.cameras:
-                why = "Dual-arm only (arm B's wrist)" if self.configured[name] == "b" else "Not used in this mode"
+                why = ("The other arm's wrist: used in dual-arm mode only"
+                       if self.configured[name] in ("a", "b") else "Not used in this mode")
             elif name in self.cam_errors:
                 why = self.cam_errors[name]
             elif self.state in ("connecting", "disconnecting"):
@@ -201,15 +235,20 @@ class Studio:
                 if failed:
                     msg = f"Preview without {len(failed)} camera(s): " + " | ".join(failed)
             else:
-                self.robot = make_robot_from_config(self.hw.robot)
-                self.teleop = make_teleoperator_from_config(self.hw.teleop)
+                robot_cfg, teleop_cfg = resolve_ports(self.hw.robot), resolve_ports(self.hw.teleop)
+                self.teleop = make_teleoperator_from_config(teleop_cfg)
+                self.robot = make_robot_from_config(robot_cfg)
                 # Leader first, as lerobot-record does. calibrate=False: LeRobot's calibration waits
-                # for Enter in the terminal, which would hang the page; calibrate.sh does it instead.
+                # for Enter in the terminal, which would hang the page. These arms are calibrated by
+                # the Hardware team and must never be recalibrated.
                 for dev in (self.teleop, self.robot):
                     dev.connect(calibrate=False)
                     if not getattr(dev, "is_calibrated", True):
-                        raise RuntimeError(f"{dev} is not calibrated (or its calibration does not match "
-                                           "the motors). Run ./vla/calibrate.sh <arm> in a terminal.")
+                        raise RuntimeError(
+                            f"{dev}: its calibration file does not match what is stored in the servos. "
+                            "rakesh_leader: expected once; run ./vla/teleop.sh single (SINGLE_ARM=a) and "
+                            "press ENTER at 'use provided calibration file'. Any other arm: stop and ask "
+                            "the Hardware team; never recalibrate (configs/calibration/README.md on hardware).")
                 self.processors = make_default_processors()
                 tap, _, rop = self.processors
                 self.features = combine_feature_dicts(
@@ -323,7 +362,7 @@ class Studio:
                          "task": self.ep_task}
                 self.dataset.add_frame(frame)
                 self.ep_frames += 1
-                if time.monotonic() - self.ep_start >= self.episode_time_s:
+                if 0 < self.episode_time_s <= time.monotonic() - self.ep_start:  # 0: until Stop
                     self.save()
             elif self.state == "idle" and self.auto_next and self.reset_until and time.monotonic() >= self.reset_until:
                 self.start()
@@ -522,7 +561,7 @@ def main() -> None:
     p.add_argument("--episode-time-s", type=float, default=25)
     p.add_argument("--reset-time-s", type=float, default=10)
     p.add_argument("--private", default="true")
-    p.add_argument("--tags", default="so101,sorting,hfteama")
+    p.add_argument("--tags", default="so101,stacking,hfteama")
     p.add_argument("--views", default="", help="fixed camera slots, comma separated")
     p.add_argument("--configured", default=None, help="name:arms for every camera in CAMERA_TABLE")
     p.add_argument("--host", default="127.0.0.1")
