@@ -28,7 +28,7 @@ import numpy as np
 from hfteama.arms.ik import ArmBase, Kinematics
 from hfteama.arms.kinematics import JOINTS, LIMITS_RAD
 from hfteama.arms.poses import Poses
-from hfteama.arms.primitives import ArmDown, MotionError, check_joints
+from hfteama.arms.primitives import ArmDown, MotionError, check_joints, clip_to_limits
 
 ROOT = Path(__file__).resolve().parents[2]
 SLOW = 0.3
@@ -169,7 +169,7 @@ def _cmd_read(d: Any, args: argparse.Namespace) -> int:
 
 def _cmd_joint(d: Any, args: argparse.Namespace) -> int:
     idx = JOINTS[:5].index(args.joint)
-    q0 = d.read_joints()[:5]
+    q0 = clip_to_limits(d.read_joints())[:5]  # an arm resting on a stop is past the model limit
     q1 = q0.copy()
     q1[idx] += args.delta
     d.move_joints(q1, speed=SLOW)

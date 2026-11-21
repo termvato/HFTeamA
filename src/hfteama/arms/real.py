@@ -30,7 +30,7 @@ from typing import Any
 import numpy as np
 
 from hfteama.arms.ik import ArmBase, Kinematics
-from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, JOINTS, LIMITS_RAD, ArmFrame
+from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, LIMITS_RAD, ArmFrame
 from hfteama.arms.primitives import (
     ArmDown,
     Grasp,
@@ -38,6 +38,7 @@ from hfteama.arms.primitives import (
     check_joints,
     check_path,
     check_point,
+    clip_to_limits,
 )
 
 log = logging.getLogger(__name__)
@@ -121,7 +122,7 @@ class LeRobotDriver:
         if self._target is not None:
             return self._target.copy()
         q = self.read_joints()
-        clipped = np.array([np.clip(v, *LIMITS_RAD[j]) for v, j in zip(q, JOINTS, strict=True)])
+        clipped = clip_to_limits(q)
         if np.abs(clipped - q).max() > 1e-6:
             log.warning(
                 "%s rests outside the model's joint limits by %s rad; its first command will "
