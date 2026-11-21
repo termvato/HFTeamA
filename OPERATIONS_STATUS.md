@@ -206,15 +206,21 @@ All on `orchestrator`. Verified on Aravind's laptop: `ruff check .` clean, `pyte
 
 ### Checks for Vato
 
-- [ ] `pytest` and `ruff check .` pass in CI (CI has ortools and dash; my laptop does not).
-- [ ] `pytest tests/test_perception.py -k executor`: VLM plan -> reach -> your executor -> camera
+- [x] `pytest` and `ruff check .` pass in CI (CI has ortools and dash; my laptop does not).
+- [x] `pytest tests/test_perception.py -k executor`: VLM plan -> reach -> your executor -> camera
       check, one check per step.
-- [ ] `pytest tests/test_registry.py -k travel`: HEFT gives each object to the nearer arm.
-- [ ] Interfaces read right: `resolve(..., catalog arms)` for `allowed_arms`; `as_verifier` matches
+- [x] `pytest tests/test_registry.py -k travel`: HEFT gives each object to the nearer arm.
+- [x] Interfaces read right: `resolve(..., catalog arms)` for `allowed_arms`; `as_verifier` matches
       `Verifier`; `rescan(...).graph` for `update_graph`; worker `arm_id`s = catalog ids
       (`rakesh_follower` black/left, `vato_follower` green/right).
 - [ ] Optional, needs the camera and a GPU (`pip install -e ".[vlm,camera]"`):
       `python scripts/real_table_plan.py --device "HD Pro Webcam C920"`.
+
+Verified by Vato 17:15: ruff clean, 135 tests pass with ortools and dash; CI green on `74d6210`;
+the executor and travel tests pass; `resolve()`, `as_verifier` (returns `(ok, why)`), `rescan().graph`
+and catalog ids (`rakesh_follower`, `vato_follower`) all fit the executor. Watch: Action's handoff
+example names the real worker `arm_a`; it must use the catalog id or reach and planning will not
+match (flagged on #20). The camera run (last item) needs your laptop.
 
 ### Open on Aravind's side
 
