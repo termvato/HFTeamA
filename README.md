@@ -163,8 +163,16 @@ Each pair records to its own dataset (`record.repo_id` per pair in
 | bimanual (both) | `diegoloayza789/hfteam_bimanual_so101` |
 
 Defaults (shared `record` section): 10 episodes, 60 s each, 30 s to reset between
-episodes, 30 fps, not pushed to the Hub. Datasets are saved under
-`~/.cache/huggingface/lerobot/<repo_id>`.
+episodes, 30 fps, not pushed to the Hub. Change them per run with `--episodes`,
+`--episode-time` and `--reset-time` (seconds).
+
+**Each session creates a new dataset** named `<repo_id>_<date>_<time>` (LeRobot 0.7 adds the
+stamp so nothing is overwritten), saved under `~/.cache/huggingface/lerobot/`:
+
+```bash
+ls ~/.cache/huggingface/lerobot/diegoloayza789/
+# hfteam_bimanual_so101_20261121_152406
+```
 
 ```bash
 hf auth login     # once, only to push datasets to the Hub (push_to_hub: true)
@@ -178,9 +186,17 @@ hfteama --pair rakesh,hacklab record --episodes 10 --task "..."
 # both pairs, B (bimanual): one dataset with both arms
 hfteama bimanual record --episodes 10 --task "Hand the cube from the left arm to the right arm"
 
-# add more episodes to an existing dataset later
-hfteama --pair rakesh record --resume --episodes 5 --task "..."
+# quick test: 1 episode of 10 s into a throwaway dataset
+hfteama bimanual record --episodes 1 --episode-time 10 --reset-time 2 --task "test" \
+    --repo-id diegoloayza789/hfteam_bimanual_test
+
+# add episodes to an existing session: pass its full stamped name
+hfteama bimanual record --resume --episodes 5 --task "..." \
+    --repo-id diegoloayza789/hfteam_bimanual_so101_20261121_152406
 ```
+
+Tested on 21 Nov with `hfteama bimanual record`: 1 episode, 240 frames at 29.9 Hz,
+12 joints (`left_*`, `right_*`) and both wrist videos.
 
 Flow of each episode: record (move the leader to do the task) → reset time (put the
 objects back) → next episode. Keys while recording: `→` ends the episode early, `←`
