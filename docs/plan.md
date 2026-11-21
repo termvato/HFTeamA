@@ -19,7 +19,8 @@ Each team owns a problem. How to solve it, and how to split it inside the team, 
 
 ## Branches
 
-One branch per team. Work on your team's branch; open a PR to `main` when CI is green.
+One branch per team. Work on your team's branch. `main` is kept in sync automatically: each team
+branch has a "Sync <branch> into main" PR that is merged when CI is green (a red CI keeps it open).
 
 | Branch | Team | Merged in so far |
 |---|---|---|

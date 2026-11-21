@@ -13,3 +13,7 @@ Owner: Operations (#21, backlog #10, #11).
 Done when: a batch on 3 fake arms survives "add arm" and "remove arm" mid-run, every plan passes
 scheduler/check.py, and the event log replays into the view.
 """
+
+from hfteama.executor.executor import Executor, TaskState
+
+__all__ = ["Executor", "TaskState"]

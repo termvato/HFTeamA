@@ -12,7 +12,7 @@ from hfteama.taskgraph import Task
 class Outcome(str, Enum):
     OK = "ok"
     FAILED = "failed"  # the step did not succeed (e.g. part not grasped); see Result.reason
-    TIMEOUT = "timeout"  # skill ran past ~1.5x predicted duration
+    TIMEOUT = "timeout"  # ran past its timeout (factor x estimate; factor open, #21)
     ARM_DOWN = "arm_down"  # bus error, heartbeat lost, or arm removed
 
 
