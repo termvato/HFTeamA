@@ -87,6 +87,7 @@ class Executor:
         durations: DurationModel | None = None,
         whatif_counts: tuple[int, ...] = (1, 2, 3, 4),
         catalog: list[str] | None = None,  # every known arm id (for the what-if row)
+        rescan: Callable[[], TaskGraph | None] | None = None,
         poll: float = 0.02,
     ) -> None:
         graph.validate()
@@ -107,6 +108,12 @@ class Executor:
         self.durations = durations or DurationModel()
         self.whatif_counts = whatif_counts
         self.catalog = list(catalog or [])
+        # After a part is lost (failed place, arm lost while holding it) nobody knows where it is.
+        # With a `rescan` hook (camera -> new task graph) the part's steps wait for the re-scan
+        # instead of retrying the pick at the old position. "auto" = CP-SAT when the arm set
+        # changes or something fails, HEFT for the frequent re-plans after each finished step.
+        self.rescan = rescan
+        self._hold: set[str] = set()
         self.poll = poll
 
         self._lock = threading.RLock()
@@ -241,6 +248,8 @@ class Executor:
             self._on_remove(msg[1], msg[2])
         elif kind == "result":
             self._on_result(msg[1], msg[2])
+        elif kind == "rescanned":
+            self._on_rescanned(msg[1], msg[2])
         elif kind == "lost":
             if msg[1] in self._active:
                 self._lose_arm(msg[1], msg[2])
@@ -272,6 +281,7 @@ class Executor:
         self.graph = merged
         self._status = {t: self._status.get(t, TaskState.PENDING) for t in tasks}
         self._retries = {t: self._retries.get(t, 0) for t in tasks}
+        self._hold = {t for t in self._hold if t in tasks}
         for arm, f in list(self._held.items()):
             if f not in tasks:
                 del self._held[arm]
@@ -519,6 +529,30 @@ class Executor:
                 del self._held[arm]
         if partner and self._status[partner] is TaskState.DONE:
             self._status[partner] = TaskState.PENDING
+            if self.rescan is not None:
+                ids = {partner, tid}
+                self._hold |= ids
+                self._emit(
+                    Event("replan", data={"reason": "rescan_requested", "tasks": sorted(ids)})
+                )
+                threading.Thread(
+                    target=self._run_rescan, args=(ids,), name="rescan", daemon=True
+                ).start()
+
+    def _run_rescan(self, ids: set[str]) -> None:
+        try:
+            graph = self.rescan()  # type: ignore[misc]
+        except Exception as e:  # camera or VLM trouble: fall back to the old positions
+            graph = None
+            self._emit(Event("replan", data={"reason": "rescan_failed", "error": str(e)}))
+        self._inbox.put(("rescanned", ids, graph))
+
+    def _on_rescanned(self, ids: set[str], graph: TaskGraph | None) -> None:
+        self._hold -= ids
+        if graph is not None:
+            self._on_graph(graph)
+        else:
+            self._replan("rescan_done", force=True)
 
     def _release(self, tid: str) -> None:
         for r, holder in list(self._locks.items()):
@@ -560,7 +594,9 @@ class Executor:
             if a in self._active and self._status[t] is TaskState.PENDING
         }
         restrict = {a: frozenset([held[a]] if a in held else []) for a in self._parking}
-        dropped = frozenset(t for t, s in self._status.items() if s is TaskState.FAILED)
+        dropped = frozenset(
+            t for t, s in self._status.items() if s is TaskState.FAILED or t in self._hold
+        )
         return Problem(
             self.graph,
             sorted(self._active),
@@ -575,7 +611,10 @@ class Executor:
 
     def _replan(self, reason: str, force: bool, extra: dict[str, Any] | None = None) -> Plan:
         p = self._problem()
-        new = solve(p, self.method, self.time_limit)
+        method = self.method
+        if method == "auto":
+            method = "cpsat" if force and len(p.pending()) <= 40 else "heft"
+        new = solve(p, method, self.time_limit)
         chosen, committed = new, True
         if not force and self._plan is not None:
             old = retime(self._plan, p)

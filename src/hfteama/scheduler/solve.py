@@ -20,7 +20,7 @@ from hfteama.scheduler.heft import heft
 from hfteama.scheduler.plan import Plan
 from hfteama.scheduler.problem import PlanError, Problem
 
-METHODS = ("greedy", "heft", "cpsat")
+METHODS = ("greedy", "heft", "cpsat")  # the executor also takes "auto" (see Executor)
 
 
 def solve(p: Problem, method: str = "heft", time_limit: float = 5.0) -> Plan:

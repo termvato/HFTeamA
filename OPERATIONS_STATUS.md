@@ -89,6 +89,27 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Notes
 
+- 18:27 (Vato): **RTX rehearsal bridge works (#33):** `view/joint_stream.py` streams each simulated
+  arm's joints over UDP; `python -m hfteama.demo --backend sim --isaac HOST:PORT` turns it on.
+  Checked: Isaac Sim (headless, 60 fps, 2.5 GB) followed Action's MuJoCo arms run by our executor
+  for 4179 arm-frames. Still open: the Isaac scene uses its own 3-arm layout (not the table
+  config) and does not show carried cubes. Seen in that run: with sort12 on 3 sim arms under our
+  executor, `pick_11` ended in `stall` on two arms in a row (2 steps done in 25 s); Action's own
+  harness completes 24/24, so the difference (which arm takes which block, or lock timing around
+  the shared bin) needs a look together with Vivek before a sim rehearsal is shown.
+
+- 18:24 (Vato): Three executor / planner changes on `orchestrator`:
+  1. **Lost part waits for a re-scan:** `Executor(rescan=fn)` where `fn() -> TaskGraph | None`
+     (camera -> re-scan -> resolved graph). After a failed place, or an arm lost while holding a
+     part, that object's pick and place are held until `fn` returns, then `update_graph` applies it.
+     Without the hook the old behaviour stays (retry at the old position). Aravind: this is where
+     `rescan(...)` + `resolve(...)` plugs in.
+  2. **Lower bound is tight for shared areas:** earliest start + total time + shortest work that
+     must follow. sort12 with 3+ arms: 54 s (was 48), equal to the best plan; assemble3: 41 s (was
+     31) and the limit is named correctly as the output tray, not "order".
+  3. **`method="auto"`** (demo default): CP-SAT when arms change or something fails (up to 40
+     pending steps, 1 s limit), HEFT for the frequent re-plans after each finished step.
+
 - 18:09 (Vato): **VLM -> reach -> executor -> IK validated in MuJoCo** on the hacklab layout, with
   `orchestrator` + `action-arm-skills` merged locally (scripts in `scripts/validation/`; they need
   Action's arm code). Results:
