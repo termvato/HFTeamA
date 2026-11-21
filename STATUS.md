@@ -14,11 +14,10 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
 - **Action (Vivek, Sahil):** CI on `action` fails on lint only (`vla/cameras.py`, `vla/detect_arms.py`).
   Fix: `ruff format vla/`, then `ruff check vla/` (B023 in `detect_arms.py` is a false positive:
   `# noqa: B023`). Details on #20 and PR #24. Keep working on `action`, not personal branches.
-- **Hardware (Diego, Om) and Action:** Operations is building the real-arm adapter
-  (`src/hfteama/arms/real.py`). It opens followers from `configs/teleop_pairs.json`, checks state and
-  limits before any motion, moves and parks slowly, and runs Action's skills by name. Needed from
-  Hardware: park and home pose per follower, table limit, grasp thresholds. Proposed skill interface
-  for Action on #20. Reply on #19 / #20.
+- **Hardware (Diego, Om) and Action:** the real-arm path is Action's (Vivek's `SkillWorker` and
+  `LeRobotDriver`, branch `action-arm-skills`); Operations is not building an adapter. Hardware:
+  please give Vivek the park and home pose per follower, the table height and grasp thresholds
+  (#19, #20). LeRobot safety notes for the driver are on #20.
 
 ## Next checkpoint: Saturday evening
 
@@ -46,12 +45,11 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 15:35
+- Updated: Sat 21 Nov 16:20
 - Done: research; repo, plan, teams, issues; architecture locked with Aravind; **core loop on fake
   arms**: planner (greedy, HEFT, CP-SAT), executor with live re-split, durations, live screen
   (`python -m hfteama.view --fake-arms 1`) on `orchestrator`.
-- Doing: real-arm adapter (`arms/real.py`): a real follower as an arm worker the executor can plan
-  with.
+- Doing: supporting Action's real-arm driver (review notes on #20); next Operations task to pick.
 - Next: first run with a real arm once Hardware and Action have one step working.
 - Blocked on: nothing.
 
