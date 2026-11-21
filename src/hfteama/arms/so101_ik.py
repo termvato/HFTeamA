@@ -97,6 +97,18 @@ def tcp_position(q) -> np.ndarray:
     return fk(q)[:3, 3]
 
 
+def chain_points(q) -> np.ndarray:
+    """Points along the arm (arm frame, (7, 3)): base, every joint, the TCP. A polyline to
+    mask the arm out of camera images."""
+    T = np.eye(4)
+    pts = [np.zeros(3)]
+    for origin, a in zip(_JOINT_ORIGINS, np.asarray(q, float)[:5], strict=True):
+        T = T @ origin @ _rotz(a)
+        pts.append(T[:3, 3].copy())
+    pts.append((T @ _TCP)[:3, 3])
+    return np.array(pts)
+
+
 def jaw_yaw(T: np.ndarray) -> float:
     """Heading (rad, in the arm's xy plane) of the TCP x axis, which is the direction the
     jaws close along (the moving jaw's tip moves along TCP x). Meaningful when the gripper

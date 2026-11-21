@@ -73,3 +73,13 @@ def test_calibrated_limits_from_lerobot_range() -> None:
     assert np.degrees(hi[3]) == pytest.approx(half)
     assert np.degrees(lo[2]) == pytest.approx(-half - 6.9)
     assert lo[0] == LOWER[0]  # joints missing from the calibration keep the model's limits
+
+
+def test_chain_points_run_from_base_to_tcp() -> None:
+    from hfteama.arms.so101_ik import chain_points
+
+    q = np.array([0.3, -0.2, 0.5, 1.0, 0.4])
+    pts = chain_points(q)
+    assert pts.shape == (7, 3)
+    assert pts[0] == pytest.approx([0, 0, 0])
+    assert pts[-1] == pytest.approx(fk(q)[:3, 3])

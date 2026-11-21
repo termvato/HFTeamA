@@ -118,6 +118,25 @@ def _hull(pts: np.ndarray) -> np.ndarray:
     return np.array(lower[:-1] + upper[:-1])
 
 
+def body_footprint(points, radius: float, camera_position, n: int = 12) -> list[np.ndarray]:
+    """Table outlines (z = 0) hidden by a body made of capsules along `points` (table frame,
+    (N, 3), z >= 0): for each segment, the hull of the capsule's ends straight below and of
+    their shadows along the camera rays."""
+    o = np.asarray(camera_position, float)
+    pts = np.asarray(points, float)
+    a = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    ring = radius * np.stack([np.cos(a), np.sin(a)], -1)
+    out = []
+    for p, q in zip(pts[:-1], pts[1:], strict=True):
+        ends = []
+        for e in (p, q):
+            z = min(max(e[2], 0.0), o[2] * 0.9)
+            shadow = o[:2] + (e[:2] - o[:2]) * o[2] / (o[2] - z)
+            ends += [e[:2] + ring, shadow + ring]
+        out.append(_hull(np.concatenate(ends)))
+    return out
+
+
 def _cross(a, b) -> float:
     return float(a[0] * b[1] - a[1] * b[0])
 
@@ -167,7 +186,7 @@ def find_pieces(
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
 
     pieces = []
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = _split_touching(mask)
     px_area_cm2 = (MM_PER_PX / 10) ** 2
     for c in contours:
         area = cv2.contourArea(c) * px_area_cm2
@@ -198,6 +217,38 @@ def find_pieces(
     return pieces, mask, top
 
 
+def _split_touching(mask, solidity: float = 0.85):
+    """Outer contours of the blobs, with blobs that look like several touching pieces (convex
+    hull much bigger than the blob) split by a watershed on the distance to the background."""
+    import cv2
+
+    out = []
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for c in contours:
+        area = cv2.contourArea(c)
+        hull = cv2.contourArea(cv2.convexHull(c))
+        if area < 200 or hull == 0 or area / hull >= solidity:
+            out.append(c)
+            continue
+        x, y, w, h = cv2.boundingRect(c)
+        blob = np.zeros((h + 2, w + 2), np.uint8)
+        cv2.drawContours(blob, [c - [x - 1, y - 1]], -1, 255, -1)
+        dist = cv2.distanceTransform(blob, cv2.DIST_L2, 5)
+        n, markers = cv2.connectedComponents((dist > 0.5 * dist.max()).astype(np.uint8))
+        if n <= 2:  # one core: a single (odd-shaped) piece
+            out.append(c)
+            continue
+        markers = markers + 1
+        markers[blob == 0] = 0
+        markers[(blob > 0) & (dist <= 0.5 * dist.max())] = 0
+        ws = cv2.watershed(cv2.cvtColor(blob, cv2.COLOR_GRAY2BGR), markers.astype(np.int32))
+        for label in range(2, n + 1):
+            part = ((ws == label) & (blob > 0)).astype(np.uint8)
+            cs, _ = cv2.findContours(part, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            out += [k + [x - 1, y - 1] for k in cs]
+    return out
+
+
 def _from_px(uv, extent):
     uv = np.asarray(uv, float)
     return np.stack(
@@ -205,8 +256,11 @@ def _from_px(uv, extent):
     )
 
 
-def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict) -> Scene:
-    """Box and pieces, with the masks from the sorter config (configs/sorter.json)."""
+def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chains=()) -> Scene:
+    """Box and pieces, with the masks from the sorter config (configs/sorter.json).
+
+    arm_chains: the arms' current polylines in the table frame (from FK), masked out with
+    their shadows; without them only a disc around each base is masked."""
     tags = {int(k): tuple(v) for k, v in cfg["table"]["tags"].items()}
     extent = region_extent(tags)
     bc, pc = cfg["box"], cfg["pieces"]
@@ -216,6 +270,8 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict) -> Scene:
     if box is not None:
         grown = Box(box.x, box.y, box.radius + pc.get("box_margin", 0.02))
         polys.append(box_footprint(grown, bc["height"], pose.position))
+    for chain in arm_chains:
+        polys += body_footprint(chain, pc.get("arm_mask_radius", 0.04), pose.position)
     pieces, mask, top = find_pieces(
         image,
         pose,

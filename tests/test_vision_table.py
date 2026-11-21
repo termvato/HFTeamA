@@ -134,3 +134,29 @@ def test_detect_scene_on_synthetic_image() -> None:
     # the jaws close across the stick: along table y
     assert abs(np.sin(stick.yaw)) == pytest.approx(1.0, abs=0.02)
     assert (disc.x, disc.y) == pytest.approx((0.50, 0.25), abs=0.005)
+
+
+def test_body_footprint_reaches_the_shadow() -> None:
+    from hfteama.vision.detect import body_footprint
+
+    cam = np.array([0.3, -0.3, 0.7])
+    # a vertical post 20 cm high at (0.3, 0.3): its shadow points away from the camera
+    polys = body_footprint([[0.3, 0.3, 0.0], [0.3, 0.3, 0.2]], 0.02, cam)
+    ys = np.concatenate([p[:, 1] for p in polys])
+    shadow_y = -0.3 + (0.3 + 0.3) * 0.7 / 0.5
+    assert ys.max() == pytest.approx(shadow_y + 0.02, abs=2e-3)
+    assert ys.min() == pytest.approx(0.28, abs=2e-3)
+
+
+def test_touching_blobs_are_split() -> None:
+    cv2 = pytest.importorskip("cv2")
+    from hfteama.vision.detect import _split_touching
+
+    mask = np.zeros((200, 300), np.uint8)
+    cv2.circle(mask, (80, 100), 40, 255, -1)
+    cv2.circle(mask, (190, 100), 40, 255, -1)
+    cv2.rectangle(mask, (110, 95), (160, 105), 255, -1)  # thin bridge
+    assert len(_split_touching(mask)) == 2
+    single = np.zeros((200, 300), np.uint8)
+    cv2.rectangle(single, (50, 80), (250, 110), 255, -1)
+    assert len(_split_touching(single)) == 1

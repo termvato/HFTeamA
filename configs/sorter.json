@@ -39,10 +39,11 @@
     "drop_above": 0.04
   },
   "pieces": {
-    "min_area_cm2": 1.0,
+    "min_area_cm2": 2.0,
     "max_area_cm2": 80.0,
     "colour_threshold": 25.0,
     "box_margin": 0.02,
+    "arm_mask_radius": 0.04,
     "grasp_z": 0.015,
     "approach_z": 0.06
   },
