@@ -486,6 +486,7 @@ class Jog:
         self.z_changed = False
         self.last_grasp = None  # (piece, aim, q) of the last `g` not logged yet, for `log`
         self.dz = 0.0  # height correction of the current piece (ArmModel.aim_table)
+        self.planned = None  # table xy the current piece was aimed at, before nudges
 
     # --- vision -------------------------------------------------------------------------------
 
@@ -586,6 +587,7 @@ class Jog:
         ax, ay, yaw, _, dz = self.arm.grasp_aim(p, self.z)
         if self.move([ax, ay, self.z + dz], yaw):
             self.dz = dz
+            self.planned = np.array([ax, ay])  # the aim before any nudge, for `ok`
             self.piece = i
             print(
                 f"  over piece {i + 1}: camera says ({p.x:.3f}, {p.y:.3f}),"
@@ -716,10 +718,9 @@ class Jog:
         if self.piece is None:
             print("  go over a piece first")
             return
-        p = self.scene.pieces[self.piece]
-        # where the tip should have been: the camera's point plus the arm's aim offset (so
-        # the fit corrects the placement only, not the aim offset a second time)
-        want = np.array(self.arm.aim(p.x, p.y))
+        # where the tip should have been: the camera's point plus the arm's aim offsets, as
+        # planned (so the fit corrects the placement only, not the offsets a second time)
+        want = self.planned
         tip = self.drv.tcp()
         off = (self.arm.placement.to_table(tip)[:2] - want) * 100
         self.pairs_arm.append(tip[:2])
