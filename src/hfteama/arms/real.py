@@ -137,9 +137,9 @@ class LeRobotDriver:
     def _base(self) -> np.ndarray:
         """The pose commands are built on: the last one sent, else the measured one (first move).
 
-        An arm can rest slightly past a model/arm limit (on its physical stop, whose calibrated range
-        is wider than the model's). Commands are never sent past `_limits`, so a measured pose
-        outside them is clipped in: the first command moves that joint inside by the overshoot.
+        An arm can rest slightly past `_limits` (on its physical stop, whose calibrated range is
+        wider than the model's). Commands are never sent past `_limits`, so a measured pose outside
+        them is clipped in: the first command moves that joint inside by the overshoot.
         """
         if self._target is not None:
             return self._target.copy()
@@ -269,7 +269,11 @@ class LeRobotDriver:
             cur = self._gripper_pct()
             if abs(cur - pct) < GRIP_DONE_PCT:
                 break
-            if prev is not None and waited >= self._gripper_wait and abs(cur - prev) < GRIP_STILL_PCT:
+            if (
+                prev is not None
+                and waited >= self._gripper_wait
+                and abs(cur - prev) < GRIP_STILL_PCT
+            ):
                 break
             prev = cur
 
