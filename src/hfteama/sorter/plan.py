@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from hfteama.arms.so101_ik import IKSolution, solve_ik
+from hfteama.arms.so101_ik import IKSolution, fk, jaw_yaw, solve_ik
 from hfteama.sorter.geometry import Placement
 from hfteama.vision.detect import Box, Piece
 
@@ -47,6 +47,7 @@ class ArmModel:
     jaw_width_gain: float = 0.0
     object_width: float | None = None  # known piece width (m); None = the camera's estimate
     square: bool = False  # the pieces are square: grasp from the side nearest the wrist's middle
+    drop_offset: tuple[float, float] = (0.0, 0.0)  # extra (forward, left) shift when dropping
     # extra height (m) by distance from the base: [(r_m, dz_m), ...] sorted by r, linearly
     # interpolated, held at the ends (e.g. lower close to the base)
     z_by_distance: tuple = ()
@@ -93,6 +94,14 @@ class ArmModel:
         p = self.placement.to_arm([x, y])
         a = p + np.array([fwd, left]) + np.asarray(self.aim_gain, float) @ p
         t = self.placement.to_table(a) + [c * j[0] - s * j[1], s * j[0] + c * j[1]]
+        return float(t[0]), float(t[1])
+
+    def drop_point(self, x: float, y: float, heading: float) -> tuple[float, float]:
+        """Table xy to command the tool at so the held piece is over (x, y): the grasp
+        correction (aim) plus this arm's drop_offset (forward, left as seen from behind it)."""
+        ax, ay = self.aim(x, y, heading, self.object_width)
+        a = self.placement.to_arm([ax, ay]) + np.asarray(self.drop_offset, float)
+        t = self.placement.to_table(a)
         return float(t[0]), float(t[1])
 
     def grasp_aim(self, piece: Piece, z: float):
@@ -175,9 +184,23 @@ def plan_drop(arm: ArmModel, box: Box, height: float, drop_above: float, max_til
         for above in np.arange(drop_above, 0.03 - 1e-9, -0.01):
             z = height + above
             for shift in np.arange(0.0, max(box.radius - 0.03, 0.0) + 1e-9, 0.01):
-                xy = [box.x + shift * toward[0], box.y + shift * toward[1], z]
+                want = (box.x + shift * toward[0], box.y + shift * toward[1])
+                # where the held piece should be -> where to command the tool: the same
+                # correction as for grasping (aim), with the jaws' heading of a first guess
+                first = solve_ik(
+                    arm.placement.to_arm([*want, z]),
+                    down=down,
+                    limits=arm.limits,
+                    max_tilt=max_tilt,
+                )
+                heading = jaw_yaw(fk(first.q)) + arm.placement.yaw
+                xy = arm.drop_point(*want, heading)
                 sol = solve_ik(
-                    arm.placement.to_arm(xy), down=down, limits=arm.limits, max_tilt=max_tilt
+                    arm.placement.to_arm([*xy, z]),
+                    down=down,
+                    seed=first.q,
+                    limits=arm.limits,
+                    max_tilt=max_tilt,
                 )
                 if sol.ok:
                     return sol

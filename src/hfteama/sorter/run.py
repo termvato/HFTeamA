@@ -173,6 +173,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             )
             < 1e-6,
             x_range=tuple(a.get("x_range", (-np.inf, np.inf))),
+            drop_offset=tuple(a.get("drop_offset", (0.0, 0.0))),
         )
     return out
 
