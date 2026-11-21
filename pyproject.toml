@@ -49,3 +49,4 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/validation/*" = ["E501", "E401", "E702", "F401", "I001"]  # one-off check scripts
+"vla/*" = ["E501"]  # LeRobot helper scripts with long command lines

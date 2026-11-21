@@ -35,7 +35,7 @@ def usb_info(tty: str) -> dict:
     node = Path(f"/sys/class/tty/{tty}/device").resolve()
     for d in (node, *node.parents):
         if (d / "idVendor").exists():
-            read = lambda f: (d / f).read_text().strip() if (d / f).exists() else ""  # noqa: E731
+            read = lambda f, d=d: (d / f).read_text().strip() if (d / f).exists() else ""  # noqa: E731
             return {
                 "vid": read("idVendor"),
                 "pid": read("idProduct"),
