@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -30,7 +31,7 @@ from typing import Any
 
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
-from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs
+from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs, port_answers
 from hfteama.events import Event, EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
@@ -189,6 +190,7 @@ def build(
     scan: Callable[[], Any] | None = None,
     verifier: Callable[..., Any] | None = None,
     method: str = "heft",
+    verify: Callable[[str], bool] | None = None,
 ) -> tuple[Executor, ArmWatcher, Rig]:
     """Wire executor, watcher and controls. `scan=None` means manual plug-in only."""
     arm_ids = list(known.values())
@@ -201,7 +203,7 @@ def build(
         verifier=verifier,
         verify_skills=PLACE_SKILLS if verifier else None,
     )
-    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()))
+    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()), verify=verify)
     return ex, watcher, Rig(ex, watcher, arm_ids)
 
 
@@ -255,6 +257,8 @@ def main(argv: list[str] | None = None) -> None:
         factory,
         clock=clock,
         scan=connected_serials if watch else None,
+        # Windows can keep listing an unplugged board: open the port before trusting it
+        verify=port_answers if watch and sys.platform == "win32" else None,
         verifier=verifier,
         method=args.method,
     )
