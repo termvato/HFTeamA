@@ -23,10 +23,11 @@ States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 
 | Decision | Who | Where |
 |---|---|---|
-| Arm contract: `execute(task)` vs `execute(arm_id, skill, params)`; distinct failure types | Vato, Aravind (then Action, Hardware agree) | #21, #4 |
 | Who owns arm detection (`vla/detect_arms.py` on `action` overlaps Hardware's scope) | Hardware, Action | #19, #20 |
 | Top-down camera: mounting and calibration to the table | Hardware, Operations | #19 |
-| Step timeout: 1.5x or 3x the estimate | Vato, Aravind | #21 |
+| Step timeout (1.5x, 2x or 3x the estimate) | Vato, Aravind | #21 |
+
+Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-locked-sat-21-nov-vato-and-aravind).
 
 ---
 

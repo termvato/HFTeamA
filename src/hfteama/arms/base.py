@@ -45,7 +45,11 @@ class ArmWorker(Protocol):
     def state(self) -> ArmState: ...
 
     def execute(self, task: Task) -> Result:
-        """Run one task's skill. Blocks until done. Never raises for a task failure; returns it."""
+        """Run one task's skill. Blocks until done. Never raises for a task failure; returns it.
+
+        Reads only task.id, task.skill and task.args (object id, target bin, table coordinates);
+        the rest of the task is the planner's business.
+        """
         ...
 
     def heartbeat(self) -> float:

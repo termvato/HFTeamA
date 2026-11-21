@@ -30,6 +30,23 @@ One branch per team. Work on your team's branch; open a PR to `main` when CI is 
 The per-person branches are kept for now; new work goes on the team branch:
 `git fetch && git switch <team> && git pull`.
 
+## Architecture (locked Sat 21 Nov, Vato and Aravind)
+
+- **VLM front end** (camera + Go): decides the categories, writes the task graph in the format on
+  `main`, checks each step from the camera, re-scans when the scene changes.
+- **Reachability graph**: which arm can reach which object and bin, from each arm's base pose and reach;
+  fills `allowed_arms`, adds handovers when no single arm reaches both ends.
+- **Planner**: a full schedule on every re-plan (needed for the countdown and the what-if estimate);
+  greedy as the never-fails fallback; CP-SAT when it fits the time limit.
+- **Re-plan rule**: running steps never move; switch plans only if over 10% better, unless arms changed
+  or something failed.
+- **Arm contract**: one worker per arm, `execute(task) -> Result`. The worker reads only the task's id,
+  skill and args (object id, target bin, table coordinates). Outcomes `ok`, `failed` + reason,
+  `timeout`, `arm_down`, with start and end times. A dispatcher-level `execute(arm_id, ...)` may wrap it.
+- **Screen**: live countdown, what-if estimate, the binding limit in words, plus steps unblocked by a new arm.
+- **Code** in `src/hfteama/`. Task format, arm contract and event log change only with all teams.
+- Still open: step timeout (see `OPERATIONS_STATUS.md` on `orchestrator`).
+
 ## Where teams meet
 
 These are the only things teams must agree on. Change them together, not alone.
