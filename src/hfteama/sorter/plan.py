@@ -177,6 +177,13 @@ def plan_drop(arm: ArmModel, box: Box, height: float, drop_above: float, max_til
     else lower in 1 cm steps down to 3 cm; at each height the point may move from the box
     centre towards the arm, up to 3 cm inside the rim. Gripper pointing down (within
     max_tilt) first; if the box is too far for that, any orientation (pointing forward)."""
+    found = drop_target(arm, box, height, drop_above, max_tilt)
+    return None if found is None else found[3]
+
+
+def drop_target(arm: ArmModel, box: Box, height: float, drop_above: float, max_tilt: float):
+    """As plan_drop, but (x, y, z, sol): where the held piece's centre will be (table frame)
+    and the IK solution for the tool, or None."""
     toward = np.array([arm.placement.x - box.x, arm.placement.y - box.y])
     toward /= max(np.linalg.norm(toward), 1e-9)
     # gripper pointing down if possible; else any way (pointing forward reaches further out)
@@ -185,26 +192,28 @@ def plan_drop(arm: ArmModel, box: Box, height: float, drop_above: float, max_til
             z = height + above
             for shift in np.arange(0.0, max(box.radius - 0.03, 0.0) + 1e-9, 0.01):
                 want = (box.x + shift * toward[0], box.y + shift * toward[1])
-                # where the held piece should be -> where to command the tool: the same
-                # correction as for grasping (aim), with the jaws' heading of a first guess
-                first = solve_ik(
-                    arm.placement.to_arm([*want, z]),
-                    down=down,
-                    limits=arm.limits,
-                    max_tilt=max_tilt,
-                )
-                heading = jaw_yaw(fk(first.q)) + arm.placement.yaw
-                xy = arm.drop_point(*want, heading)
-                sol = solve_ik(
-                    arm.placement.to_arm([*xy, z]),
-                    down=down,
-                    seed=first.q,
-                    limits=arm.limits,
-                    max_tilt=max_tilt,
-                )
+                sol = drop_solve(arm, want[0], want[1], z, down, max_tilt)
                 if sol.ok:
-                    return sol
+                    return float(want[0]), float(want[1]), float(z), sol
     return None
+
+
+def drop_solve(arm: ArmModel, x: float, y: float, z: float, down: bool, max_tilt: float):
+    """IK for the tool so the held piece's centre is at (x, y, z), table frame: the same
+    correction as for grasping (aim, plus drop_offset), with the jaws' heading of a first
+    guess."""
+    first = solve_ik(
+        arm.placement.to_arm([x, y, z]), down=down, limits=arm.limits, max_tilt=max_tilt
+    )
+    heading = jaw_yaw(fk(first.q)) + arm.placement.yaw
+    xy = arm.drop_point(x, y, heading)
+    return solve_ik(
+        arm.placement.to_arm([*xy, z]),
+        down=down,
+        seed=first.q,
+        limits=arm.limits,
+        max_tilt=max_tilt,
+    )
 
 
 def make_plan(scene, arms: dict[str, ArmModel], cfg: dict) -> Plan:
