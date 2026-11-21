@@ -647,7 +647,7 @@ class Jog:
         if z < dz - 0.002:
             print(f"  that would go {-z * 100:.1f} cm into the table")
             return
-        self.drv.gripper(self.mc.get("gripper_open", 60.0), wait=0.3)
+        self.drv.gripper(self.mc.get("gripper_open", 60.0))  # fully open before going down
         up = self.arm.placement.to_arm(self.target)
         low = self.arm.placement.to_arm([*self.target[:2], z])
         try:
@@ -1021,7 +1021,7 @@ def pick_and_drop(drv, pick, drop, mc: dict, pc: dict) -> bool:
     caller). Returns False only if the motion itself failed."""
     yaw = float(np.arctan2(fk(pick.grasp.q)[1, 0], fk(pick.grasp.q)[0, 0]))
     try:
-        drv.gripper(mc.get("gripper_open", 60.0), wait=0.0)
+        drv.gripper(mc.get("gripper_open", 60.0))  # fully open before going down
         drv.move_q(pick.above.q)
         drv.move_line(pick.above.q, pick.target_arm, yaw)
         closed = drv.gripper(mc.get("gripper_closed", 2.0))
