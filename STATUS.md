@@ -77,9 +77,13 @@ Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/o
 - Blocked on:
 
 ### Sahil
-- Updated: Sat 21 Nov 14:03 (from the repo)
-- Done: VLA data-collection setup in `vla/` on `action` (arm detection by USB serial, calibration,
-  teleop, recording single- and dual-arm datasets).
-- Doing: not reported yet
-- Next: not reported yet
-- Blocked on: CI lint fails on `vla/detect_arms.py` (see #20).
+- Updated: Sat 21 Nov 14:40
+- Goal: replace the scripted IK pick-and-place step with a learned policy (SmolVLA first), trained
+  on teleop data for the sort task, behind the same step interface.
+- Done: data collection in `vla/` on `action` (arm detection, calibration, teleop, recording to the
+  HF Hub). Local recording web page (live cameras, start/save/discard, upload), tested without
+  arms, not pushed yet.
+- Doing: connecting one arm and the cameras to record the single-arm dataset (~50 episodes).
+- Next: second arm, dual-arm dataset, train SmolVLA, plug it in as an arm worker. Fix CI lint on
+  `vla/detect_arms.py`.
+- Blocked on: nothing.
