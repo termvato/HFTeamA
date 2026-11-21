@@ -5,7 +5,7 @@ fails, the system re-splits the remaining work live and shows the new predicted 
 what limits further speed-up (arm count, step order, or a shared zone).
 
 Works for any task that splits into steps (see `tasks/README.md`); the demo picks one.
-Background and sources: `research/`. Visual map: `docs/README.md` (diagram) and `docs/map.html`. Umbrella issue: #1.
+Background and sources: `research/`. Visual map: `docs/README.md` (diagram) and `docs/map.html`. Umbrella issue: #1. Progress: [`STATUS.md`](../STATUS.md) (everyone updates their own block).
 
 ## Teams
 
@@ -30,6 +30,23 @@ One branch per team. Work on your team's branch; open a PR to `main` when CI is 
 The per-person branches are kept for now; new work goes on the team branch:
 `git fetch && git switch <team> && git pull`.
 
+## Architecture (locked Sat 21 Nov, Vato and Aravind)
+
+- **VLM front end** (camera + Go): decides the categories, writes the task graph in the format on
+  `main`, checks each step from the camera, re-scans when the scene changes.
+- **Reachability graph**: which arm can reach which object and bin, from each arm's base pose and reach;
+  fills `allowed_arms`, adds handovers when no single arm reaches both ends.
+- **Planner**: a full schedule on every re-plan (needed for the countdown and the what-if estimate);
+  greedy as the never-fails fallback; CP-SAT when it fits the time limit.
+- **Re-plan rule**: running steps never move; switch plans only if over 10% better, unless arms changed
+  or something failed.
+- **Arm contract**: one worker per arm, `execute(task) -> Result`. The worker reads only the task's id,
+  skill and args (object id, target bin, table coordinates). Outcomes `ok`, `failed` + reason,
+  `timeout`, `arm_down`, with start and end times. A dispatcher-level `execute(arm_id, ...)` may wrap it.
+- **Screen**: live countdown, what-if estimate, the binding limit in words, plus steps unblocked by a new arm.
+- **Code** in `src/hfteama/`. Task format, arm contract and event log change only with all teams.
+- Still open: step timeout (see `OPERATIONS_STATUS.md` on `orchestrator`).
+
 ## Where teams meet
 
 These are the only things teams must agree on. Change them together, not alone.
@@ -50,13 +67,28 @@ These are the only things teams must agree on. Change them together, not alone.
 | Sunday evening | Full demo run: 3 real arms plus sim arms, a failure, the speed-up curve |
 | Sunday night | Code freeze, rehearsal, backup video |
 
+## Product (demo): a visual sorting system
+
+Decided 21 Nov. The demo task is sorting; the core stays task-agnostic.
+
+| Feature | What the user sees |
+|---|---|
+| Go button | Objects on the table, press Go. No other input needed. |
+| VLM as the brain | A camera VLM looks at the table, decides the categories itself, and assigns each object to a bin. |
+| Estimate before Go | Approximate time for the arms plugged in now, plus a what-if row for 1 / 2 / 3 / 4 arms. |
+| Live countdown | Predicted finish time, updated whenever an arm joins, leaves or a step fails. |
+| Why it stops speeding up | The binding limit in words (arms, step order, or a shared area), plus steps that only became possible because a new arm can reach them. |
+| Failures | Says what happened ("grasp failed, retrying", "arm lost, moving its work", "too slow") and recovers; a camera check confirms every step. |
+| Scene changes | New or moved objects mid-run: the camera notices, the VLM re-reads the table, the plan and countdown update. |
+| Simulated arms | Only in the what-if estimate; they do not execute in the live run. |
+
 ## Demo
 
-1. One arm works through a batch; predicted finish time on screen.
-2. Plug in a second arm mid-run: it is detected, the work re-splits, the finish time drops.
-3. Plug in the third: a smaller drop, and the screen names the bottleneck.
-4. Remove or fail an arm: its work flows back to the others.
-5. Simulated arms extend the curve past 3 to show where it flattens.
+1. Objects on the table, one arm plugged in: the screen shows the VLM's grouping and the estimate (with what-if for more arms).
+2. Press Go. Plug in a second arm mid-run: it is detected, the work re-splits, the countdown drops.
+3. Plug in the third: a smaller drop, and the screen names the limit.
+4. Drop a part or unplug an arm: the screen says what happened and the work flows to the others.
+5. Drop a new object on the table: it is picked up by the re-scan and sorted too.
 
 ## Later extensions (not in the core build)
 
