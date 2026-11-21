@@ -54,11 +54,14 @@ Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/o
 - Blocked on: nothing.
 
 ### Aravind
-- Updated: Sat 21 Nov 14:02 (from the repo)
-- Done: Operations backlog #2-#18; task allocation design doc (`docs/TASK_ALLOCATION_ARCHITECTURE.md` on `orchestrator`).
+- Updated: Sat 21 Nov 16:15 (from the repo)
+- Done: Operations backlog #2-#18; design doc; arm registry and reachability (#3); VLM decomposer,
+  step check and re-scan; object positions from the camera (Qwen pointing onto the table plane).
+  First real Qwen3-VL-4B run on the RTX 4060 passed (synthetic image: 6/6 objects, 0.6 cm mean
+  error, 8.5 s per scan; step check 2.8 s per call).
 - Doing: not reported yet
 - Next: not reported yet
-- Blocked on: arm contract decision with Vato (#21).
+- Blocked on: nothing reported.
 
 ## Hardware (`hardware`, #19)
 
