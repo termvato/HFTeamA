@@ -163,3 +163,12 @@ def test_fit_aim_affine_recovers_a_turn_about_the_base() -> None:
     assert jaw == pytest.approx([0.015, -0.005], abs=1e-9)
     assert G == pytest.approx(np.array(gain), abs=1e-9)
     assert rms < 1e-9
+
+
+def test_z_by_distance_lowers_close_pieces() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, z_by_distance=((0.18, -0.005), (0.28, 0.0)))
+    near, mid, far = (p.to_table([r, 0.0]) for r in (0.15, 0.23, 0.30))
+    assert arm.correction(*near)[2] == pytest.approx(-0.005)
+    assert arm.correction(*mid)[2] == pytest.approx(-0.0025)
+    assert arm.correction(*far)[2] == pytest.approx(0.0)

@@ -111,6 +111,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
             aim_table=tuple(tuple(r) for r in sorted(a.get("aim_table", []))),
             aim_gain=tuple(map(tuple, a.get("aim_gain", ((0.0, 0.0), (0.0, 0.0))))),
             bearing_range=tuple(a.get("bearing_range_deg", (-180.0, 180.0))),
+            z_by_distance=tuple(tuple(r) for r in sorted(a.get("z_by_distance", []))),
         )
     return out
 

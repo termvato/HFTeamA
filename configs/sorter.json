@@ -73,7 +73,7 @@
     "approach_z": 0.05
   },
   "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.3 cm in from the back tag on its side (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
-  "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m). aim_table = [[bearing_deg, forward, left, dz], ...]: the same shift as a function of where the piece is seen from the arm (0 = ahead, + = its left), interpolated; overrides aim_offset. bearing_range_deg = [min, max] bearing (deg, + = the arm's left) of the pieces this arm takes. aim_gain = 2x2 G: extra shift G @ (forward, left) of the piece from the base, proportional to where it is (about a 10 deg turn for rakesh).",
+  "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m). aim_table = [[bearing_deg, forward, left, dz], ...]: the same shift as a function of where the piece is seen from the arm (0 = ahead, + = its left), interpolated; overrides aim_offset. bearing_range_deg = [min, max] bearing (deg, + = the arm's left) of the pieces this arm takes. aim_gain = 2x2 G: extra shift G @ (forward, left) of the piece from the base, proportional to where it is (about a 10 deg turn for rakesh). z_by_distance = [[r_m, dz_m], ...]: extra height by distance from the base (rakesh: 0.5 cm lower at 18 cm, nothing from 28 cm).",
   "arms": {
     "rakesh": {
       "pair": "rakesh",
@@ -108,6 +108,16 @@
         [
           0.193,
           0.005
+        ]
+      ],
+      "z_by_distance": [
+        [
+          0.18,
+          -0.005
+        ],
+        [
+          0.28,
+          0.0
         ]
       ]
     },

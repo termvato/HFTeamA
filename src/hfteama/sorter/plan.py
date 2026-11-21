@@ -40,6 +40,9 @@ class ArmModel:
     # part proportional to where the piece is: G @ (forward, left) of the piece from the base
     # (arm frame, m); [[0, -a], [a, 0]] is a small turn by a rad about the base
     aim_gain: tuple = ((0.0, 0.0), (0.0, 0.0))
+    # extra height (m) by distance from the base: [(r_m, dz_m), ...] sorted by r, linearly
+    # interpolated, held at the ends (e.g. lower close to the base)
+    z_by_distance: tuple = ()
     # pieces this arm takes: bearing from the arm (deg, 0 = ahead, + = its left), min/max
     bearing_range: tuple[float, float] = (-180.0, 180.0)
 
@@ -53,12 +56,17 @@ class ArmModel:
 
     def correction(self, x: float, y: float) -> tuple[float, float, float]:
         """(forward, left, dz) to apply for a piece seen at table (x, y)."""
-        if not self.aim_table:
-            return (*self.aim_offset, 0.0)
         a = self.placement.to_arm([x, y])
+        dz = 0.0
+        if self.z_by_distance:
+            k = np.array(self.z_by_distance, float)
+            dz = float(np.interp(np.hypot(a[0], a[1]), k[:, 0], k[:, 1]))
+        if not self.aim_table:
+            return (*self.aim_offset, dz)
         b = np.degrees(np.arctan2(a[1], a[0]))
         k = np.array(self.aim_table, float)
-        return tuple(float(np.interp(b, k[:, 0], k[:, i])) for i in (1, 2, 3))
+        fwd, left, dzt = (float(np.interp(b, k[:, 0], k[:, i])) for i in (1, 2, 3))
+        return fwd, left, dzt + dz
 
     def aim(self, x: float, y: float, heading: float = 0.0) -> tuple[float, float]:
         """Table xy to aim the tool at to grasp a piece seen at (x, y), with the jaws'
