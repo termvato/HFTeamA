@@ -101,16 +101,10 @@ A black image (brightness near 0) means the lens is covered.
 
 ## Record a dataset
 
-Settings are in `"record"` in `configs/teleop_pairs.json`
-(`repo_id` `diegoloayza789/hfteam_rakesh_so101`).
-
-```bash
-hf auth login                                   # only if push_to_hub is true
-hfteama --pair <pair> record --episodes 5 --task "Pick up the cube and place it in the box"
-hfteama --pair <pair> record --resume --episodes 5
-```
-
-While recording: `→` ends the episode early, `←` re-records it, `Esc` stops.
+See the README ("Record a dataset"): per-pair datasets, commands for one or both pairs,
+episode flow and keyboard controls. Each pair's `record` section in
+`configs/teleop_pairs.json` overrides the shared one (at least `repo_id`, so two pairs
+never write into the same dataset).
 
 ## Troubleshooting
 

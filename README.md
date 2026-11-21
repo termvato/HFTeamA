@@ -97,17 +97,72 @@ prints the exact LeRobot command; it must contain `--robot.calibration_dir=.../c
 | `rakesh` (default) | `rakesh_follower` (`5B79014975`) | `rakesh_leader` (`5B8E115290`) | `wrist` |
 | `hacklab` | `vato_follower` (`5A7A015861`) | `hacklab_leader` (`5A7A015820`) | `wrist` |
 
-**Both pairs at once, with cameras:** one terminal per pair (each arm is its own USB bus).
-Both stream to the same Rerun window; pick each pair's recording in Rerun's left panel.
+#### Ports change when you plug in: that's fine
+
+`/dev/ttyACM0`, `ttyACM1`, ... are assigned in plug-in order, so they change every time.
+`hfteama` finds each arm by its **USB serial** (table above) and each camera by its
+`/dev/v4l/by-id/` name, so you never set ports by hand. Always check first:
 
 ```bash
-hfteama --pair rakesh teleop --cameras     # terminal 1
-hfteama --pair hacklab teleop --cameras    # terminal 2
+hfteama pairs     # every arm you need must say "connected at /dev/ttyACM*", and show its cameras
 ```
 
-Other commands: `hfteama --pair rakesh
-camera`, `hfteama --pair rakesh record --episodes 5 --task "..."`.
-Calibrating a new arm, cameras, recording and troubleshooting:
+If an arm says "not connected": its USB cable is out, or (follower) its 12 V supply is off.
+Keep each servo board on its own arm: the serial belongs to the board, not the arm.
+
+#### Run both pairs at once (with cameras)
+
+One terminal per pair; each arm is its own USB bus, so they don't interfere.
+
+```bash
+# terminal 1                                   # terminal 2
+source .venv/bin/activate                      source .venv/bin/activate
+hfteama --pair rakesh teleop --cameras         hfteama --pair hacklab teleop --cameras
+```
+
+Both stream to the same Rerun window; pick each pair's recording in Rerun's left panel.
+With 4 arms and 2 cameras on one laptop, plug the cameras into different USB ports (or a
+powered hub); camera timeouts or dropped fps usually mean too much on one port.
+
+#### Record a dataset
+
+Each pair records to its own dataset (`record.repo_id` per pair in
+[`configs/teleop_pairs.json`](configs/teleop_pairs.json)):
+
+| Pair | Dataset |
+|---|---|
+| `rakesh` | `diegoloayza789/hfteam_rakesh_so101` |
+| `hacklab` | `diegoloayza789/hfteam_hacklab_so101` |
+
+Defaults (shared `record` section): 10 episodes, 60 s each, 30 s to reset between
+episodes, 30 fps, not pushed to the Hub. Datasets are saved under
+`~/.cache/huggingface/lerobot/<repo_id>`.
+
+```bash
+hf auth login     # once, only to push datasets to the Hub (push_to_hub: true)
+
+# one pair
+hfteama --pair rakesh record --episodes 10 --task "Pick up the cube and place it in the box"
+
+# both pairs: one terminal each, same task description per pair
+hfteama --pair rakesh  record --episodes 10 --task "..."     # terminal 1
+hfteama --pair hacklab record --episodes 10 --task "..."     # terminal 2
+
+# add more episodes to an existing dataset later
+hfteama --pair rakesh record --resume --episodes 5 --task "..."
+```
+
+Flow of each episode: record (move the leader to do the task) → reset time (put the
+objects back) → next episode. Keys while recording: `→` ends the episode early, `←`
+discards it and records it again, `Esc` stops and saves.
+
+**Two pairs recording at once:** on a normal desktop (X11) LeRobot listens to the keyboard
+globally, so **a key press goes to both recordings** (`Esc` stops both, `→` ends the
+episode in both). Start both terminals together and use the same `--episodes` so they stay
+in step, or record one pair at a time if each needs its own control.
+
+`-n` prints the LeRobot command without running it, e.g. `hfteama -n --pair hacklab record`.
+Calibrating a new arm, camera setup and troubleshooting:
 [`docs/hardware/so101_setup.md`](docs/hardware/so101_setup.md).
 
 ## Development

@@ -88,3 +88,11 @@ def test_unknown_pair() -> None:
 def test_cameras_arg_format() -> None:
     out = cameras_arg({"front": {"type": "opencv", "index_or_path": 0, "fps": 30}})
     assert out == '{front: {"type": "opencv", "index_or_path": 0, "fps": 30}}'
+
+
+def test_each_pair_records_to_its_own_dataset() -> None:
+    """Two pairs recording at once must not write into the same dataset."""
+    repos = [load_pair(DEFAULT_CONFIG, name).record["repo_id"] for name in read_config()["pairs"]]
+    assert len(repos) == len(set(repos))
+    hacklab = cmd("--pair", "hacklab", "record")
+    assert "--dataset.repo_id=diegoloayza789/hfteam_hacklab_so101" in hacklab

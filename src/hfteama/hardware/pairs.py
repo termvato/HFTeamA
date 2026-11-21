@@ -84,7 +84,7 @@ def load_pair(path: Path | str | None = None, pair: str | None = None) -> PairCo
         follower=_arm(pairs[name]["follower"], FOLLOWER_CALIBRATION_DIR, "HFTEAM_FOLLOWER"),
         leader=_arm(pairs[name]["leader"], LEADER_CALIBRATION_DIR, "HFTEAM_LEADER"),
         cameras=pairs[name].get("cameras", {}),
-        record=data.get("record", {}),
+        record={**data.get("record", {}), **pairs[name].get("record", {})},
     )
 
 
