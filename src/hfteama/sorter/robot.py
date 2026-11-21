@@ -26,6 +26,7 @@ class ArmDriver:
         from hfteama.hardware.pairs import load_pair
 
         self.side = side
+        self.arm_cfg = arm_cfg
         self.motion = motion
         self.pair = load_pair(pairs_config, arm_cfg["pair"])
         self.arm = self.pair.follower
@@ -85,7 +86,11 @@ class ArmDriver:
             self.robot.disconnect()
             raise SystemExit(f"{self.arm.id}: not calibrated, refusing to move it.")
         obs = self.read()
-        self.home = self.motion.get("home") or {f"{j}.pos": obs[f"{j}.pos"] for j in BODY}
+        self.home = (
+            self.arm_cfg.get("home")
+            or self.motion.get("home")
+            or {f"{j}.pos": obs[f"{j}.pos"] for j in BODY}
+        )
         self.gripper_target = obs["gripper.pos"]
         return self
 
