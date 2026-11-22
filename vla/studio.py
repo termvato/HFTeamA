@@ -62,9 +62,17 @@ def resolve_ports(cfg):
     import detect_arms  # same folder
 
     cfg = copy.deepcopy(cfg)
-    names = {a["serial"]: a["id"] for a in json.loads(ARMS.read_text())["arms"]} if ARMS.exists() else {}
+    names = (
+        {a["serial"]: a["id"] for a in json.loads(ARMS.read_text())["arms"]}
+        if ARMS.exists()
+        else {}
+    )
     now = {i["serial"]: p for p, i in detect_arms.ports().items()}
-    for holder in (cfg, getattr(cfg, "left_arm_config", None), getattr(cfg, "right_arm_config", None)):
+    for holder in (
+        cfg,
+        getattr(cfg, "left_arm_config", None),
+        getattr(cfg, "right_arm_config", None),
+    ):
         port = getattr(holder, "port", None)
         if not (isinstance(port, str) and port.startswith("serial:")):
             continue
@@ -76,12 +84,18 @@ def resolve_ports(cfg):
             import getpass
             import grp
 
-            if getpass.getuser() in grp.getgrnam("dialout").gr_mem:  # joined after this session began
-                raise RuntimeError(f"{name} is on {now[serial]}. You are in the dialout group, but the "
-                                   "studio was started before that: stop it, run 'newgrp dialout' in "
-                                   "that terminal (or log out and back in), and start it again")
-            raise RuntimeError(f"{name} is on {now[serial]}, but you may not open it: "
-                               "sudo usermod -aG dialout $USER, then log out and back in")
+            if (
+                getpass.getuser() in grp.getgrnam("dialout").gr_mem
+            ):  # joined after this session began
+                raise RuntimeError(
+                    f"{name} is on {now[serial]}. You are in the dialout group, but the "
+                    "studio was started before that: stop it, run 'newgrp dialout' in "
+                    "that terminal (or log out and back in), and start it again"
+                )
+            raise RuntimeError(
+                f"{name} is on {now[serial]}, but you may not open it: "
+                "sudo usermod -aG dialout $USER, then log out and back in"
+            )
         holder.port = now[serial]
     return cfg
 
@@ -102,15 +116,28 @@ class Studio:
             idle -> uploading -> idle
     """
 
-    def __init__(self, hw: Hardware, mode: str, repo_id: str, task: str, fps: int,
-                 episode_time_s: float, reset_time_s: float, private: bool, tags: list[str],
-                 views: list[str] | None = None, configured: dict[str, str] | None = None):
+    def __init__(
+        self,
+        hw: Hardware,
+        mode: str,
+        repo_id: str,
+        task: str,
+        fps: int,
+        episode_time_s: float,
+        reset_time_s: float,
+        private: bool,
+        tags: list[str],
+        views: list[str] | None = None,
+        configured: dict[str, str] | None = None,
+    ):
         self.hw, self.mode, self.repo_id, self.task, self.fps = hw, mode, repo_id, task, fps
         # Fixed camera slots on the page (config.sh CAMERA_VIEWS), and name -> arms for every camera
         # in CAMERA_TABLE, so an empty slot can say why it is empty.
         self.views = list(views or hw.robot.cameras)
         self.views += [c for c in hw.robot.cameras if c not in self.views]
-        self.configured = configured if configured is not None else {c: "both" for c in hw.robot.cameras}
+        self.configured = (
+            configured if configured is not None else {c: "both" for c in hw.robot.cameras}
+        )
         self.cam_errors: dict[str, str] = {}
         self.episode_time_s, self.reset_time_s = episode_time_s, reset_time_s
         self.private, self.tags = private, tags
@@ -155,8 +182,11 @@ class Studio:
             if name not in self.configured:
                 why = "Not set up yet: add its line to CAMERA_TABLE in vla/config.sh"
             elif name not in self.hw.robot.cameras:
-                why = ("The other arm's wrist: used in dual-arm mode only"
-                       if self.configured[name] in ("a", "b") else "Not used in this mode")
+                why = (
+                    "The other arm's wrist: used in dual-arm mode only"
+                    if self.configured[name] in ("a", "b")
+                    else "Not used in this mode"
+                )
             elif name in self.cam_errors:
                 why = self.cam_errors[name]
             elif self.state in ("connecting", "disconnecting"):
@@ -171,17 +201,27 @@ class Studio:
         with self.lock:
             return {
                 "slots": self.slots(),
-                "state": self.state, "mode": self.mode, "repo_id": self.repo_id, "task": self.task,
-                "fps": self.fps, "hz": round(self.hz, 1), "cameras": sorted(self.frames),
+                "state": self.state,
+                "mode": self.mode,
+                "repo_id": self.repo_id,
+                "task": self.task,
+                "fps": self.fps,
+                "hz": round(self.hz, 1),
+                "cameras": sorted(self.frames),
                 "camera_sizes": {k: f"{v.shape[1]}x{v.shape[0]}" for k, v in self.frames.items()},
                 "joints": {k: round(v, 1) for k, v in self.joints.items()},
-                "episodes": self.episodes_on_disk(), "session_saved": self.session_saved,
+                "episodes": self.episodes_on_disk(),
+                "session_saved": self.session_saved,
                 "elapsed": round(now - self.ep_start, 1) if self.state == "recording" else 0,
-                "frames": self.ep_frames, "episode_time_s": self.episode_time_s,
+                "frames": self.ep_frames,
+                "episode_time_s": self.episode_time_s,
                 "reset_time_s": self.reset_time_s,
                 "reset_left": round(max(0.0, self.reset_until - now), 1) if self.auto_next else 0,
-                "auto_next": self.auto_next, "message": self.message, "error": self.error,
-                "url": self.url, "private": self.private,
+                "auto_next": self.auto_next,
+                "message": self.message,
+                "error": self.error,
+                "url": self.url,
+                "private": self.private,
             }
 
     def jpeg(self, cam: str) -> bytes | None:
@@ -192,7 +232,9 @@ class Studio:
         cached = self._jpeg_cache.get(cam)
         if cached and cached[0] is img:
             return cached[1]
-        ok, buf = cv2.imencode(".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 75])
+        ok, buf = cv2.imencode(
+            ".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 75]
+        )
         if not ok:
             return None
         self._jpeg_cache[cam] = (img, buf.tobytes())
@@ -248,18 +290,28 @@ class Studio:
                             f"{dev}: its calibration file does not match what is stored in the servos. "
                             "rakesh_leader: expected once; run ./vla/teleop.sh single (SINGLE_ARM=a) and "
                             "press ENTER at 'use provided calibration file'. Any other arm: stop and ask "
-                            "the Hardware team; never recalibrate (configs/calibration/README.md on hardware).")
+                            "the Hardware team; never recalibrate (configs/calibration/README.md on hardware)."
+                        )
                 self.processors = make_default_processors()
                 tap, _, rop = self.processors
                 self.features = combine_feature_dicts(
                     aggregate_pipeline_dataset_features(
-                        pipeline=tap, use_videos=True,
-                        initial_features=create_initial_features(action=self.robot.action_features)),
+                        pipeline=tap,
+                        use_videos=True,
+                        initial_features=create_initial_features(action=self.robot.action_features),
+                    ),
                     aggregate_pipeline_dataset_features(
-                        pipeline=rop, use_videos=True,
-                        initial_features=create_initial_features(observation=self.robot.observation_features)),
+                        pipeline=rop,
+                        use_videos=True,
+                        initial_features=create_initial_features(
+                            observation=self.robot.observation_features
+                        ),
+                    ),
                 )
-                state, msg = "idle", "Connected. The leader drives the follower. Press Start to record."
+                state, msg = (
+                    "idle",
+                    "Connected. The leader drives the follower. Press Start to record.",
+                )
         except Exception as e:  # noqa: BLE001 - show any hardware error on the page
             self._close_hardware()
             with self.lock:
@@ -357,14 +409,21 @@ class Studio:
 
         with self.lock:
             if self.state == "recording":
-                frame = {**build_dataset_frame(self.dataset.features, obs_p, prefix=OBS_STR),
-                         **build_dataset_frame(self.dataset.features, act_p, prefix=ACTION),
-                         "task": self.ep_task}
+                frame = {
+                    **build_dataset_frame(self.dataset.features, obs_p, prefix=OBS_STR),
+                    **build_dataset_frame(self.dataset.features, act_p, prefix=ACTION),
+                    "task": self.ep_task,
+                }
                 self.dataset.add_frame(frame)
                 self.ep_frames += 1
                 if 0 < self.episode_time_s <= time.monotonic() - self.ep_start:  # 0: until Stop
                     self.save()
-            elif self.state == "idle" and self.auto_next and self.reset_until and time.monotonic() >= self.reset_until:
+            elif (
+                self.state == "idle"
+                and self.auto_next
+                and self.reset_until
+                and time.monotonic() >= self.reset_until
+            ):
                 self.start()
 
     # ------------------------------------------------------------ episodes
@@ -374,21 +433,34 @@ class Studio:
             return
         n_cams = len(self.hw.robot.cameras)
         if (self.root / "meta" / "info.json").exists():
-            ds = LeRobotDataset.resume(self.repo_id, root=self.root, image_writer_threads=4 * n_cams)
+            ds = LeRobotDataset.resume(
+                self.repo_id, root=self.root, image_writer_threads=4 * n_cams
+            )
             try:  # same cameras, sizes, joints and fps as the episodes already recorded
                 sanity_check_dataset_robot_compatibility(ds, self.robot, self.fps, self.features)
             except ValueError as e:
                 ds.finalize()
-                have = sorted(k.removeprefix("observation.images.") for k in ds.features
-                              if k.startswith("observation.images."))
-                raise RuntimeError(f"{self.repo_id} was recorded with cameras {have} and a different setup "
-                                   f"than now ({e}). Use the same cameras, or record into a new dataset "
-                                   "(DATASET_SINGLE / DATASET_DUAL in config.sh).") from None
+                have = sorted(
+                    k.removeprefix("observation.images.")
+                    for k in ds.features
+                    if k.startswith("observation.images.")
+                )
+                raise RuntimeError(
+                    f"{self.repo_id} was recorded with cameras {have} and a different setup "
+                    f"than now ({e}). Use the same cameras, or record into a new dataset "
+                    "(DATASET_SINGLE / DATASET_DUAL in config.sh)."
+                ) from None
             self.dataset = ds
         else:
-            self.dataset = LeRobotDataset.create(self.repo_id, self.fps, root=self.root,
-                                                 robot_type=self.robot.robot_type, features=self.features,
-                                                 use_videos=True, image_writer_threads=4 * n_cams)
+            self.dataset = LeRobotDataset.create(
+                self.repo_id,
+                self.fps,
+                root=self.root,
+                robot_type=self.robot.robot_type,
+                features=self.features,
+                use_videos=True,
+                image_writer_threads=4 * n_cams,
+            )
 
     def start(self, task: str | None = None) -> None:
         with self.lock:
@@ -428,7 +500,9 @@ class Studio:
                 self.state = "idle"
                 self.reset_until = time.monotonic() + self.reset_time_s
                 nxt = f" Next starts in {self.reset_time_s:.0f} s." if self.auto_next else ""
-                self._say(f"Saved. {self.dataset.num_episodes} episodes on disk. Reset the scene.{nxt}")
+                self._say(
+                    f"Saved. {self.dataset.num_episodes} episodes on disk. Reset the scene.{nxt}"
+                )
         except Exception as e:  # noqa: BLE001
             with self.lock:
                 self.dataset.clear_episode_buffer()
@@ -514,7 +588,9 @@ def make_handler(studio: Studio):
         def _stream(self, cam: str):
             """MJPEG: the browser shows it in a plain <img>. About 15 fps, independent of the control loop."""
             if cam not in studio.frames:
-                self.send_error(HTTPStatus.NOT_FOUND, f"no camera {cam!r}; have {sorted(studio.frames)}")
+                self.send_error(
+                    HTTPStatus.NOT_FOUND, f"no camera {cam!r}; have {sorted(studio.frames)}"
+                )
                 return
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
@@ -524,8 +600,12 @@ def make_handler(studio: Studio):
                 while True:
                     jpg = studio.jpeg(cam)
                     if jpg is not None:
-                        self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\n"
-                                         + f"Content-Length: {len(jpg)}\r\n\r\n".encode() + jpg + b"\r\n")
+                        self.wfile.write(
+                            b"--frame\r\nContent-Type: image/jpeg\r\n"
+                            + f"Content-Length: {len(jpg)}\r\n\r\n".encode()
+                            + jpg
+                            + b"\r\n"
+                        )
                     time.sleep(1 / 15)
             except (BrokenPipeError, ConnectionResetError):
                 pass
@@ -553,7 +633,9 @@ def make_handler(studio: Studio):
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--mode", choices=("single", "dual"), required=True)
     p.add_argument("--repo-id", required=True)
     p.add_argument("--task", default="")
@@ -567,17 +649,32 @@ def main() -> None:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
     args, hw_flags = p.parse_known_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(name)s %(message)s", datefmt="%H:%M:%S"
+    )
 
     hw = draccus.parse(Hardware, args=[f for f in hw_flags if f != "--"])
-    studio = Studio(hw, args.mode, args.repo_id, args.task, args.fps, args.episode_time_s,
-                    args.reset_time_s, args.private.lower() == "true", args.tags.split(","),
-                    views=[v for v in args.views.split(",") if v] or None,
-                    configured=None if args.configured is None else
-                    dict(e.split(":", 1) for e in args.configured.split(",") if e))
+    studio = Studio(
+        hw,
+        args.mode,
+        args.repo_id,
+        args.task,
+        args.fps,
+        args.episode_time_s,
+        args.reset_time_s,
+        args.private.lower() == "true",
+        args.tags.split(","),
+        views=[v for v in args.views.split(",") if v] or None,
+        configured=None
+        if args.configured is None
+        else dict(e.split(":", 1) for e in args.configured.split(",") if e),
+    )
     server = ThreadingHTTPServer((args.host, args.port), make_handler(studio))
     server.daemon_threads = True
-    print(f"Recording studio ({args.mode} -> {args.repo_id}): http://localhost:{args.port}", flush=True)
+    print(
+        f"Recording studio ({args.mode} -> {args.repo_id}): http://localhost:{args.port}",
+        flush=True,
+    )
     studio.connect(cameras_only=True)  # show the cameras right away; arms connect from the page
     try:
         server.serve_forever()

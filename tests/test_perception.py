@@ -336,6 +336,7 @@ def _example_cal() -> Calibration:
 
 
 def test_pointing_projects_onto_the_table() -> None:
+    pytest.importorskip("PIL")
     from hfteama.perception import VLMPointDetector
 
     pts = {
@@ -361,6 +362,7 @@ def test_pointing_projects_onto_the_table() -> None:
 
 
 def test_pointing_accepts_a_bare_list_and_retries_garbage() -> None:
+    pytest.importorskip("PIL")
     from hfteama.perception import DetectionError, VLMPointDetector
 
     vlm = FakeVLM(["I see cubes", '```json\n[{"point_2d": [500, 500], "label": "cube"}]\n```'])
@@ -373,6 +375,7 @@ def test_pointing_accepts_a_bare_list_and_retries_garbage() -> None:
 
 
 def test_off_table_points_are_dropped() -> None:
+    pytest.importorskip("PIL")
     from hfteama.perception import VLMPointDetector
 
     vlm = FakeVLM(['{"objects": [{"label": "cup", "point_2d": [0, 0]}]}'])  # -> (-0.083, 0.40)
@@ -382,6 +385,7 @@ def test_off_table_points_are_dropped() -> None:
 
 
 def test_axis_points_give_the_pick_yaw() -> None:
+    pytest.importorskip("PIL")
     from hfteama.perception import VLMPointDetector
 
     # camera.example: image x = table +x, image y = table -y; 64 px right + 64 px down = -45 deg
@@ -430,6 +434,7 @@ def test_pick_yaw_is_a_folded_axis_and_follows_a_moved_object() -> None:
 
 
 def test_labels_reach_the_sorting_prompt() -> None:
+    pytest.importorskip("PIL")
     from hfteama.perception import VLMPointDetector
 
     vlm = FakeVLM(

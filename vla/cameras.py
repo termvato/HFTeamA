@@ -52,8 +52,12 @@ def usb_port(video: str) -> str:
 def mjpeg_sizes(dev: str) -> list[str]:
     """Frame sizes the camera offers as MJPG (asks ffmpeg; empty if it cannot tell)."""
     try:
-        out = subprocess.run(["ffmpeg", "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", dev],
-                             capture_output=True, text=True, timeout=10).stderr
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", dev],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stderr
     except (OSError, subprocess.TimeoutExpired):
         return []
     line = next((ln for ln in out.splitlines() if "mjpeg" in ln.lower()), "")
@@ -77,12 +81,20 @@ def capture_devices() -> list[dict]:
     """Video capture nodes only: each USB camera also has a metadata node (index 1) that gives no video."""
     stable = by_id_paths()
     found = []
-    for sys_dev in sorted(Path("/sys/class/video4linux").glob("video*"), key=lambda p: int(p.name[5:])):
+    for sys_dev in sorted(
+        Path("/sys/class/video4linux").glob("video*"), key=lambda p: int(p.name[5:])
+    ):
         if (sys_dev / "index").read_text().strip() != "0":
             continue
         dev = f"/dev/{sys_dev.name}"
-        found.append({"dev": dev, "stable": stable.get(dev, dev), "name": (sys_dev / "name").read_text().strip(),
-                      "usb": usb_port(sys_dev.name)})
+        found.append(
+            {
+                "dev": dev,
+                "stable": stable.get(dev, dev),
+                "name": (sys_dev / "name").read_text().strip(),
+                "usb": usb_port(sys_dev.name),
+            }
+        )
     return found
 
 
@@ -154,16 +166,26 @@ def contact_sheet(results: dict, cols: int = 3) -> np.ndarray:
     tiles = []
     for name, r in results.items():
         img = r.get("img")
-        tile = (cv2.resize(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), (480, 360)) if img is not None
-                else np.full((360, 480, 3), 40, np.uint8))
+        tile = (
+            cv2.resize(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), (480, 360))
+            if img is not None
+            else np.full((360, 480, 3), 40, np.uint8)
+        )
         label = f"{name}  {r.get('size', '?')}  {r.get('fps', 0):.0f} fps  {'OK' if r['ok'] else 'FAIL'}"
         cv2.rectangle(tile, (0, 0), (480, 28), (0, 0, 0), -1)
-        cv2.putText(tile, label, (8, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                    (120, 230, 120) if r["ok"] else (80, 80, 240), 2)
+        cv2.putText(
+            tile,
+            label,
+            (8, 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (120, 230, 120) if r["ok"] else (80, 80, 240),
+            2,
+        )
         tiles.append(tile)
     while len(tiles) % cols:
         tiles.append(np.zeros_like(tiles[0]))
-    rows = [np.hstack(tiles[i:i + cols]) for i in range(0, len(tiles), cols)]
+    rows = [np.hstack(tiles[i : i + cols]) for i in range(0, len(tiles), cols)]
     return np.vstack(rows)
 
 
@@ -171,14 +193,20 @@ def cmd_check(a: argparse.Namespace) -> None:
     cfgs = parse_cameras(a.cameras)
     cams = make_cameras_from_configs(cfgs)
     results: dict[str, dict] = {}
-    for name, cam in cams.items():  # open all first: problems show up only with every camera running
+    for (
+        name,
+        cam,
+    ) in cams.items():  # open all first: problems show up only with every camera running
         r = results[name] = {"ok": False, "problems": [], "dev": str(cfgs[name].index_or_path)}
         try:
             cam.connect()
         except Exception as e:  # noqa: BLE001
             busy = [u for u in users_of(r["dev"]) if not u.startswith(f"{os.getpid()} ")]
-            r["problems"].append(f"busy, already open in: {'; '.join(busy)} (stop that first)" if busy
-                                 else f"does not open: {str(e).strip().splitlines()[0]}")
+            r["problems"].append(
+                f"busy, already open in: {'; '.join(busy)} (stop that first)"
+                if busy
+                else f"does not open: {str(e).strip().splitlines()[0]}"
+            )
     threads = []
     for name, cam in cams.items():
         if cam.is_connected:
@@ -194,7 +222,9 @@ def cmd_check(a: argparse.Namespace) -> None:
         if cam.is_connected:
             got = fourcc_of(cam)
             if cfg.fourcc and got != cfg.fourcc:
-                r["problems"].append(f"format {got}, not {cfg.fourcc} (uses far more USB bandwidth)")
+                r["problems"].append(
+                    f"format {got}, not {cfg.fourcc} (uses far more USB bandwidth)"
+                )
             if "error" in r:
                 r["problems"].append(r["error"])
             if r.get("img") is not None:
@@ -203,8 +233,10 @@ def cmd_check(a: argparse.Namespace) -> None:
                 if (h, w) != (cam.height, cam.width):
                     r["problems"].append(f"frames are {w}x{h}, expected {cam.width}x{cam.height}")
             if r.get("fps", 0) < 0.9 * cfg.fps:
-                r["problems"].append(f"{r.get('fps', 0):.1f} fps delivered, needs {cfg.fps} "
-                                     "(USB bandwidth, light too low for the exposure, or a bad cable)")
+                r["problems"].append(
+                    f"{r.get('fps', 0):.1f} fps delivered, needs {cfg.fps} "
+                    "(USB bandwidth, light too low for the exposure, or a bad cable)"
+                )
             if r.get("frozen", 0) > 0.5:
                 r["problems"].append("picture does not change (frozen or covered)")
             cam.disconnect()
@@ -220,7 +252,9 @@ def cmd_check(a: argparse.Namespace) -> None:
             print(f"       - {p}")
     for port, names in ports.items():
         if len(names) > 1:
-            print(f"note: {', '.join(names)} share USB port/hub {port}; if fps drops, move one to another port")
+            print(
+                f"note: {', '.join(names)} share USB port/hub {port}; if fps drops, move one to another port"
+            )
     if results:
         cv2.imwrite(str(SHEET), contact_sheet(results))
         print(f"views: {SHEET}")
@@ -228,7 +262,9 @@ def cmd_check(a: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("list")
     s.add_argument("--table", default="")

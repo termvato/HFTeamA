@@ -358,7 +358,7 @@ def default_poses(task_dir: Path, real: bool) -> str:
     return str(real_file if real and real_file.exists() else task_dir / "poses.json")
 
 
-def _summary(log: EventLog, graph_size: int) -> tuple[int, list[str]]:
+def _summary(log: EventLog) -> tuple[int, list[str]]:
     ends = [e for e in log.read() if e.kind == "task_end"]
     ok = {e.task for e in ends if e.outcome == "ok"}
     bad = sorted({e.task for e in ends if e.task and e.task not in ok})
@@ -592,7 +592,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         close_vlm()
         close_cam()
 
-    n_ok, bad = _summary(log, len(graph.tasks))
+    n_ok, bad = _summary(log)
     print(f"{n_ok}/{len(graph.tasks)} steps ok. events: {log_path}")
     if bad or n_ok < len(graph.tasks):
         print("not ok:", ", ".join(bad) or "unfinished steps")
