@@ -12,7 +12,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
-   live screen. Run: `python -m hfteama.view --fake-arms 1`, open http://127.0.0.1:8050.
+   live screen. Run: `python -m hfteama.demo --backend fake --plugged rakesh_follower`, open
+   http://127.0.0.1:8050 (one dashboard since 22 Nov: Orchestra; the Dash screen is gone).
 3. **VLM on top of the loop: done** (Aravind): object detection by Qwen pointing, decomposer
    (camera + Go -> categories -> steps), step check (`Executor(verifier=...)`, place steps only),
    re-scan (`Executor.update_graph`). Reachability fills `allowed_arms` (SO-101 reach). Real Qwen
@@ -29,7 +30,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | 1 | Real-arm worker (skills, IK, driver behind `execute(task)`) | Action | being built separately; integrated later through `Executor.add_arm(worker)`. Not an Operations blocker |
 | 2 | Arm base poses in the table frame (marker 0). Nobody knows where the markers sit relative to the arms, so the arms measure it themselves: jog the gripper tip onto two marker centres, read the joints, FK (`arms/kinematics.py`) gives base x, y, yaw. ~2 min per arm. Until then: estimated from the image (+-3-5 cm; spacing checked against the measured 30 cm gap) | Aravind (tool), Hardware (jogging) | open |
 | 3 | Machines: decided (Aravind, 17:55): once everything is merged on `main` and verified, the real run happens on Aravind's laptop (RTX 4060): arms, cameras, Qwen and the executor in one process, so no network service is needed. Catch: the laptop is Windows, and Hardware's and Sahil's code assumes Linux (`/dev/ttyACM*`, `/dev/v4l/by-id/...`, `/sys`, `/proc`). Needs Windows entries (COM ports, camera names; the C920 already works through ffmpeg/DirectShow) or WSL with USB passthrough | Hardware, Aravind | open: settle before integration |
-| 4 | Grasp angle: pointing gives position only. IK cannot know the angle (it needs one as input). Cheap fix: Qwen gives two points along each object's long axis -> yaw in task args (`pick_yaw_deg`). A VLA can learn it from the wrist camera if its data has varied orientations (Sahil) | Aravind (yaw), Action (uses it) | open |
+| 4 | Grasp angle: pointing gives position only. IK cannot know the angle (it needs one as input). Cheap fix: Qwen gives two points along each object's long axis -> yaw in task args (`pick_yaw_deg`). A VLA can learn it from the wrist camera if its data has varied orientations (Sahil) | Aravind (yaw), Action (uses it) | done (22 Nov): perception emits `pick_yaw_deg` (long axis, [-90, 90) deg): from the tag's top edge with tags, from Qwen's two `axis_2d` end points otherwise; round objects get none (skill keeps its default heading). Action's `pick` already reads it. Not yet checked on a real frame |
 | 7 | **Place must leave the shared area before it returns** (root cause of Vato's "stall" at 18:09): `place` ends hovering 8 cm over the bowl, the executor frees the bowl lock, and the next arm drives into the parked one; both jam. Traced in MuJoCo with Action's IK. Fix tried locally (not pushed, Action's file): `_do_place` moves to the arm's `carry` pose after releasing, as `pick` already can; with that, every run finished. Needs a `carry` pose per arm in `poses.json` that IK reaches, e.g. hacklab table: `rakesh_follower` [-0.171, 0.231, 0.10], `vato_follower` [0.748, 0.251, 0.10] (outer side, ~0.45 m from the bowl) | Action (Vivek) | open: Action's change |
 | 5 | Arg names: `object`, `target`, `pick_xyz`, `place_xyz` (metres, table frame) | Action, Operations | agreed in both designs; to confirm on #20 |
 | 6 | Third robot for the plug-in test (an arm joins mid-run, work re-splits): needs its catalog id (its follower calibration id) and base pose (same touch tool as #2). Placed where it reaches objects the other two cannot, it also unblocks steps | Hardware, Aravind | open |
@@ -79,15 +80,31 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #14 | Mock worker | done: fake arm with failure injection (`arms/fake.py`) |
 | #15 | Scaling benchmark | done (Vato): `scripts/scaling_benchmark.py`, sort12 and assemble3 on 1-8 arms: planned (HEFT), lower bound and binding term, ideal 1/N, measured on fake arms (1-4); CSV + interactive chart under `runs/scaling/` |
 | #16 | Plan validator | done (`scheduler/check.py`), run after every re-plan |
-| #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
+| #17 | Plan vs actual view | done: on the dashboard (Orchestra), `python -m hfteama.demo` |
 | #18 | Re-split policy questions | open |
 | new | VLM decomposer, step check, re-scan | done; step check wired as `Executor(verifier=...)`. Real run on the RTX 4060 (Qwen3-VL-4B, 4-bit, synthetic table image, `scripts/vlm_smoke.py`): sorting by colour right on the first try, 12 s (once at Go); step check correct, 2.8 s per call; peak VRAM 3.1 GB. Not yet on a real camera photo |
-| new | VLM pipeline into the live screen | next (Aravind) |
+| new | VLM pipeline into the live screen | done on fake data (Aravind, 22 Nov): `hfteama.perception.live` (`plan_from_camera`, `verifier`, `rescan_hook`), demo `--rescan` / `--rescan-every`. Tested on rendered tag frames; not yet on the real C920 |
 | new | Camera calibration from the table's ArUco markers | done (Aravind): `perception/markers.py`, 4x4 tags, 7 cm; focal length + camera pose fitted on all corners (0.7 px). Real C920: f 1412-1431 px, camera 0.74 m above the table, stable between frames within 1 cm. Table config `configs/hacklab_table.json` |
 | new | Distance-aware step times | done (Aravind): `resolve(..., travel_s_per_m=...)` gives each arm its own duration by distance, so the planner picks the nearer arm; measured durations take over once recorded |
 | new | Object detection (camera -> table positions) | done: Qwen points, pixel ray meets the table plane (`perception/pointing.py`). Real run: 6/6 objects, error mean 0.6 cm, max 0.9 cm, 8.5 s per scan (synthetic image). Position only, no yaw. OnePose dropped |
 
 ## Notes
+
+- 22 Nov (Aravind), **the camera hooks for the film** (branch `aravind/live-hooks` = `main` +
+  `orchestrator`'s TagDetector):
+
+      HFTEAMA_TABLE=configs/hacklab_table.json python -m hfteama.demo --backend real         --table configs/hacklab_table.json         --planner hfteama.perception.live:plan_from_camera         --verifier hfteama.perception.live:verifier         --rescan hfteama.perception.live:rescan_hook --rescan-every 20
+
+  1. `--planner` returns the resolved graph (reach 0.14-0.42 m, travel, 15 cm clearance); pick
+     steps carry `object`, `label`, `pick_xyz`, `pick_yaw_deg` when known. With `--planner` the
+     demo no longer re-runs `resolve` (it is not idempotent: travel time was added twice); `--table`
+     only draws the map then (`demo.table_scene`).
+  2. Each re-scan writes a `scene` event, so the map follows. `--rescan` sets `Executor.rescan`
+     (lost part); `--rescan-every S` re-scans periodically and calls `update_graph` on a change.
+  3. With tags (`"tags"` in the table file) the step check needs no GPU: the place is confirmed
+     when the box's tag is inside the bin. Without tags, Qwen checks as before.
+  4. Config by env: `HFTEAMA_CAMERA` (default `camera.name`), `HFTEAMA_IMAGE` (file or URL, dry
+     run), `HFTEAMA_DETECTOR` auto|tags|vlm, `HFTEAMA_TRAVEL`, `HFTEAMA_CLEARANCE`.
 
 - 19:10 (Aravind), answers to Vato's 18:09 IK validation (checked with `action-arm-skills`
   merged in a local worktree, MuJoCo, Vato's scripts):
@@ -278,6 +295,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 ## Log
 
+- 22 Nov (Aravind): grasp yaw (Blockers #4) and the camera hooks for the live screen (`perception/live.py`, demo `--rescan`).
 - 20:12 (Vato): demo runner uses 15 cm clearance between arms (`--clearance`, default 0.15, 0 = off), as Aravind asked at 19:10. His checks run here: 149 tests pass, ruff clean. Blockers #7 (place must retreat to carry) reads right; fine to send to Action.
 - 19:10 (Aravind): IK join: reach 0.14-0.42 m, clearance locks, stall traced to place not leaving the bowl (Action, Blockers #7).
 - 17:55 (Aravind): real run on Aravind's laptop after the merge to `main` (no Qwen service needed); Windows paths flagged; third robot for the plug-in test.
@@ -354,5 +372,5 @@ match (flagged on #20). The camera run (last item) needs your laptop.
 
 1. Arm base poses by touching two markers with each gripper, all three arms (Blockers #2, #6).
 2. Windows on the laptop: camera and arm access without Linux paths (Blockers #3, with Hardware).
-3. Grasp yaw from two points along each object (Blockers #4).
-4. VLM pipeline into the live screen (Go -> camera -> Qwen -> executor; periodic re-scan).
+3. ~~Grasp yaw (Blockers #4)~~: done in code; check on a real frame.
+4. ~~VLM pipeline into the live screen~~: done in code (`perception/live.py`); first run on the C920.

@@ -101,7 +101,12 @@ def build(events: Iterable[Event], clock_now: float | None = None) -> Screen:
             if e.kind == "arm_failed":
                 sc.feed.insert(0, f"Arm {e.arm} lost ({d.get('reason', '')}), moving its work")
             else:
-                sc.feed.insert(0, f"Arm {e.arm} parked and removed")
+                sc.feed.insert(0, f"Arm {e.arm} removed: going home, then torque off")
+        elif e.kind == "arm_parked" and e.arm:
+            if d.get("ok", True):
+                sc.feed.insert(0, f"Arm {e.arm} home, torque off")
+            else:
+                sc.feed.insert(0, f"Arm {e.arm} did NOT park: {d.get('error', '')}")
         elif e.kind == "plan" and e.task and e.arm and e.plan_version is not None:
             plan_by_version.setdefault(e.plan_version, []).append(
                 Bar(e.task, e.arm, e.planned_start or 0.0, e.planned_end or 0.0, "plan")

@@ -135,6 +135,7 @@ class Executor:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._finished = threading.Event()
+        self._paused = False
 
     # ------------------------------------------------------------------ public (thread-safe)
 
@@ -168,6 +169,19 @@ class Executor:
             self._thread = threading.Thread(target=self._loop, name="executor", daemon=True)
             self._thread.start()
 
+    def pause(self) -> None:
+        """No new steps start. Running steps finish, and an arm holding a part still places it."""
+        with self._lock:
+            self._paused = True
+
+    def resume(self) -> None:
+        with self._lock:
+            self._paused = False
+
+    @property
+    def paused(self) -> bool:
+        return self._paused
+
     def stop(self) -> None:
         self._stop.set()
         if self._thread is not None:
@@ -199,6 +213,14 @@ class Executor:
                 "predicted_finish": self._plan.makespan if self._plan else None,
                 "binding": self._plan.binding if self._plan else "",
                 "blocked": list(self._plan.blocked) if self._plan else [],
+                # for dashboards (Orchestra): additive, nothing above changes
+                "started": self._t0 is not None,
+                "paused": self._paused,
+                "runs": {
+                    t: {"arm": r.arm_id, "start": r.start, "estimate": r.estimate}
+                    for t, r in self._runs.items()
+                },
+                "retries": {t: n for t, n in self._retries.items() if n},
             }
 
     def now(self) -> float:
@@ -269,6 +291,10 @@ class Executor:
         tasks = dict(new.tasks)
         for t in started - set(tasks):
             tasks[t] = self.graph.tasks[t]  # never drop work that ran or is running
+        for t in set(self.graph.tasks) - set(tasks):  # a part in a gripper is not on the table:
+            partner = self.graph.tasks[t].same_arm_as  # keep the step that puts it down
+            if partner in started:
+                tasks[t] = self.graph.tasks[t]
         merged = TaskGraph(new.name, tasks)
         merged.validate()
         added = sorted(set(tasks) - set(self.graph.tasks))
@@ -323,7 +349,21 @@ class Executor:
         worker = self._workers.pop(arm)
         self._active.discard(arm)
         self._parking.discard(arm)
-        threading.Thread(target=worker.park, name=f"park-{arm}", daemon=True).start()
+
+        def park() -> None:
+            # a park that could not finish (bus error, step that would not stop) was silent
+            # before: the screen and the log now say whether the arm reached home, torque off
+            try:
+                worker.park()
+                error = getattr(worker, "park_error", None)
+            except Exception as exc:  # noqa: BLE001  (park never raises by contract; belt and braces)
+                error = repr(exc)
+            with self._lock:  # the loop writes the log under this lock: one writer at a time
+                self._emit(
+                    Event("arm_parked", arm=arm, data={"ok": not error, "error": error or ""})
+                )
+
+        threading.Thread(target=park, name=f"park-{arm}", daemon=True).start()
         self._emit(Event("arm_removed", arm=arm))
         self._replan("arm_removed", force=True, extra={"arm": arm})
 
@@ -357,6 +397,8 @@ class Executor:
                 tid: str | None = self._held[arm]
             elif arm in self._parking:
                 self._park(arm)
+                continue
+            elif self._paused:
                 continue
             else:
                 tid = next(
@@ -448,6 +490,11 @@ class Executor:
                 self._replan("task_done", force=False)
             else:
                 self._status[tid] = TaskState.VERIFYING
+                # The step ran: the arm no longer holds this one. Left held, the dispatcher would
+                # re-run it while the check is out (live demo 22 Nov: endless re-places, and a
+                # remove never parked the arm). A rejected check re-does the pick via _retry.
+                if self._held.get(arm) == tid:
+                    del self._held[arm]
                 self._verify(tid, arm, token, res)
         elif outcome is Outcome.ARM_DOWN:
             self._status[tid] = TaskState.PENDING
@@ -505,6 +552,14 @@ class Executor:
         if self._retries[tid] <= self.max_retries:
             self._redo_partner(tid)
             self._status[tid] = TaskState.PENDING
+            if self.rescan is not None and tid not in self._hold:
+                # A missed grasp usually nudges the part: retry where the camera sees it now,
+                # not where it was (live run 22 Nov: retries at the old spot nearly all missed).
+                self._hold.add(tid)
+                self._emit(Event("replan", data={"reason": "rescan_requested", "tasks": [tid]}))
+                threading.Thread(
+                    target=self._run_rescan, args=({tid},), name="rescan", daemon=True
+                ).start()
         else:
             self._give_up(tid, reason)
         self._replan("task_failed", force=True, extra={"task": tid, "why": reason})

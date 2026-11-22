@@ -1,10 +1,11 @@
-"""The demo runner: executor + plug-in detection + live screen, on fake, simulated or real arms.
+"""The demo runner: executor + plug-in detection + the dashboard, on fake, simulated or real arms.
 
     python -m hfteama.demo --backend fake --plugged rakesh_follower     # no hardware
     python -m hfteama.demo --backend real                               # arms join when plugged in
     python -m hfteama.demo --backend fake --planner pkg.module:function # batch from a planner hook
 
-Then open http://127.0.0.1:8050 and press Go.
+Then open the dashboard, http://127.0.0.1:8050, and press Go. It is the one screen (Orchestra,
+`hfteama.orchestra`): robots, the run, plan against actual, the table map and the controls.
 
 - Which arms exist: the followers in Hardware's `configs/teleop_pairs.json` (USB serial -> arm id).
 - Arms join and leave through `hfteama.discovery.ArmWatcher`: by USB serial (`--watch`, default for
@@ -16,13 +17,19 @@ Then open http://127.0.0.1:8050 and press Go.
   from reach, and the screen shows a top view of who takes what.
 - What the batch is: a task file (`--task`), or a planner hook `module:function` returning a
   `TaskGraph` (the camera + VLM pipeline plugs in here), optionally with `--verifier
-  module:function` returning the executor's step-check function.
+  module:function` returning the executor's step-check function and `--rescan module:function`
+  (called with the executor and the log) returning the re-scan; `--rescan-every S` also re-scans
+  every S seconds. The camera pipeline: `hfteama.perception.live` (plan_from_camera, verifier,
+  rescan_hook). A planner's graph is already resolved, so `--table` then only draws the map.
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib
+import os
+import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -30,12 +37,14 @@ from typing import Any
 
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
-from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs
+from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs, port_answers
 from hfteama.events import Event, EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
 
-BACKENDS = ("fake", "sim", "real")
+BACKENDS = ("fake", "sim", "real", "sorter")
+DEFAULT_POSES = "tasks/sort/poses.json"
+SORTER_POSES = "tasks/sorter_boxes/poses_real.json"
 
 
 def hook(spec: str) -> Callable[..., Any]:
@@ -56,7 +65,9 @@ def fake_factory(clock: Clock, noise: float = 0.1) -> Callable[[str], Any]:
     return make
 
 
-def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[[str], Any]:
+def action_factory(
+    backend: str, poses_path: str, arms_config: str, pairs: str | None = None
+) -> Callable[[str], Any]:
     """Action's worker on its sim or real driver. Imported here, so `fake` needs none of it."""
     try:
         from hfteama.arms import generic_skills  # noqa: F401  (registers the skills)
@@ -68,6 +79,10 @@ def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[
             f"action-arm-skills), which is not in this checkout: {e}"
         ) from e
     poses = Poses.load(poses_path)
+    if backend == "sorter":  # real arms through Hardware's calibrated sorter IK (#19)
+        from hfteama.sorter.bridge import sorter_worker_factory
+
+        return sorter_worker_factory(poses, pairs_config=pairs)
     if backend == "real":
         from hfteama.arms.real import from_config
 
@@ -91,14 +106,23 @@ def with_table(
 ) -> tuple[TaskGraph, dict]:
     """Fill each step's allowed arms from reach on the real table layout, and describe the table
     for the screen's top view (arms with their reach, bins, objects with their steps)."""
-    import json
-
     from hfteama.registry import load_catalog, resolve
 
     catalog = {a: n for a, n in load_catalog(table).items() if a in arm_ids}
     resolved = resolve(graph, catalog.values(), travel_s_per_m=10.0, clearance_m=clearance_m).graph
+    return resolved, table_scene(resolved, table, arm_ids)
+
+
+def table_scene(graph: TaskGraph, table: str, arm_ids: list[str]) -> dict:
+    """The screen's top view of an already resolved graph: arms with their reach, bins, and the
+    objects with their steps (the `scene` event). The camera pipeline writes one per re-scan."""
+    import json
+
+    from hfteama.registry import load_catalog
+
+    catalog = {a: n for a, n in load_catalog(table).items() if a in arm_ids}
     objects: dict[str, dict] = {}
-    for t in resolved.tasks.values():
+    for t in graph.tasks.values():
         oid = t.args.get("object")
         if oid is None:
             continue
@@ -122,7 +146,36 @@ def with_table(
         ],
         "objects": [o for o in objects.values() if "xy" in o],
     }
-    return resolved, scene
+    return scene
+
+
+def periodic_rescan(
+    executor: Executor,
+    rescan: Callable[[], TaskGraph | None],
+    every_s: float,
+    started: Callable[[], bool] = lambda: True,
+) -> threading.Thread:
+    """Every `every_s` seconds after Go, until the batch is done: re-scan and hand a changed
+    graph to the executor. A failing scan is logged and skipped, never fatal."""
+
+    def loop() -> None:
+        while not executor.finished:
+            time.sleep(every_s)
+            if not started() or executor.finished:
+                continue
+            try:
+                graph = rescan()
+            except Exception as e:  # camera or VLM trouble: keep running on the old graph
+                executor.log.write(
+                    Event("replan", data={"reason": "rescan_failed", "error": str(e)})
+                )
+                continue
+            if graph is not None:
+                executor.update_graph(graph)
+
+    t = threading.Thread(target=loop, name="periodic-rescan", daemon=True)
+    t.start()
+    return t
 
 
 class Rig:
@@ -157,9 +210,13 @@ class Rig:
                 return arm_id if self.watcher.plug(arm_id) else f"{arm_id} (could not start)"
         return "no arm left"
 
-    def remove(self, arm_id: str) -> None:
-        """Slow stop: finish the step, park, then it may be unplugged."""
-        self.ex.remove_arm(arm_id)
+    def plug(self, arm_id: str) -> bool:
+        """Plug in this arm (same as its USB cable going in). False if unknown, in, or it failed."""
+        return arm_id in self.known and self.watcher.plug(arm_id)
+
+    def remove(self, arm_id: str, abort: bool = False) -> None:
+        """Slow stop: finish the step (abort=True: cancel it), park, then it may be unplugged."""
+        self.ex.remove_arm(arm_id, abort=abort)
         self.watcher.forget(arm_id)
 
     def down(self, arm_id: str) -> None:
@@ -187,6 +244,7 @@ def build(
     scan: Callable[[], Any] | None = None,
     verifier: Callable[..., Any] | None = None,
     method: str = "heft",
+    verify: Callable[[str], bool] | None = None,
 ) -> tuple[Executor, ArmWatcher, Rig]:
     """Wire executor, watcher and controls. `scan=None` means manual plug-in only."""
     arm_ids = list(known.values())
@@ -199,7 +257,7 @@ def build(
         verifier=verifier,
         verify_skills=PLACE_SKILLS if verifier else None,
     )
-    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()))
+    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()), verify=verify)
     return ex, watcher, Rig(ex, watcher, arm_ids)
 
 
@@ -209,9 +267,25 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--task", default="tasks/sort/sort12.json")
     ap.add_argument("--planner", help="module:function returning a TaskGraph (overrides --task)")
     ap.add_argument("--verifier", help="module:function returning verifier(task, result)")
+    ap.add_argument(
+        "--rescan",
+        help="module:function(executor, log) returning rescan() -> TaskGraph | None",
+    )
+    ap.add_argument(
+        "--rescan-every",
+        type=float,
+        default=0.0,
+        help="seconds between periodic re-scans after Go (needs --rescan; 0 = only after a lost "
+        "part)",
+    )
     ap.add_argument("--pairs", default="configs/teleop_pairs.json")
     ap.add_argument("--arms-config", default="configs/real_arms.json")
-    ap.add_argument("--poses", default="tasks/sort/poses.json")
+    ap.add_argument(
+        "--poses",
+        default=None,
+        help=f"named poses (default {DEFAULT_POSES}; --backend sorter: {SORTER_POSES}, from "
+        "`hfteama sort export`: each arm's carry pose and drop point)",
+    )
     ap.add_argument("--plugged", default="", help="arm ids to plug in at start (comma separated)")
     ap.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None)
     ap.add_argument("--method", default="auto", choices=["auto", "greedy", "heft", "cpsat"])
@@ -226,24 +300,42 @@ def main(argv: list[str] | None = None) -> None:
         help="metres two arms keep apart where both can reach (0 = off; needs --table)",
     )
     ap.add_argument("--log", default=None)
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8050)
+    # the dashboard (Orchestra) is always served; the --orchestra-* spellings are the old ones
+    ap.add_argument("--host", "--orchestra-host", dest="host", default="127.0.0.1")
+    ap.add_argument("--port", "--orchestra-port", dest="port", type=int, default=8050)
+    ap.add_argument(
+        "--token",
+        "--orchestra-token",
+        dest="token",
+        default=None,
+        help="operator token, needed for commands when --host is not 127.0.0.1",
+    )
+    ap.add_argument("--orchestra", action="store_true", help=argparse.SUPPRESS)  # always on now
     args = ap.parse_args(argv)
-
-    from hfteama.view.app import create_app
 
     clock = Clock(args.scale if args.backend == "fake" else 1.0)
     known = followers_from_pairs(args.pairs)
+    if args.backend == "sorter":  # the camera hooks then see the boxes as the sorter grasps them
+        os.environ.setdefault("HFTEAMA_DETECTOR", "sorter")
+        # real picks and places take 10-16 s: a lower estimate lets the watchdog (3 x estimate)
+        # cut every step off mid-motion (runs 22 Nov 07:38 and 07:45: all picks timed out)
+        os.environ.setdefault("HFTEAMA_MIN_STEP", "15")
+        os.environ.setdefault("HFTEAMA_NEAREST", "6")  # each box to its nearest arm
+    if args.poses is None:
+        sorter = args.backend == "sorter" and Path(SORTER_POSES).exists()
+        args.poses = SORTER_POSES if sorter else DEFAULT_POSES
     graph = hook(args.planner)() if args.planner else load(args.task)
     verifier = hook(args.verifier)() if args.verifier else None
     scene = None
-    if args.table:
+    if args.table and args.planner:  # the planner hook resolves on its own table: draw only
+        scene = table_scene(graph, args.table, list(known.values()))
+    elif args.table:
         graph, scene = with_table(graph, args.table, list(known.values()), args.clearance or None)
     if args.backend == "fake":
         factory = fake_factory(clock)
     else:
-        factory = action_factory(args.backend, args.poses, args.arms_config)
-    watch = args.watch if args.watch is not None else args.backend == "real"
+        factory = action_factory(args.backend, args.poses, args.arms_config, args.pairs)
+    watch = args.watch if args.watch is not None else args.backend in ("real", "sorter")
     path = Path(args.log or f"runs/{time.strftime('%Y%m%d-%H%M%S')}/events.jsonl")
     log = EventLog(path)
     ex, watcher, rig = build(
@@ -253,11 +345,17 @@ def main(argv: list[str] | None = None) -> None:
         factory,
         clock=clock,
         scan=connected_serials if watch else None,
+        # Windows can keep listing an unplugged board: open the port before trusting it
+        verify=port_answers if watch and sys.platform == "win32" else None,
         verifier=verifier,
         method=args.method,
     )
     if scene:
         log.write(Event("scene", data=scene))
+    if args.rescan:
+        ex.rescan = hook(args.rescan)(ex, log)
+        if args.rescan_every > 0:
+            periodic_rescan(ex, ex.rescan, args.rescan_every, started=rig.started)
     for arm_id in filter(None, args.plugged.split(",")):
         watcher.plug(arm_id.strip())
     if not watcher.joined():
@@ -266,7 +364,23 @@ def main(argv: list[str] | None = None) -> None:
         watcher.start()
     print(f"arms: {', '.join(known.values())} | backend: {args.backend} | USB watch: {watch}")
     print(f"event log: {path}")
-    create_app(log, controls=rig, clock=clock).run(host=args.host, port=args.port, debug=False)
+    from hfteama.orchestra import StateHub
+    from hfteama.orchestra.server import start
+
+    hub = StateHub(
+        log,
+        ex,
+        watcher,
+        rig,
+        clock,
+        args.backend,
+        args.pairs,
+        table_path=args.table,
+        watching=watch,
+        task_name=Path(args.task).stem if not args.planner else "",
+    )
+    print(f"dashboard: http://{args.host}:{args.port}/  (press Go there)")
+    start(hub, rig, args.host, args.port, args.token, block=True)
 
 
 if __name__ == "__main__":

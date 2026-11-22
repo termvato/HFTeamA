@@ -281,6 +281,120 @@ def test_camera_checks_only_place_steps_in_demo_setting(tmp_path: Path) -> None:
     assert checked and set(checked) == {"place"} and len(checked) == 12
 
 
+def test_a_slow_place_check_does_not_rerun_the_place_and_stop_still_parks(tmp_path: Path) -> None:
+    """Live demo 22 Nov: the arm kept "holding" a place while the camera checked it, so the
+    dispatcher re-ran the place every few seconds, the check's answer was thrown away, and a
+    remove never parked the arm. A finished place is not held any more."""
+    import time as _time
+
+    g = TaskGraph(
+        "one",
+        {
+            "pick_a": Task("pick_a", "pick", args={"pick_xyz": [0.1, 0.1, 0.02]}, duration=1.0),
+            "place_a": Task(
+                "place_a", "place", deps=("pick_a",), same_arm_as="pick_a", duration=1.0
+            ),
+        },
+    )
+
+    def slow_check(task, result) -> tuple[bool, str]:
+        _time.sleep(0.5)  # Qwen takes seconds; the fake arm is much faster than that
+        return True, ""
+
+    ex, log, clock = make(
+        tmp_path, graph=g, verifier=slow_check, verify_skills=frozenset({"place"})
+    )
+    ex.add_arm(arm("a", clock))
+    ex.start()
+    assert ex.wait(10)
+    starts = [e.task for e in kinds(log, "task_start")]
+    assert starts == ["pick_a", "place_a"], starts
+    assert set(ex.snapshot()["status"].values()) == {"done"}
+
+    # a stop during the check parks the arm instead of re-running the place
+    ex2, log2, clock2 = make(
+        tmp_path / "b", graph=g, verifier=slow_check, verify_skills=frozenset({"place"})
+    )
+    ex2.add_arm(arm("a", clock2))
+    ex2.start()
+    end = _time.monotonic() + 10
+    while ex2.snapshot()["status"]["place_a"] != "verifying" and _time.monotonic() < end:
+        _time.sleep(0.01)
+    ex2.remove_arm("a")
+    end = _time.monotonic() + 10
+    while not kinds(log2, "arm_removed") and _time.monotonic() < end:
+        _time.sleep(0.01)
+    assert kinds(log2, "arm_removed"), "the arm was never parked"
+    assert [e.task for e in kinds(log2, "task_start")].count("place_a") == 1
+    ex2.stop()
+
+
+def test_a_missed_grasp_is_retried_where_the_camera_sees_the_part_now(tmp_path: Path) -> None:
+    """Live run 22 Nov: a missed grasp nudges the box, and retries at the old spot missed too.
+    With a rescan hook the failed pick waits for a fresh scan and retries at the new spot; a
+    place whose part is in a gripper survives a scan that no longer sees that part."""
+    from dataclasses import replace as dc_replace
+
+    g = TaskGraph(
+        "two",
+        {
+            "pick_a": Task("pick_a", "pick", args={"pick_xyz": [0.1, 0.1, 0.02]}, duration=1.0),
+            "place_a": Task(
+                "place_a", "place", deps=("pick_a",), same_arm_as="pick_a", duration=1.0
+            ),
+        },
+    )
+    calls: list[int] = []
+
+    def rescan() -> TaskGraph:
+        calls.append(1)
+        moved = dc_replace(g.tasks["pick_a"], args={"pick_xyz": [0.3, 0.2, 0.02]})
+        return TaskGraph("two", {**g.tasks, "pick_a": moved})
+
+    ex, log, clock = make(tmp_path, graph=g, rescan=rescan)
+    a = arm("a", clock)
+    a.fail_next("grasp")
+    ex.add_arm(a)
+    ex.start()
+    assert ex.wait(10)
+    assert len(calls) == 1
+    assert ex.graph.tasks["pick_a"].args["pick_xyz"] == [0.3, 0.2, 0.02]
+    order = [
+        (e.kind, e.task or e.data.get("reason"))
+        for e in log.read()
+        if e.kind == "task_start" or e.data.get("reason") in ("rescan_requested", "graph_updated")
+    ]
+    assert order == [
+        ("task_start", "pick_a"),
+        ("replan", "rescan_requested"),
+        ("replan", "graph_updated"),
+        ("task_start", "pick_a"),
+        ("task_start", "place_a"),
+    ]
+    assert set(ex.snapshot()["status"].values()) == {"done"}
+
+
+def test_a_scan_that_misses_a_held_part_keeps_its_place(tmp_path: Path) -> None:
+    g = TaskGraph(
+        "one",
+        {
+            "pick_a": Task("pick_a", "pick", duration=1.0),
+            "place_a": Task(
+                "place_a", "place", deps=("pick_a",), same_arm_as="pick_a", duration=3.0
+            ),
+            "pick_b": Task("pick_b", "pick", duration=1.0),
+        },
+    )
+    ex, log, clock = make(tmp_path, graph=g)
+    ex.add_arm(arm("a", clock))
+    ex.start()
+    until(lambda: ex.snapshot()["status"]["pick_a"] == "done")
+    # the camera no longer sees part a (it is in the gripper): the scan only has pick_b
+    ex.update_graph(TaskGraph("one", {"pick_b": g.tasks["pick_b"]}))
+    assert ex.wait(10)
+    assert ex.snapshot()["status"]["place_a"] == "done"
+
+
 def test_lost_part_waits_for_a_rescan_before_the_pick_is_retried(tmp_path: Path) -> None:
     from dataclasses import replace as dc_replace
 

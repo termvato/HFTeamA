@@ -3,6 +3,10 @@
 - [`plan.md`](plan.md): the main plan: teams, where teams meet, checkpoints, demo, safety.
 - [`map.html`](map.html): one-page visual map (architecture, what happens when an arm is plugged in,
   speed-up limits, who builds what). Live at https://termvato.github.io/HFTeamA/map.html
+- [`PHASE_IMPROVEMENT_PLAN.md`](PHASE_IMPROVEMENT_PLAN.md): what the 22 Nov real-arm runs showed
+  and the plan to make two arms work at the same time (balance, bowl lock, per-arm processes).
+- [`VIEW_DASHBOARD_REMOTE.md`](VIEW_DASHBOARD_REMOTE.md): watching the dashboard from another
+  laptop on the same Wi-Fi (view only, e.g. to screen-record a run).
 - [`../tasks/README.md`](../tasks/README.md): how to add a task.
 - [`../research/`](../research/): background report and notes.
 
@@ -34,9 +38,9 @@ builds that task.
 ## When an arm is plugged in
 
 Run it yourself without hardware: `python -m hfteama.demo --backend fake --plugged rakesh_follower`,
-open http://127.0.0.1:8050, press Go, then "Plug in next arm" under "Arm controls".
+open the dashboard at http://127.0.0.1:8050, press Go, then "Plug in next arm".
 
 1. Discovery (`src/hfteama/discovery.py`) sees a known arm's USB serial and starts its worker.
 2. The worker checks the arm's state and limits, moves slowly to home, and reports ready.
 3. The executor keeps running tasks where they are and re-plans the rest.
-4. The screen shows the new finish time and what now limits it (arm count, step order, or a shared resource).
+4. The dashboard shows the new finish time and what now limits it (arm count, step order, or a shared resource).

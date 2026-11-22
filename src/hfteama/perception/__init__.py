@@ -5,6 +5,7 @@ changes. Zero-shot (no training): fixed answer format, validator, retry.
 
 - frames.py      camera frame -> table frame (camera pose in the base frame, intrinsics K)
 - pointing.py    VLMPointDetector: the VLM points at objects, pixels projected onto the table
+- tags.py        TagDetector: AprilTag/ArUco tags on the boxes give position, yaw and id
 - scene.py       detections -> objects with stable ids in the table frame; scene diff
 - vlm.py         VLM interface; QwenVLM (Hugging Face transformers); FakeVLM for tests
 - prompts.py     decomposer and step-check prompts
@@ -39,6 +40,13 @@ from hfteama.perception.scene import (
     build_scene,
     diff_scenes,
 )
+from hfteama.perception.tags import (
+    TagBox,
+    TagConfig,
+    TagDetector,
+    tag_decomposer,
+    tag_sorting,
+)
 from hfteama.perception.vlm import VLM, FakeVLM, QwenVLM, VLMError
 
 __all__ = [
@@ -59,6 +67,9 @@ __all__ = [
     "Scene",
     "SceneDiff",
     "SceneObject",
+    "TagBox",
+    "TagConfig",
+    "TagDetector",
     "Sorting",
     "StepChecker",
     "VLMPointDetector",
@@ -68,4 +79,6 @@ __all__ = [
     "graph_to_dict",
     "load_bins",
     "rescan",
+    "tag_decomposer",
+    "tag_sorting",
 ]

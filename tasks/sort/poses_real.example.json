@@ -1,0 +1,59 @@
+{
+ "note": "TEMPLATE for the real table: numbers are copied from the SIM layout and are WRONG for the real table. Measure every point in the shared table frame (metres), keyed by the arm ids in the arm catalog / real_arms.json. 'carry' = where pick leaves the arm: above its own output bin, outside the shared input area (the executor frees the area's lock when pick returns).",
+ "table_z": 0.0,
+ "locations": {
+  "input_bin": [
+   0.0,
+   0.0,
+   0.02
+  ]
+ },
+ "objects": {
+  "block_01": [
+   -0.0525,
+   -0.035,
+   0.015
+  ],
+  "block_02": [
+   -0.0175,
+   -0.035,
+   0.015
+  ],
+  "block_03": [
+   0.0175,
+   -0.035,
+   0.015
+  ],
+  "block_04": [
+   0.0525,
+   -0.035,
+   0.015
+  ]
+ },
+ "per_arm": {
+  "rakesh_follower": {
+   "own_output_bin": [
+    -0.2598,
+    0.15,
+    0.02
+   ],
+   "carry": [
+    -0.2598,
+    0.15,
+    0.12
+   ]
+  },
+  "vato_follower": {
+   "own_output_bin": [
+    -0.0,
+    -0.3,
+    0.02
+   ],
+   "carry": [
+    -0.0,
+    -0.3,
+    0.12
+   ]
+  }
+ }
+}

@@ -1,4 +1,5 @@
-"""Real table, dry run: top camera -> marker calibration -> Qwen object positions -> reachability
+"""Real table, dry run: top camera -> marker calibration -> object positions (tags on the boxes,
+or Qwen pointing) -> reachability
 -> executor split across the arms. The executor runs fake workers (no motion) standing in for the
 real arms, so this checks perception and planning end to end before any arm moves.
 
@@ -15,17 +16,14 @@ Needs: pip install -e ".[vlm,camera]".
 from __future__ import annotations
 
 import argparse
-import io
 import math
-import subprocess
 import sys
 import tempfile
 import time
-import urllib.request
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import ImageDraw
 
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
@@ -36,39 +34,21 @@ from hfteama.perception import (
     DecompositionError,
     DetectionError,
     QwenVLM,
+    TagConfig,
+    TagDetector,
     VLMError,
     VLMPointDetector,
     build_scene,
     load_bins,
+    tag_sorting,
 )
+from hfteama.perception.camera import grab, load
 from hfteama.perception.markers import calibrate_from_markers
+from hfteama.perception.tags import tag_yaw_deg
 from hfteama.registry import load_catalog, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
 PALETTE = [(30, 30, 30), (40, 200, 90), (40, 90, 220), (220, 120, 30)]
-
-
-def grab(device: str, size: tuple[int, int]) -> Image.Image:
-    """One frame from a camera through ffmpeg (DirectShow on Windows, V4L2 on Linux)."""
-    import imageio_ffmpeg
-
-    ff = imageio_ffmpeg.get_ffmpeg_exe()
-    src = ["-f", "dshow", "-i", f"video={device}"] if sys.platform == "win32" else [
-        "-f", "v4l2", "-i", device]  # fmt: skip
-    cmd = [ff, "-hide_banner", "-loglevel", "error", "-video_size", f"{size[0]}x{size[1]}", *src,
-           "-ss", "2", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"]  # fmt: skip
-    out = subprocess.run(cmd, capture_output=True, timeout=30, check=True).stdout
-    return Image.open(io.BytesIO(out)).convert("RGB")
-
-
-def load(src: str) -> Image.Image:
-    if not src.startswith(("http://", "https://")):
-        return Image.open(src).convert("RGB")
-    with urllib.request.urlopen(src, timeout=10) as r:
-        buf = r.read(5_000_000)
-    s = buf.find(b"\xff\xd8")
-    e = buf.find(b"\xff\xd9", s + 2)
-    return Image.open(io.BytesIO(buf[s : e + 2])).convert("RGB")
 
 
 def main() -> int:
@@ -88,6 +68,12 @@ def main() -> int:
     ap.add_argument("--image-side", type=int, default=1920, help="pixels sent to Qwen")
     ap.add_argument("--out", default="real_table_plan.png")
     ap.add_argument("--no-run", action="store_true", help="skip the executor runs")
+    ap.add_argument(
+        "--detector",
+        choices=("auto", "tags", "vlm"),
+        default="auto",
+        help='objects from tags on the boxes or from Qwen; auto = tags if the table has "tags"',
+    )
     a = ap.parse_args()
 
     import json
@@ -102,7 +88,11 @@ def main() -> int:
 
     mk = cfg["markers"]
     m = calibrate_from_markers(
-        np.asarray(img), mk["size_m"], mk.get("reference_id"), dictionary=mk["dictionary"]
+        np.asarray(img),
+        mk["size_m"],
+        mk.get("reference_id"),
+        dictionary=mk["dictionary"],
+        only_ids=mk.get("table_ids"),
     )
     cal = m.calib
     print("calibration:", m.summary(), sep="\n")
@@ -111,28 +101,51 @@ def main() -> int:
     for arm in arms:
         print(f"arm {arm.arm_id}: base {arm.base_xy}, yaw {arm.base_yaw_deg}")
 
-    vlm = QwenVLM(max_image_side=a.image_side)
+    use_tags = a.detector == "tags" or (a.detector == "auto" and "tags" in cfg)
+    if a.detector == "tags" and "tags" not in cfg:
+        ap.error(f'--detector tags needs a "tags" section in {a.table}')
+    tag_cfg = TagConfig.from_dict(cfg["tags"]) if use_tags else None
+    # every box listed with a bin, and only listed boxes counted: the plan needs no VLM
+    no_vlm = (
+        tag_cfg is not None
+        and tag_cfg.only_listed
+        and bool(tag_cfg.boxes)
+        and all(b.bin for b in tag_cfg.boxes.values())
+    )
+
+    vlm = None if no_vlm else QwenVLM(max_image_side=a.image_side)
     try:
-        det = VLMPointDetector(vlm, cal, object_height_m=0.02)
+        if tag_cfg is not None:
+            same = tag_cfg.dictionary == mk["dictionary"]
+            det = TagDetector(cal, tag_cfg, ignore_ids=m.markers if same else ())
+            name = f"tags ({tag_cfg.dictionary})"
+        else:
+            det = VLMPointDetector(vlm, cal, object_height_m=0.02)
+            name = "Qwen"
         t0 = time.monotonic()
         scene = build_scene(det.detect(img), cal)
-        print(f"\nQwen: {len(scene.objects)} objects in {time.monotonic() - t0:.1f} s")
+        print(f"\n{name}: {len(scene.objects)} objects in {time.monotonic() - t0:.2f} s")
         for o in scene.objects.values():
             dist = "".join(
                 f"  {r.arm_id}: {math.dist(o.xyz[:2], r.pan_axis_xy):.2f} m"
                 f"{'' if r.reaches(o.xyz) else ' (out of reach)'}"
                 for r in arms
             )
-            print(f"  {o.id} {o.label!r:16} ({o.xyz[0]:+.3f}, {o.xyz[1]:+.3f}) m{dist}")
+            yaw = f" yaw {tag_yaw_deg(o.quat_wxyz):+.0f} deg" if tag_cfg is not None else ""
+            print(f"  {o.id} {o.label!r:16} ({o.xyz[0]:+.3f}, {o.xyz[1]:+.3f}) m{yaw}{dist}")
         if det.dropped:
             print("  dropped:", det.dropped)
-        dec = Decomposer(vlm, bins).decompose(img, scene)
+        if no_vlm:
+            dec = tag_sorting(scene, bins, tag_cfg)
+        else:
+            dec = Decomposer(vlm, bins).decompose(img, scene)
         print("grouping:", json.dumps(dec.grouping()))
     except (VLMError, DetectionError, DecompositionError) as e:
         print("VLM refused:", e)
         return 2
     finally:
-        vlm.unload()
+        if vlm is not None:
+            vlm.unload()
 
     rr = resolve(dec.graph, arms, travel_s_per_m=a.travel, clearance_m=a.clearance)
     print("\nsteps (allowed arms: planned seconds):")

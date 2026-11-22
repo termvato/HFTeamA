@@ -381,6 +381,54 @@ def test_off_table_points_are_dropped() -> None:
     assert det.dropped == [("cup", "not on the table")]
 
 
+def test_axis_points_give_the_pick_yaw() -> None:
+    from hfteama.perception import VLMPointDetector
+
+    # camera.example: image x = table +x, image y = table -y; 64 px right + 64 px down = -45 deg
+    pts = {
+        "objects": [
+            {"label": "pen", "point_2d": [500, 500], "axis_2d": [[450, 450], [550, 583.33333]]},
+            {"label": "ball", "point_2d": [700, 300]},  # round: no axis, no yaw
+            {"label": "cube", "point_2d": [300, 700], "axis_2d": [[1, 2, 3]]},  # malformed
+            {"label": "dot", "point_2d": [300, 300], "axis_2d": [[300, 300], [301, 300]]},  # 1.5 mm
+        ]
+    }
+    vlm = FakeVLM([json.dumps(pts), answer({"all": "bin_1"}, {f"obj_0{i}": "all" for i in "1234"})])
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    scene = build_scene(VLMPointDetector(vlm, _example_cal()).detect(img), _example_cal())
+    assert scene.objects["obj_01"].yaw_deg == pytest.approx(-45.0, abs=0.01)
+    assert scene.objects["obj_01"].xyz[:2] == pytest.approx((0.45, 0.20), abs=1e-9)
+    assert [scene.objects[o].yaw_deg for o in ("obj_02", "obj_03", "obj_04")] == [None] * 3
+    assert "axis_2d" in vlm.calls[0]
+    g = Decomposer(vlm, BINS, annotate=False).decompose(img, scene).graph
+    assert g.tasks["pick_obj_01"].args["pick_yaw_deg"] == pytest.approx(-45.0)
+    assert "pick_yaw_deg" not in g.tasks["pick_obj_02"].args  # skill keeps its default heading
+
+
+def test_pick_yaw_is_a_folded_axis_and_follows_a_moved_object() -> None:
+    from hfteama.perception.decomposer import pick_pose_args
+
+    def turned(x: float, yaw_deg: float) -> Detection:
+        d = det(x, 0.0)
+        c, s = np.cos(np.radians(yaw_deg)), np.sin(np.radians(yaw_deg))
+        d.T_cam_obj[:2, :2] = [[c, -s], [s, c]]
+        d.has_yaw = True
+        return d
+
+    s1 = build_scene([turned(0.2, 135.0)], IDENTITY)
+    assert pick_pose_args(s1.objects["obj_01"])["pick_yaw_deg"] == pytest.approx(-45.0)
+    vlm = FakeVLM([answer({"red": "bin_1"}, {"obj_01": "red"})])
+    dec = Decomposer(vlm, BINS, annotate=False)
+    d = dec.decompose(None, s1)
+    s2 = build_scene([turned(0.23, 10.0)], IDENTITY, s1)  # nudged 3 cm and turned
+    r = rescan(dec, None, s2, s1, d.graph, d.sorting, done=set(), running=set())
+    assert r.updated == ["pick_obj_01"]
+    assert r.graph.tasks["pick_obj_01"].args["pick_yaw_deg"] == pytest.approx(10.0)
+    s3 = build_scene([det(0.26, 0.0)], IDENTITY, s2)  # seen again, yaw no longer known
+    r = rescan(dec, None, s3, s2, r.graph, d.sorting, done=set(), running=set())
+    assert "pick_yaw_deg" not in r.graph.tasks["pick_obj_01"].args
+
+
 def test_labels_reach_the_sorting_prompt() -> None:
     from hfteama.perception import VLMPointDetector
 

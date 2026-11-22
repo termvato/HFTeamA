@@ -32,3 +32,9 @@ htmlcov/
 CLAUDE.local.md
 configs/arms.json
 runs/
+
+# Sorter preview/plan images
+outputs/
+vla/camera_check.jpg
+MUJOCO_LOG.TXT
+tasks/sorter_boxes/

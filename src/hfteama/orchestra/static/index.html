@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Orchestra</title>
+  <meta name="description" content="Operator dashboard for the Orchestra plug-and-produce orchestrator: robots, status, task, plan against actual, the table, and per-arm detail.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5d73'/%3E%3Cpath d='M8 22c3-8 5-12 8-12s5 4 8 12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="orchestra.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- 30 %: robots and their status, nothing else -->
+    <aside class="left" aria-label="Robots and status">
+      <header class="brand">
+        <span class="logo">Orchestra</span>
+        <span class="brand-tools">
+          <span id="conn" class="conn" role="status"></span>
+          <button id="theme" class="icon-btn" type="button" aria-label="Switch light or dark theme" title="Light / dark">◐</button>
+        </span>
+      </header>
+
+      <section class="counter" aria-live="polite">
+        <div class="count"><b id="c-joined">0</b><span class="of">/<span id="c-known">0</span></span></div>
+        <div class="count-label" id="c-label">robots joined</div>
+      </section>
+
+      <ul id="robot-list" class="robot-list"></ul>
+
+      <footer class="left-foot">
+        <p id="source-note" class="source-note"></p>
+        <p class="stopnote">On-screen stops are software stops. Emergency: switch off the follower's 12&nbsp;V supply.</p>
+      </footer>
+    </aside>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize panes" aria-valuemin="20" aria-valuemax="45" aria-valuenow="30" tabindex="0"></div>
+
+    <!-- 70 %: the task on top, one card per robot that joined it -->
+    <main class="right" aria-label="Task and robot details">
+      <div id="real-banner" class="banner bad" hidden>Real arms: a person must be at the rig</div>
+      <div id="lost-banner" class="banner bad" hidden></div>
+
+      <section class="taskbar" aria-label="Current operating task">
+        <div class="eyebrow">Current task <span id="phase" class="phase"></span></div>
+        <div class="task-row">
+          <div class="task-name">
+            <h1 id="task-title">Connecting…</h1>
+            <p id="task-sub" class="sub"></p>
+          </div>
+          <div class="run-box">
+            <div id="big" class="big">--:--</div>
+            <div id="big-label" class="sub"></div>
+          </div>
+        </div>
+        <div class="progress" aria-hidden="true"><div id="prog-bar" class="bar"></div></div>
+        <div class="task-foot">
+          <span id="prog-text" class="sub"></span>
+          <span class="controls">
+            <span id="cmd-msg" class="cmd-msg" role="status"></span>
+            <button id="btn-go" class="btn primary" type="button">Go</button>
+            <button id="btn-pause" class="btn" type="button">Pause</button>
+            <button id="btn-stop" class="btn" type="button">Stop all</button>
+          </span>
+        </div>
+        <div id="replan" class="replan" hidden><b id="replan-head"></b> <span id="replan-detail"></span></div>
+        <p id="limit" class="limit"></p>
+        <div id="whatif" class="whatif" hidden></div>
+      </section>
+
+      <section id="schedule" class="schedule" aria-label="Plan and table" hidden>
+        <div id="gantt-panel" class="panel gantt-panel">
+          <div class="p-head">
+            <h2>Plan vs actual</h2>
+            <span class="legend" aria-hidden="true"><i class="lg-plan"></i>plan <i class="lg-ok"></i>done <i class="lg-running"></i>running <i class="lg-failed"></i>failed</span>
+          </div>
+          <div id="gantt" class="gantt"></div>
+        </div>
+        <div id="map-panel" class="panel map-panel">
+          <div class="p-head"><h2>Who takes what</h2><span class="legend">top view of the table</span></div>
+          <div id="map" class="map"></div>
+        </div>
+        <div id="cam-panel" class="panel cam-panel" hidden>
+          <div class="p-head"><h2>Camera</h2><span id="cam-state" class="legend">overhead, live</span></div>
+          <div class="cam"><img id="cam-img" alt="Live overhead camera view of the table" /></div>
+        </div>
+      </section>
+
+      <section id="cards" class="cards" aria-label="Robots on this task"></section>
+
+      <section class="activity">
+        <div class="act-head">
+          <h2>Activity</h2>
+          <span id="demo-tools" class="demo-tools" hidden>
+            <button id="btn-auto" class="link" type="button">Play demo</button>
+            <button id="btn-reset" class="link" type="button">Reset</button>
+          </span>
+        </div>
+        <ol id="feed" class="feed"></ol>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="confirm" class="confirm">
+    <form method="dialog">
+      <h3 id="confirm-title"></h3>
+      <p id="confirm-text"></p>
+      <label id="confirm-type-wrap" hidden>Type <b>STOP</b> to confirm <input id="confirm-type" autocomplete="off"></label>
+      <div class="confirm-actions">
+        <button value="cancel" class="btn" type="submit">Cancel</button>
+        <button value="ok" id="confirm-ok" class="btn danger" type="submit">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="fatal" class="fatal" hidden></div>
+  <script>
+    window.addEventListener('error', function (e) {
+      var f = document.getElementById('fatal');
+      f.hidden = false;
+      f.textContent = 'Orchestra error: ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')';
+    });
+  </script>
+  <script src="js/demo.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/schedule.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

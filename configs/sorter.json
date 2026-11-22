@@ -1,0 +1,208 @@
+{
+  "note": "Vision-guided IK sorter (hfteama sort ...). Table frame, seen from BEHIND the arms (facing the camera): origin at the centre of tag 1 (back-left), x to the right along the back tags (tag 2 at x = 0.734), y forward towards the camera (tags 3 and 0 at y = 0.335), z up; metres. Tag centres: 73.4 cm apart along x, 33.5 cm along y. See docs/hardware/sorter.md.",
+  "camera": {
+    "name": "C922",
+    "width": 1920,
+    "height": 1080,
+    "fourcc": "MJPG",
+    "intrinsics": "configs/camera/overhead_c922_1920x1080.yml",
+    "controls": {
+      "focus_automatic_continuous": 0,
+      "focus_absolute": 0,
+      "white_balance_automatic": 0,
+      "white_balance_temperature": 3803,
+      "auto_exposure": 1,
+      "exposure_dynamic_framerate": 0,
+      "exposure_time_absolute": 253,
+      "gain": 0,
+      "power_line_frequency": 1,
+      "backlight_compensation": 0,
+      "zoom_absolute": 100,
+      "pan_absolute": 0,
+      "tilt_absolute": 0
+    }
+  },
+  "table": {
+    "dictionary": "DICT_4X4_50",
+    "tags": {
+      "1": [
+        0.0,
+        0.0
+      ],
+      "2": [
+        0.734,
+        0.0
+      ],
+      "3": [
+        0.0,
+        0.335
+      ],
+      "0": [
+        0.734,
+        0.335
+      ]
+    },
+    "tag_mask": 0.11,
+    "max_pose_rms_px": 3.0
+  },
+  "box": {
+    "diameter": 0.18,
+    "height": 0.052,
+    "drop_above": 0.08
+  },
+  "pieces": {
+    "min_area_cm2": 25.0,
+    "max_area_cm2": 80.0,
+    "max_length": 0.17,
+    "colour_threshold": 25.0,
+    "box_margin": 0.02,
+    "arm_mask_radius": 0.04,
+    "ignore": {
+      "note": "Never pieces: large dark colourless regions (black arm, wrist cameras, cables; Lab chroma < dark_chroma_max, so a dark blue piece still counts) and green ones (green arm), grown by 'grow' m. OpenCV hue 0..180, Lab L 0..255.",
+      "dark_l_max": 75,
+      "dark_chroma_max": 20,
+      "green_hue": [
+        30,
+        75
+      ],
+      "green_s_min": 50,
+      "min_area_cm2": 40.0,
+      "grow": 0.02
+    },
+    "grasp_z": 0.015,
+    "approach_z": 0.08,
+    "object_note": "Current pieces: boxes 5.8 x 5.8 x 3.9 cm with a 3 cm tag on top and bottom.",
+    "object_width": 0.058,
+    "object_height": 0.039,
+    "centre_z": 0.02,
+    "region_margin": 0.035,
+    "object_length": 0.058,
+    "fit_box": true,
+    "tags": {
+      "enabled": true,
+      "note": "Each box has a DICT_4X4_50 tag (any id) of `size` m on its top (and bottom). A 4x4 tag much smaller than the reference tags is a box tag; its centre at object_height is the box centre. size = the black square as the camera measures it flat (2.9 cm); size_tol 4 %: a loose tag lying on the table measures ~5 % smaller at the box-top height, so it is not taken for a box.",
+      "size": 0.029,
+      "size_tol": 0.04
+    }
+  },
+  "arms_note": "Arms are named after their pair. Seen from behind the arms: rakesh (black) on the right, hacklab (green) on the left. base = base_link origin in the table frame: 1.5 cm behind the back tags (y = -0.015), 16.3 cm in from the back tag on its side (measured); yaw_deg = heading of the arm's forward axis: +90 = facing the camera (+y).",
+  "arms_tuning_note": "Per arm, measured with `hfteama sort jog`: z_offset = real tip height minus model (m); offsets_deg = ArmFrame joint zero offsets (rakesh's wrist_roll is 90 deg off the model); aim_offset = [forward, left] shift of the grasp point seen from behind the arm (m). aim_table = [[bearing_deg, forward, left, dz], ...]: the same shift as a function of where the piece is seen from the arm (0 = ahead, + = its left), interpolated; overrides aim_offset. bearing_range_deg = [min, max] bearing (deg, + = the arm's left) of the pieces this arm takes. aim_gain = 2x2 G: extra shift G @ (forward, left) of the piece from the base, proportional to where it is (about a 10 deg turn for rakesh). z_by_distance = [[r_m, dz_m], ...]: extra height by distance from the base (rakesh: 0.5 cm lower at 18 cm, nothing from 28 cm). x_range = [min, max] table x of the pieces this arm takes: its half of the table (split halfway between the bases). home = rest pose (LeRobot deg) the arm returns to; without it, the pose it had when the sorter connected.",
+  "arms": {
+    "rakesh": {
+      "pair": "rakesh",
+      "colour": "black",
+      "base": [
+        0.571,
+        -0.015
+      ],
+      "yaw_deg": 90.0,
+      "z_offset": -0.015,
+      "offsets_deg": {
+        "wrist_roll": 90.0
+      },
+      "aim_offset": [
+        0.006,
+        0.002
+      ],
+      "mask_radius": 0.12,
+      "jaw_offset": [
+        0.019,
+        -0.003
+      ],
+      "bearing_range_deg": [
+        -90.0,
+        90.0
+      ],
+      "aim_gain": [
+        [
+          0.006,
+          -0.161
+        ],
+        [
+          0.193,
+          0.005
+        ]
+      ],
+      "z_by_distance": [
+        [
+          0.18,
+          -0.005
+        ],
+        [
+          0.28,
+          0.0
+        ]
+      ],
+      "jaw_ref_width": 0.025,
+      "jaw_width_gain": 0.5,
+      "x_range": [
+        0.367,
+        1.0
+      ]
+    },
+    "hacklab": {
+      "pair": "hacklab",
+      "colour": "green",
+      "base": [
+        0.163,
+        -0.015
+      ],
+      "yaw_deg": 90.0,
+      "mask_radius": 0.12,
+      "offsets_deg": {
+        "wrist_roll": 0.0
+      },
+      "jaw_offset": [
+        0.003,
+        -0.0033
+      ],
+      "jaw_ref_width": 0.025,
+      "jaw_width_gain": 0.5,
+      "note": "wrist_roll offset 0 (not rakesh's 90: its logged grasps fit the shared gripper geometry only with the jaws turned 90 deg). jaw offsets as rakesh. aim_offset / aim_gain fitted on its grasps.",
+      "x_range": [
+        -1.0,
+        0.367
+      ],
+      "home": {
+        "shoulder_pan.pos": -3.9,
+        "shoulder_lift.pos": -111.5,
+        "elbow_flex.pos": 96.0,
+        "wrist_flex.pos": 29.6,
+        "wrist_roll.pos": -91.4
+      },
+      "aim_offset": [
+        0.0005,
+        0.012
+      ],
+      "aim_gain": [
+        [
+          0.0116,
+          -0.0968
+        ],
+        [
+          0.0489,
+          -0.0457
+        ]
+      ]
+    }
+  },
+  "motion": {
+    "max_joint_speed_deg_s": 45.0,
+    "rate_hz": 50,
+    "max_tilt_deg": 30.0,
+    "drop_max_tilt_deg": 60.0,
+    "drop_shift_max_m": 0.05,
+    "drop_shift_note": "main's place over the bowl (bridge): the drop point may move this far from the asked point towards the arm, to keep the gripper down. 5 cm keeps a 5.8 cm box inside the 18 cm bowl.",
+    "gripper_open": 100.0,
+    "gripper_closed": 2.0,
+    "gripper_wait_s": 0.6,
+    "gripper_timeout_s": 3.0,
+    "grasp_min_open": 2.0,
+    "max_relative_target": 10.0,
+    "home_note": "Home (camera-clear) pose = the pose the arm has when the sorter connects: leave each arm folded at rest before starting.",
+    "home": null,
+    "wrist_roll_half_range_deg": 90.0,
+    "wrist_roll_note": "wrist_roll stays within (arm's wrist_roll_center_deg, LeRobot deg, default 0) +- this: the moving jaw always on the same side",
+    "lift_after_drop": 0.05
+  }
+}

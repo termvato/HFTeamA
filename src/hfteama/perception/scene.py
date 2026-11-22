@@ -27,6 +27,8 @@ class Detection:
     score: float = 1.0
     pixel: tuple[float, float] | None = None  # centre in the image, for labelling it to the VLM
     label: str = ""  # free description from the detector, e.g. "red cube" (shown to the VLM)
+    key: str = ""  # identity the detector knows (e.g. "tag_05"); used as the object id as is
+    has_yaw: bool = False  # the pose's rotation about z is measured (else identity = unknown)
 
 
 class ObjectDetector(Protocol):
@@ -44,6 +46,20 @@ class SceneObject:
     pixel: tuple[float, float] | None = None
     score: float = 1.0
     label: str = ""
+    has_yaw: bool = False  # quat_wxyz holds a measured yaw (tags, VLM axis points)
+
+    @property
+    def yaw_deg(self) -> float | None:
+        """Yaw of the object's x axis about table z, degrees in (-180, 180]; None if unknown."""
+        if not self.has_yaw:
+            return None
+        w, x, y, z = self.quat_wxyz
+        return math.degrees(math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))
+
+
+def axis_deg(deg: float) -> float:
+    """A long axis has no direction: fold a heading into [-90, 90) degrees."""
+    return (deg + 90.0) % 180.0 - 90.0
 
 
 @dataclass
@@ -78,15 +94,21 @@ def build_scene(
 
     prev = dict(previous.objects) if previous else {}
     index = previous.next_index if previous else 1
+    ids: dict[int, str] = {}
+    used: set[str] = set()
+    # detections that know who they are (tags) keep that id; the rest match by distance
+    for i, (d, _, _) in enumerate(found):
+        if d.key and d.key not in used:
+            ids[i] = d.key
+            used.add(d.key)
     # greedy nearest match, closest pairs first
     pairs = sorted(
         (_dist(xyz, o.xyz), i, oid)
         for i, (d, xyz, _) in enumerate(found)
+        if i not in ids
         for oid, o in prev.items()
-        if o.model == d.model and _dist(xyz, o.xyz) <= match_radius
+        if oid not in used and o.model == d.model and _dist(xyz, o.xyz) <= match_radius
     )
-    ids: dict[int, str] = {}
-    used: set[str] = set()
     for _, i, oid in pairs:
         if i not in ids and oid not in used:
             ids[i] = oid
@@ -98,7 +120,7 @@ def build_scene(
         if oid is None:
             oid = f"obj_{index:02d}"
             index += 1
-        objects[oid] = SceneObject(oid, d.model, xyz, q, d.pixel, d.score, d.label)
+        objects[oid] = SceneObject(oid, d.model, xyz, q, d.pixel, d.score, d.label, d.has_yaw)
     return Scene(objects=objects, next_index=index)
 
 

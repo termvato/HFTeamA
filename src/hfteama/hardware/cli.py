@@ -188,6 +188,10 @@ def add_subcommands(sub: argparse._SubParsersAction) -> None:
     b.add_argument("--cameras", action="store_true", help="teleop: also stream cameras")
     _record_flags(b)
 
+    from hfteama.sorter.run import add_parser as add_sort_parser
+
+    add_sort_parser(sub)
+
 
 def _record_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--episodes", type=int)
@@ -199,6 +203,10 @@ def _record_flags(p: argparse.ArgumentParser) -> None:
 
 
 def dispatch(args: argparse.Namespace) -> int:
+    if args.command == "sort":
+        from hfteama.sorter.run import dispatch as sort_dispatch
+
+        return sort_dispatch(args)
     if args.command == "bimanual":
         return run_bimanual(args)
     if len(pair_names(args)) > 1:
