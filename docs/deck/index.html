@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plug and Produce · Orchestra</title>
+
+<!-- Fonts: Space Grotesk (display + body), JetBrains Mono (labels) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   THEME: Neo-Grid Bold
+   Change these to restyle the whole deck
+   =========================================== */
+:root {
+    --paper: #F5F4EF;
+    --bg: #ECECE8;
+    --ink: #0A0A0A;
+    --lemon: #E6FF3D;
+    --muted: #8A8A85;
+    --stage-bg: #1A1A1A;
+    --slide-bg: var(--bg);
+
+    --font-display: 'Space Grotesk', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ===========================================
+   FIXED 16:9 STAGE: MANDATORY BASE STYLES
+   (viewport-base.css, included in full)
+   =========================================== */
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+
+.deck-viewport {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--stage-bg, #000);
+}
+
+.deck-stage {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    transform-origin: 0 0;
+    background: var(--slide-bg, #fff);
+}
+
+.slide {
+    position: absolute;
+    inset: 0;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    background: var(--slide-bg, #fff);
+}
+
+.slide.active,
+.slide.visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.deck-controls {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    transform: translateX(-50%);
+    z-index: 1000;
+}
+
+@media print {
+    html,
+    body {
+        width: 1920px;
+        height: auto;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .deck-viewport {
+        position: static;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .deck-stage {
+        position: static;
+        width: auto;
+        height: auto;
+        transform: none !important;
+        background: none;
+    }
+
+    .slide {
+        position: relative;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        width: 1920px;
+        height: 1080px;
+        break-after: page;
+        page-break-after: always;
+    }
+
+    .slide:last-child {
+        break-after: auto;
+        page-break-after: auto;
+    }
+
+    .deck-controls {
+        display: none !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+/* ===========================================
+   GRID FRAME: 12 columns x 8 rows, 40px inset, 12px gaps
+   Place panels with inline grid-column / grid-row spans
+   =========================================== */
+.slide { font-family: var(--font-display); color: var(--ink); }
+
+.frame {
+    position: absolute;
+    inset: 40px;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 12px;
+}
+
+/* ===========================================
+   PANELS: paper (default), ink (inverted), lemon (signal)
+   No radius, no shadow: depth comes from color adjacency
+   =========================================== */
+.p {
+    position: relative;
+    overflow: hidden;
+    background: var(--paper);
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+    min-height: 0;
+}
+.p.ink { background: var(--ink); color: var(--paper); }
+.p.lemon { background: var(--lemon); color: var(--ink); }
+.p.between { justify-content: space-between; }
+.p.end { justify-content: flex-end; }
+.p.pad-lg { padding: 36px 40px; }
+/* Card bodies reserve equal lines so headlines in a row line up */
+.p.between > div:last-child > p.bsm { min-height: 4.35em; }
+.p.between > div:last-child > p.body { min-height: 2.7em; }
+
+/* ===========================================
+   TYPOGRAPHY
+   Display = Space Grotesk 700 uppercase; body = 400 mixed case;
+   labels = JetBrains Mono uppercase, tracked
+   =========================================== */
+.lab {
+    font: 400 20px/1.35 var(--font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+.lab-sm { font: 400 16px/1.4 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.8; }
+
+.display, .title, .sub, .ch, .h3, .stat, .stat-lg, .stat-sm, .secnum {
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.display { font-size: 132px; line-height: 0.92; letter-spacing: -0.02em; }
+.title   { font-size: 88px;  line-height: 0.95; letter-spacing: -0.015em; }
+.sub     { font-size: 56px;  line-height: 1.0;  letter-spacing: -0.01em; }
+.ch      { font-size: 44px;  line-height: 1.0;  letter-spacing: -0.01em; }
+.h3      { font-size: 30px;  line-height: 1.05; letter-spacing: -0.005em; }
+.stat    { font-size: 156px; line-height: 0.9;  letter-spacing: -0.03em; }
+.stat-lg { font-size: 240px; line-height: 0.85; letter-spacing: -0.04em; }
+.stat-sm { font-size: 96px;  line-height: 0.9;  letter-spacing: -0.03em; }
+.secnum  { font-size: 320px; line-height: 0.85; letter-spacing: -0.05em; }
+
+.body    { font: 400 28px/1.35 var(--font-display); }
+.body-lg { font: 400 36px/1.3 var(--font-display); }
+.bsm     { font: 400 22px/1.45 var(--font-display); }
+.mono { font-family: var(--font-mono); }
+
+/* Headline emphasis: <mark> = lemon swatch, <em> = lemon color, upright */
+mark { background: var(--lemon); color: var(--ink); padding: 0 8px; }
+em { font-style: normal; color: var(--lemon); }
+.p.lemon em, .p:not(.ink) em { color: var(--ink); background: var(--lemon); padding: 0 6px; }
+
+/* ===========================================
+   DECORATIVE MARKS
+   =========================================== */
+.corner {
+    position: absolute; top: 22px; right: 22px;
+    width: 36px; height: 36px;
+    display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: 4px;
+}
+.corner i { background: currentColor; }
+.corner i:nth-child(2) { background: transparent; }
+
+.blockmark {
+    width: 96px; height: 96px;
+    display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: 6px;
+}
+.blockmark i:nth-child(1), .blockmark i:nth-child(4) { background: currentColor; }
+
+/* Page-number tag, bottom-left of every slide */
+.pagenum {
+    position: absolute; left: 0; bottom: 0; z-index: 2;
+    font: 400 20px var(--font-mono); letter-spacing: 0.04em;
+    padding: 10px 18px;
+    background: var(--paper); color: var(--ink);
+}
+.pagenum.invert { background: var(--ink); color: var(--paper); }
+.pagenum.lemon { background: var(--lemon); color: var(--ink); }
+
+/* Status chips (0-radius "pills") */
+.chips { display: flex; flex-wrap: wrap; gap: 12px; }
+.chip {
+    font: 500 20px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 8px 14px; border: 1.5px solid currentColor;
+}
+.chip.yes { background: var(--lemon); color: var(--ink); border-color: var(--ink); }
+
+/* ===========================================
+   REVEAL ANIMATION: panels rise in, staggered, when a slide becomes visible
+   =========================================== */
+.frame > .p {
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.55s var(--ease-out-expo), transform 0.55s var(--ease-out-expo);
+}
+.slide.visible .frame > .p { opacity: 1; transform: none; }
+.frame > .p:nth-child(1) { transition-delay: 0.05s; }
+.frame > .p:nth-child(2) { transition-delay: 0.15s; }
+.frame > .p:nth-child(3) { transition-delay: 0.25s; }
+.frame > .p:nth-child(4) { transition-delay: 0.35s; }
+.frame > .p:nth-child(5) { transition-delay: 0.45s; }
+.frame > .p:nth-child(6) { transition-delay: 0.55s; }
+.frame > .p:nth-child(7) { transition-delay: 0.65s; }
+.frame > .p:nth-child(8) { transition-delay: 0.75s; }
+
+/* ===========================================
+   SLIDE 3: LIVE COUNTDOWN WIDGET (example numbers, see slide 6)
+   =========================================== */
+.clock-time {
+    font: 700 132px/0.9 var(--font-display); letter-spacing: -0.03em;
+    color: var(--lemon); font-variant-numeric: tabular-nums;
+}
+.lanes { display: grid; gap: 14px; }
+.lane { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 14px; opacity: 0.25; transition: opacity 0.4s; }
+.lane.on { opacity: 1; }
+.lane .bar { height: 34px; display: flex; gap: 6px; }
+.lane .bar i { display: block; height: 100%; background: var(--paper); transform: scaleX(0); transform-origin: left; transition: transform 0.6s var(--ease-out-expo); }
+.lane.on .bar i { transform: scaleX(1); }
+.lane .bar i.l { background: var(--lemon); }
+.limit-tag { align-self: flex-start; }
+
+/* ===========================================
+   SLIDE 4: FLOW ARROW
+   =========================================== */
+.arrow { width: 56px; height: 56px; position: absolute; right: 24px; top: 24px; }
+
+/* ===========================================
+   SLIDE 5: DEMO BEATS
+   =========================================== */
+.film { position: relative; padding: 0; overflow: hidden; background: var(--ink); }
+.film video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--ink); }
+.film .missing { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 40px; color: var(--paper); font: 500 24px/1.4 var(--font-mono); }
+.film.nofilm video { display: none; }
+.film.nofilm .missing { display: flex; }
+.beats { list-style: none; display: grid; gap: 30px; }
+.beats li { display: grid; grid-template-columns: 72px 1fr; gap: 20px; align-items: baseline; }
+.beats .n { font: 500 24px var(--font-mono); letter-spacing: 0.06em; color: var(--lemon); }
+.beats .t { font: 400 30px/1.3 var(--font-display); }
+.beats b { font-weight: 700; text-transform: uppercase; letter-spacing: -0.005em; }
+
+/* ===========================================
+   SLIDE 6: BAR CHART (ideal 1/N vs lower bound)
+   =========================================== */
+.chart { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px; align-items: end;
+         border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); padding: 0 32px; min-height: 0; }
+.grp { height: 100%; display: flex; align-items: flex-end; gap: 10px; position: relative; }
+.bar-v { flex: 1; position: relative; transform: scaleY(0); transform-origin: bottom; transition: transform 0.8s var(--ease-out-expo); }
+.slide.visible .bar-v { transform: scaleY(1); }
+.grp:nth-child(2) .bar-v { transition-delay: 0.15s; }
+.grp:nth-child(3) .bar-v { transition-delay: 0.3s; }
+.grp:nth-child(4) .bar-v { transition-delay: 0.45s; }
+.bar-v.a { background: var(--ink); }
+.bar-v.b { background: var(--lemon); border: 1.5px solid var(--ink); }
+.bar-v span { position: absolute; top: -34px; left: 0; right: 0; text-align: center; font: 500 20px var(--font-mono); }
+.xaxis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px; padding: 0 32px 0 34px; }
+.xaxis div { text-align: center; }
+.legend { display: flex; gap: 28px; align-items: center; }
+.sw { display: inline-block; width: 22px; height: 22px; vertical-align: -4px; margin-right: 10px; }
+.sw.a { background: var(--ink); }
+.sw.b { background: var(--lemon); border: 1.5px solid var(--ink); }
+.formula { font: 500 38px/1.35 var(--font-mono); letter-spacing: 0.01em; }
+.formula u { text-decoration: none; border-bottom: 3px solid var(--lemon); }
+
+/* ===========================================
+   PRESENTER CHROME (outside the stage)
+   Progress bar, notes overlay (N), edit toggle (E)
+   =========================================== */
+.progress { position: fixed; left: 0; bottom: 0; height: 4px; background: var(--lemon); z-index: 1001; transition: width 0.3s; }
+.notes { display: none; }
+#notesPanel {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 1002;
+    background: rgba(10, 10, 10, 0.92); color: var(--paper);
+    font: 400 18px/1.5 var(--font-display); padding: 18px 28px 24px;
+    transform: translateY(100%); transition: transform 0.25s;
+}
+#notesPanel.show { transform: none; }
+#notesPanel .lab { color: var(--lemon); margin-bottom: 6px; }
+
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle {
+    position: fixed; top: 16px; left: 16px; z-index: 10001;
+    font: 500 14px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
+    background: var(--lemon); color: var(--ink); border: 0; padding: 10px 14px; cursor: pointer;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed var(--lemon); outline-offset: 4px; }
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+<!-- =========================================================
+     01 / COVER
+     ========================================================= -->
+<section class="slide" aria-label="Plug and Produce">
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 8;grid-row:1/span 6">
+      <div class="lab">Orchestra / HackLab Berlin 2026 &middot; Desk Hero</div>
+      <div class="corner"><i></i><i></i><i></i><i></i></div>
+      <h1 class="display" style="font-size:196px;line-height:.86;letter-spacing:-.045em">Plug<br>and<br>Produce</h1>
+    </div>
+    <div class="p lemon between" style="grid-column:9/span 4;grid-row:1/span 3">
+      <div class="lab">Arms plugged in</div>
+      <div class="stat">1&nbsp;&rarr;&nbsp;2</div>
+    </div>
+    <div class="p ink between" style="grid-column:9/span 4;grid-row:4/span 3">
+      <div class="lab">Predicted finish</div>
+      <div class="stat-sm" style="font-size:112px;color:var(--lemon)">&darr;&nbsp;Drops</div>
+    </div>
+    <div class="p ink" style="grid-column:1/span 8;grid-row:7/span 2;justify-content:center">
+      <p class="body-lg">Build a skill once, for one arm. Plug in more arms, and your desk gets tidied faster.</p>
+    </div>
+    <div class="p between" style="grid-column:9/span 4;grid-row:7/span 2">
+      <div class="lab">SO-101 arms &middot; one camera</div>
+      <div class="lab">Team of 6 &middot; 48 hours</div>
+    </div>
+  </div>
+  <div class="pagenum lemon">01 / 10</div>
+  <aside class="notes">We're Orchestra. Your desk is a mess. Point a camera at it and the arms tidy it. In a hurry? Plug in another arm and watch the finish time drop. (~15 s)</aside>
+</section>
+
+<!-- =========================================================
+     02 / PROBLEM
+     ========================================================= -->
+<section class="slide" aria-label="The problem">
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 7;grid-row:1/span 4">
+      <div class="lab">The problem / your desk</div>
+      <div class="corner"><i></i><i></i><i></i><i></i></div>
+      <h2 class="title">A desk robot does<br><mark>one trained thing</mark></h2>
+    </div>
+    <div class="p lemon between" style="grid-column:8/span 5;grid-row:1/span 4">
+      <div class="lab">Training runs we need for a new object on the desk</div>
+      <div class="stat-lg">0</div>
+    </div>
+    <div class="p ink between" style="grid-column:1/span 4;grid-row:5/span 4">
+      <div class="stat-sm" style="color:var(--lemon)">01</div>
+      <div><div class="ch" style="margin-bottom:14px">New object</div><p class="body">A trained policy only knows what it was shown. One independent test on this arm: 30&ndash;40% success after 50 demos.</p></div>
+    </div>
+    <div class="p between" style="grid-column:5/span 4;grid-row:5/span 4">
+      <div class="stat-sm">02</div>
+      <div><div class="ch" style="margin-bottom:14px">In a hurry</div><p class="body">An SO-101 costs about $100. But every new arm setup means new data and new training.</p></div>
+    </div>
+    <div class="p ink between" style="grid-column:9/span 4;grid-row:5/span 4">
+      <div class="stat-sm" style="color:var(--lemon)">03</div>
+      <div><div class="ch" style="margin-bottom:14px">More arms</div><p class="body">Published multi-arm systems get 1.5&ndash;3&times;, not N&times;. Nothing tells you why.</p></div>
+    </div>
+  </div>
+  <div class="pagenum">02 / 10</div>
+  <aside class="notes">Desk robots today are trained for one chore with the objects they saw. One independent test on this very arm got 30 to 40 percent success after 50 demonstrations. The arm itself is the cheap part, about a hundred dollars. Putting a second one to work is the hard part: new data, or re-programming. And more arms is never N times faster: published systems get 1.5 to 3 times, with nothing telling you why. Ours needs no training per object: a camera model names what is on the desk. (~35 s) Sources if asked: Tiensmith 2026 blog test (ACT about 40%, SmolVLA and pi0.5 about 30%); Hugging Face launch price; our research report for the 1.5 to 3 times range.</aside>
+</section>
+
+<!-- =========================================================
+     03 / IDEA
+     ========================================================= -->
+<section class="slide" aria-label="The idea" data-countdown>
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 9;grid-row:1/span 3">
+      <div class="lab">The idea</div>
+      <h2 class="title" style="font-size:84px">Press Go. Plug in.<br><mark>Watch the clock drop.</mark></h2>
+    </div>
+    <div class="p lemon between" style="grid-column:1/span 3;grid-row:4/span 5">
+      <div class="stat-sm">01</div>
+      <div>
+        <div class="ch" style="margin-bottom:14px">See</div>
+        <p class="bsm">A camera model reads the desk, names each thing, decides where it goes and writes the steps.</p>
+      </div>
+    </div>
+    <div class="p between" style="grid-column:4/span 3;grid-row:4/span 5">
+      <div class="stat-sm">02</div>
+      <div>
+        <div class="ch" style="margin-bottom:14px">Split</div>
+        <p class="bsm">The planner gives every step to an arm and predicts the finish time.</p>
+      </div>
+    </div>
+    <div class="p ink between" style="grid-column:7/span 3;grid-row:4/span 5">
+      <div class="stat-sm" style="color:var(--lemon)">03</div>
+      <div>
+        <div class="ch" style="margin-bottom:14px">Re-split</div>
+        <p class="bsm">An arm joins, leaves or fails: running steps stay put, the rest is re-planned live.</p>
+      </div>
+    </div>
+    <div class="p ink between" style="grid-column:10/span 3;grid-row:1/span 8">
+      <div class="lab">Predicted finish &middot; our planner</div>
+      <div class="clock-time" id="clockTime">2:00</div>
+      <div class="chip yes limit-tag" id="clockLimit">Limit: arms</div>
+      <div class="lanes">
+        <div class="lane on" data-lane="1"><span class="lab">Arm 1</span><div class="bar"><i style="width:30%"></i><i style="width:22%"></i><i style="width:26%"></i></div></div>
+        <div class="lane" data-lane="2"><span class="lab">Arm 2</span><div class="bar"><i class="l" style="width:28%"></i><i class="l" style="width:24%"></i></div></div>
+        <div class="lane" data-lane="3"><span class="lab">Arm 3</span><div class="bar"><i style="width:34%"></i></div></div>
+      </div>
+      <div class="lab-sm">Sort 12 objects &middot; planner output on today's code</div>
+    </div>
+  </div>
+  <div class="pagenum invert">03 / 10</div>
+  <aside class="notes">The pitch in one line: modular skills. Build a skill once, for one arm. Plug in more arms and Orchestra deploys it across all of them, with no new training and no re-programming. Three moves. See: a camera model reads the desk and writes the steps. Split: the planner assigns steps and predicts the finish. Re-split: when an arm joins, leaves or fails, we re-plan the rest live. The clock on the right is our planner's real output for the 12-object sort: watch it drop as arms join, then stop when a shared bin binds. (~35 s)</aside>
+</section>
+
+<!-- =========================================================
+     04 / HOW IT WORKS
+     ========================================================= -->
+<section class="slide" aria-label="How it works">
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 5;grid-row:1/span 2">
+      <div class="lab">How it works</div>
+      <h2 class="sub">One loop, <mark>any arm</mark></h2>
+    </div>
+    <div class="p ink between" style="grid-column:6/span 7;grid-row:1/span 2">
+      <div class="lab">The one contract every arm speaks</div>
+      <p class="body-lg"><span class="mono" style="color:var(--lemon);font-size:32px;white-space:nowrap">execute(task) &rarr; ok | failed | timeout | arm_down</span><br>Every arm runs the same skills. Orchestra manages the rest.</p>
+    </div>
+
+    <div class="p between" style="grid-column:1/span 3;grid-row:3/span 3">
+      <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
+      <div class="lab">Ops &middot; 01</div>
+      <div><div class="h3" style="margin-bottom:10px">Camera + VLM</div><p class="bsm">Qwen3-VL points at each object; ArUco markers map pixels onto the table.</p></div>
+    </div>
+    <div class="p lemon between" style="grid-column:4/span 3;grid-row:3/span 3">
+      <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
+      <div class="lab">Ops &middot; 02</div>
+      <div><div class="h3" style="margin-bottom:10px">Planner</div><p class="bsm">Reach: only arms that can get to an object are offered it. Time: every step has an estimate, replaced by each arm's measured times.</p></div>
+    </div>
+    <div class="p between" style="grid-column:7/span 3;grid-row:3/span 3">
+      <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
+      <div class="lab">Ops &middot; 03</div>
+      <div><div class="h3" style="margin-bottom:10px">Executor</div><p class="bsm">One arm at a time in a shared area. Retries, heartbeat, and a re-plan on every event.</p></div>
+    </div>
+    <div class="p ink between" style="grid-column:10/span 3;grid-row:3/span 3">
+      <div class="lab">Action &middot; 04</div>
+      <div><div class="h3" style="margin-bottom:10px">Arm workers</div><p class="bsm">Pick and place by calibrated IK: the same skill on every arm. X-VLA (0.9B), fine-tuned on 41 demos, fits the same call.</p></div>
+    </div>
+
+    <div class="p lemon between" style="grid-column:1/span 4;grid-row:6/span 3">
+      <div class="lab">Hardware</div>
+      <div><div class="h3" style="margin-bottom:10px">Discovery</div><p class="bsm">Arm plugged in or out: its worker starts, homes slowly, joins the plan.</p></div>
+    </div>
+    <div class="p between" style="grid-column:5/span 4;grid-row:6/span 3">
+      <div class="lab">Ops</div>
+      <div><div class="h3" style="margin-bottom:10px">Event log</div><p class="bsm">Append-only JSON lines. The screen reads only this.</p></div>
+    </div>
+    <div class="p ink between" style="grid-column:9/span 4;grid-row:6/span 3">
+      <div class="lab">Ops</div>
+      <div><div class="h3" style="margin-bottom:10px">Live screen</div><p class="bsm">Countdown, what-if for 1&ndash;4 arms, the limit in words, plan vs actual.</p></div>
+    </div>
+  </div>
+  <div class="pagenum invert">04 / 10</div>
+  <aside class="notes">Left to right. The camera model names what is on the desk and writes the steps. Reach: we know where each arm stands, so a step is only offered to arms that can get to the object. Time: every step has an estimate, and after the first few the planner uses each arm's own measured times, so the finish time on screen gets more honest as it runs. The executor keeps two arms out of the same spot and re-plans on every event. Plugging in an arm is just one more event. (~40 s)</aside>
+</section>
+
+<!-- =========================================================
+     05 / LIVE DEMO CUE
+     ========================================================= -->
+<section class="slide" aria-label="Live demo">
+  <div class="frame">
+    <div class="p film" style="grid-column:1/span 8;grid-row:1/span 8">
+      <video src="media/real_two_arms.mp4" controls muted playsinline preload="metadata" onerror="this.parentNode.classList.add('nofilm')"></video>
+      <div class="missing">Film of the real run:<br>media/real_two_arms.mp4</div>
+    </div>
+    <div class="p ink pad-lg" style="grid-column:9/span 4;grid-row:1/span 8;justify-content:center">
+      <ol class="beats">
+        <li><span class="n">01</span><span class="t"><b>See.</b> The camera reads the desk and splits the work.</span></li>
+        <li><span class="n">02</span><span class="t"><b>Go.</b> One arm tidies; the clock runs.</span></li>
+        <li><span class="n">03</span><span class="t"><b>Plug in.</b> A second arm, found by its USB.</span></li>
+        <li><span class="n">04</span><span class="t"><b>Re-plan.</b> The rest is re-split, live.</span></li>
+        <li><span class="n">05</span><span class="t"><b>Together.</b> Both arms finish the desk.</span></li>
+      </ol>
+    </div>
+  </div>
+  <div class="pagenum invert">05 / 10</div>
+  <aside class="notes">Play the film, shot on our own table (click the video). Narrate each beat over it; keep quiet at the plug-in and let the screen do the talking. Say only what the film shows. If the rig is on stage and behaving, offer a judge to put their own object on the desk. (~90 s)</aside>
+</section>
+
+<!-- =========================================================
+     06 / THREE ARMS, SIMULATED
+     ========================================================= -->
+<section class="slide" aria-label="Three arms">
+  <div class="frame">
+    <div class="p film" style="grid-column:1/span 8;grid-row:1/span 8">
+      <video src="../media/pyramid_isaac_sim.mp4" controls muted playsinline preload="metadata" onerror="this.parentNode.classList.add('nofilm')"></video>
+      <div class="missing">Simulation film:<br>docs/media/pyramid_isaac_sim.mp4</div>
+    </div>
+    <div class="p lemon between pad-lg" style="grid-column:9/span 4;grid-row:1/span 4">
+      <div class="lab">Same planner, three arms, another job</div>
+      <div class="ch">Arms join<br>as it runs</div>
+    </div>
+    <div class="p ink between" style="grid-column:9/span 4;grid-row:5/span 2">
+      <div class="lab">Steps done, 14 boxes into a pyramid</div>
+      <div class="stat-sm" style="color:var(--lemon)">28/28</div>
+    </div>
+    <div class="p between" style="grid-column:9/span 4;grid-row:7/span 2">
+      <div class="lab">Simulated (MuJoCo, shown in Isaac Sim)</div>
+      <p class="bsm">Arm 2 joins after 3 boxes, arm 3 after 7. Done in 110.5 s, no contact between arms.</p>
+    </div>
+  </div>
+  <div class="pagenum invert">06 / 10</div>
+  <aside class="notes">Two arms is what fits on our table. In simulation the same planner and executor run three: one arm starts alone, the second joins after three boxes, the third after seven, and nobody re-programs anything. A different job too, stacking a pyramid: the system does not care what the task is. Say clearly this one is simulated. (~25 s)</aside>
+</section>
+
+<!-- =========================================================
+     07 / WHY IT STOPS SPEEDING UP
+     ========================================================= -->
+<section class="slide" aria-label="Why it stops speeding up">
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 6;grid-row:1/span 3">
+      <div class="lab">Why it stops speeding up</div>
+      <h2 class="title" style="font-size:72px">More arms help<br><mark>until</mark> something<br>else binds</h2>
+    </div>
+    <div class="p ink between pad-lg" style="grid-column:7/span 6;grid-row:1/span 3">
+      <div class="lab">Lower bound, computed on every re-plan</div>
+      <div class="formula">finish &ge; max(<br>&nbsp;&nbsp;<u>work &divide; arms</u>,<br>&nbsp;&nbsp;<u>step order</u>, <u>busiest shared area</u> )</div>
+      <div class="chips"><span class="chip yes">arms</span><span class="chip yes">order</span><span class="chip yes">resource:&lt;name&gt;</span></div>
+    </div>
+    <div class="p" style="grid-column:1/span 8;grid-row:4/span 5;gap:16px">
+      <div class="legend lab"><span><i class="sw a"></i>Ideal 1/N</span><span><i class="sw b"></i>Our plan</span><span style="margin-left:auto">Sort 12 objects &middot; seconds</span></div>
+      <div class="chart" id="scaleChart" style="margin-top:40px">
+        <div class="grp"><div class="bar-v a" style="height:100%"><span>120</span></div><div class="bar-v b" style="height:100%"><span>120</span></div></div>
+        <div class="grp"><div class="bar-v a" style="height:50%"><span>60</span></div><div class="bar-v b" style="height:53.3%"><span>64</span></div></div>
+        <div class="grp"><div class="bar-v a" style="height:33.3%"><span>40</span></div><div class="bar-v b" style="height:45%"><span>54</span></div></div>
+        <div class="grp"><div class="bar-v a" style="height:25%"><span>30</span></div><div class="bar-v b" style="height:45%"><span>54</span></div></div>
+      </div>
+      <div class="xaxis lab-sm" id="scaleAxis"><div>1 arm<br>limit: arms</div><div>2 arms<br>limit: arms</div><div>3 arms<br>limit: input bin</div><div>4 arms<br>limit: input bin</div></div>
+    </div>
+    <div class="p lemon between" style="grid-column:9/span 4;grid-row:4/span 3">
+      <div class="lab">Planned speed-up (planner output), sort 12 objects, <span data-fact="scaling.best_arms">3</span> arms</div>
+      <div class="stat" data-fact="scaling.best_speedup">2.2&times;</div>
+    </div>
+    <div class="p ink between" style="grid-column:9/span 4;grid-row:7/span 2">
+      <div class="lab">Published multi-arm systems: 1.5&ndash;3&times;</div>
+      <p class="body">Not N&times;. The screen names the limit, in words.</p>
+    </div>
+  </div>
+  <div class="pagenum invert">07 / 10</div>
+  <aside class="notes">Speed-up is never N times. The finish time can't beat the work split across arms, the longest chain of ordered steps, or the busiest shared area. We compute that bound on every re-plan and say which one binds. This chart is planned, not measured on real arms: our planner on today's code for a 12-object sort: the second arm nearly halves it, the third helps less, and the fourth adds nothing because everyone queues at the shared input bin. (~35 s)</aside>
+</section>
+
+<!-- =========================================================
+     08 / BUILT THIS WEEKEND (numbers filled by update_deck.py)
+     ========================================================= -->
+<section class="slide" aria-label="Built this weekend">
+  <div class="frame">
+    <div class="p pad-lg between" style="grid-column:1/span 6;grid-row:1/span 3">
+      <div class="lab">Where we are</div>
+      <h2 class="title" style="font-size:80px">Built this<br><mark>weekend</mark></h2>
+      <div class="lab-sm">From the repo &middot; main @ <span data-fact="main_sha">ec9f69e</span> &middot; <span data-fact="generated">Sat 21 Nov</span></div>
+    </div>
+    <div class="p lemon between" style="grid-column:7/span 3;grid-row:1/span 3">
+      <div class="lab">Tests across team branches</div>
+      <div class="stat" data-fact="show.tests">199</div>
+    </div>
+    <div class="p ink between" style="grid-column:10/span 3;grid-row:1/span 3">
+      <div class="lab">Commits, all teams</div>
+      <div class="stat" style="color:var(--lemon)" data-fact="show.commits">91</div>
+    </div>
+    <div class="p between" style="grid-column:1/span 3;grid-row:4/span 3">
+      <div class="lab">Operations backlog done</div>
+      <div class="stat-sm" data-fact="show.ops_backlog">16/22</div>
+    </div>
+    <div class="p ink between" style="grid-column:4/span 3;grid-row:4/span 3">
+      <div class="lab">Action workstreams done</div>
+      <div class="stat-sm" style="color:var(--lemon)" data-fact="show.action_work">12/13</div>
+    </div>
+    <div class="p between" style="grid-column:7/span 3;grid-row:4/span 3">
+      <div class="lab">Arm pairs calibrated, teleoperating</div>
+      <div class="stat-sm" data-fact="show.pairs">2</div>
+    </div>
+    <div class="p lemon between" style="grid-column:10/span 3;grid-row:4/span 3">
+      <div class="lab">Two-arm demos, X-VLA policy trained in <span data-fact="show.policy_time">1 h 42 min</span></div>
+      <div class="stat-sm" data-fact="show.policy_episodes">41</div>
+    </div>
+    <div class="p ink between" style="grid-column:1/span 6;grid-row:7/span 2">
+      <div class="lab">Simulation</div>
+      <p class="body">Sort 12 objects: <span data-fact="show.sim_steps">24/24</span> steps on <span data-fact="show.sim_arms">3</span> MuJoCo arms; a failed grasp recovers.</p>
+    </div>
+    <div class="p between" style="grid-column:7/span 6;grid-row:7/span 2">
+      <div class="lab">Real arms, on film</div>
+      <p class="body">Two SO-101s tidy 5 of 5 objects in 2:49, same skill on both. An arm plugged in mid-run joins in under 1 s.</p>
+    </div>
+  </div>
+  <div class="pagenum">08 / 10</div>
+  <aside class="notes">Where we are, straight from the repo: the camera, the planner and the live re-split work end to end; simulated arms run the whole sort; and since Sunday morning two real arms tidy the table together, with an arm joining mid-run in under a second. A learned policy is next: X-VLA, trained on our 41 two-arm demos, fits them to within <span data-fact="show.policy_error">0.9°</span>; its success on the arms is not measured yet. (~25 s)</aside>
+</section>
+
+<!-- =========================================================
+     09 / UNDER THE HOOD + TEAM
+     ========================================================= -->
+<section class="slide" aria-label="Under the hood">
+  <div class="frame">
+    <div class="p lemon between" style="grid-column:1/span 3;grid-row:1/span 3">
+      <div class="lab">CP-SAT proves the plan optimal at 4&ndash;8 arms</div>
+      <div class="stat" style="font-size:128px">&lt;2&nbsp;s</div>
+    </div>
+    <div class="p between" style="grid-column:4/span 3;grid-row:1/span 3">
+      <div class="lab">Switch plans only if 10% better, unless arms change or a step fails</div>
+      <div class="stat" style="font-size:128px">10%</div>
+    </div>
+    <div class="p ink between" style="grid-column:7/span 3;grid-row:1/span 3">
+      <div class="lab">Running steps moved by a re-plan</div>
+      <div class="stat" style="font-size:128px;color:var(--lemon)">0</div>
+    </div>
+    <div class="p between" style="grid-column:10/span 3;grid-row:1/span 3">
+      <div class="lab">Camera check per place step, Qwen3-VL on one laptop GPU</div>
+      <div class="stat" style="font-size:128px">2.8&nbsp;s</div>
+    </div>
+
+    <div class="p ink between" style="grid-column:1/span 4;grid-row:4/span 5">
+      <div class="lab">Hardware</div>
+      <div>
+        <div class="sub" style="margin-bottom:16px">Diego &amp; Om</div>
+        <p class="bsm">Rig, calibration, safe motion. Two real arms picking by camera, aim fitted on logged grasps.</p>
+      </div>
+    </div>
+    <div class="p between" style="grid-column:5/span 4;grid-row:4/span 5">
+      <div class="lab">Action</div>
+      <div>
+        <div class="sub" style="margin-bottom:16px">Vivek &amp; Sahil</div>
+        <p class="bsm">IK skills behind one worker, sort on 3 MuJoCo arms. X-VLA trained on 41 two-arm demos.</p>
+      </div>
+    </div>
+    <div class="p lemon between" style="grid-column:9/span 4;grid-row:4/span 5">
+      <div class="lab">Operations</div>
+      <div>
+        <div class="sub" style="margin-bottom:16px">Vato &amp; Aravind</div>
+        <p class="bsm">Planners, live re-split, live screen, plug-in detection. Qwen3-VL reads the desk.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagenum lemon">09 / 10</div>
+  <aside class="notes">Under the hood: CP-SAT proves optimal plans in under 2 s at 4 to 8 arms, with HEFT as the live default. We never move a running step, we only switch plans when it's clearly better, and the camera checks every place. Three teams, one contract between them. (~25 s)</aside>
+</section>
+
+<!-- =========================================================
+     10 / CLOSE
+     ========================================================= -->
+<section class="slide" aria-label="Thank you">
+  <div class="frame">
+    <div class="p ink end pad-lg" style="grid-column:1/span 9;grid-row:1/span 6">
+      <div class="corner" style="color:var(--lemon)"><i></i><i></i><i></i><i></i></div>
+      <h2 class="display">Plug in an arm.<br><em>Watch the clock</em><br><em>drop.</em></h2>
+    </div>
+    <div class="p lemon between" style="grid-column:10/span 3;grid-row:1/span 6">
+      <div class="blockmark"><i></i><i></i><i></i><i></i></div>
+      <div>
+        <div class="lab" style="margin-bottom:14px">Thank you</div>
+        <div class="sub">Questions?</div>
+      </div>
+    </div>
+    <div class="p between" style="grid-column:1/span 6;grid-row:7/span 2">
+      <div class="lab">Beyond the desk</div>
+      <p class="body">Today it tidies your desk. The same system runs a packing bench: add an arm, re-program nothing.</p>
+    </div>
+    <div class="p between" style="grid-column:7/span 6;grid-row:7/span 2">
+      <div class="lab">Orchestra &middot; github.com/termvato/HFTeamA</div>
+      <p class="body">Diego &middot; Om &middot; Vivek &middot; Sahil &middot; Vato &middot; Aravind</p>
+    </div>
+  </div>
+  <div class="pagenum invert">10 / 10</div>
+  <aside class="notes">The desk is the story: a messy desk, tidied, and faster when you plug in another arm. One sentence beyond the desk, no more: the same system runs a packing bench, add an arm and nobody re-programs anything. Plug in an arm, watch the clock drop. Thanks. (~15 s) Only if a judge asks about industry: factories installed 603,000 robots in 2025 (IFR, up 11%), and integrators quote set-up at 1.5 to 3 times the robot's price (a rough range, not a measurement).</aside>
+</section>
+
+</main>
+</div>
+
+<!-- Presenter chrome: outside the stage -->
+<div class="progress" id="progress"></div>
+<div id="notesPanel" aria-live="polite"><div class="lab">Speaker notes (N)</div><div id="notesText"></div></div>
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)">Edit</button>
+
+<!-- Repo facts: regenerate with `python presentation/update_deck.py --fetch` -->
+<!-- FACTS:START -->
+<script type="application/json" id="deck-facts">
+{
+ "generated": "Sun 22 Nov 15:35",
+ "main_sha": "5052ec9",
+ "show": {
+  "tests": 399,
+  "commits": 242,
+  "ops_backlog": "17/22",
+  "action_work": "12/13",
+  "followers": 2,
+  "pairs": 2,
+  "episodes": 20,
+  "sim_steps": "24/24",
+  "sim_arms": "3",
+  "dry_1": "53 s",
+  "dry_2": "37 s",
+  "vlm_found": "6/6",
+  "vlm_error": "0.6 cm",
+  "policy_episodes": "41",
+  "policy_time": "1 h 42 min",
+  "policy_error": "0.9°"
+ },
+ "scaling": {
+  "task": "sort12",
+  "rows": [
+   {
+    "n": 1,
+    "planned": 120.0,
+    "bound": 120.0,
+    "ideal": 120.0,
+    "limit": "arms"
+   },
+   {
+    "n": 2,
+    "planned": 64.0,
+    "bound": 60.0,
+    "ideal": 60.0,
+    "limit": "arms"
+   },
+   {
+    "n": 3,
+    "planned": 54.0,
+    "bound": 54.0,
+    "ideal": 40.0,
+    "limit": "input bin"
+   },
+   {
+    "n": 4,
+    "planned": 54.0,
+    "bound": 54.0,
+    "ideal": 30.0,
+    "limit": "input bin"
+   }
+  ],
+  "best_speedup": "2.2×",
+  "best_arms": 3
+ }
+}
+</script>
+<!-- FACTS:END -->
+
+<script>
+/* ===========================================
+   REPO FACTS (written by presentation/update_deck.py)
+   Missing facts leave the slide's own text in place
+   =========================================== */
+const FACTS = (() => {
+    try { return JSON.parse(document.getElementById('deck-facts').textContent); }
+    catch { return null; }
+})();
+const fact = (path) => path.split('.').reduce((o, k) => (o == null ? null : o[k]), FACTS);
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+
+function applyFacts() {
+    document.querySelectorAll('[data-fact]').forEach((el) => {
+        const v = fact(el.dataset.fact);
+        if (v != null) el.textContent = v;
+    });
+    const rows = fact('scaling.rows');
+    if (!rows || !rows.length) return;
+    const top = Math.max(...rows.map((r) => Math.max(r.planned, r.ideal)));
+    const bar = (cls, v) => `<div class="bar-v ${cls}" style="height:${(100 * v / top).toFixed(1)}%"><span>${Math.round(v)}</span></div>`;
+    const arms = (n) => `${n} arm${n > 1 ? 's' : ''}`;
+    document.getElementById('scaleChart').innerHTML = rows.map((r) => `<div class="grp">${bar('a', r.ideal)}${bar('b', r.planned)}</div>`).join('');
+    document.getElementById('scaleAxis').innerHTML = rows.map((r) => `<div>${arms(r.n)}<br>limit: ${r.limit}</div>`).join('');
+}
+applyFacts();
+
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Keys: arrows / space / PgUp / PgDn / Home / End; N = notes; E = edit; Ctrl+S = save HTML
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = [...document.querySelectorAll('.slide')];
+        this.stage = document.getElementById('deckStage');
+        this.progress = document.getElementById('progress');
+        this.notesPanel = document.getElementById('notesPanel');
+        this.notesText = document.getElementById('notesText');
+        this.timers = [];
+        this.editing = false;
+        this.current = 0;
+        this.slides.forEach((s, i) => {
+            const pn = s.querySelector('.pagenum');
+            const pad = (n) => String(n).padStart(2, '0');
+            if (pn) pn.textContent = `${pad(i + 1)} / ${pad(this.slides.length)}`;
+        });
+        this.setupStageScale();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.setupWheelNav();
+        this.setupEditing();
+        const fromHash = parseInt(location.hash.slice(1), 10);
+        this.show(Number.isFinite(fromHash) ? fromHash - 1 : 0);
+    }
+
+    setupStageScale() {
+        const scale = () => {
+            const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+            this.stage.style.transform =
+                `translate(${(innerWidth - 1920 * k) / 2}px, ${(innerHeight - 1080 * k) / 2}px) scale(${k})`;
+        };
+        scale();
+        addEventListener('resize', scale);
+    }
+
+    setupKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            if (this.editing) {
+                if (e.key === 'Escape') this.toggleEdit(false);
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); this.saveHtml(); }
+                return;
+            }
+            const next = ['ArrowRight', 'ArrowDown', ' ', 'PageDown'];
+            const prev = ['ArrowLeft', 'ArrowUp', 'PageUp'];
+            if (next.includes(e.key)) { e.preventDefault(); this.show(this.current + 1); }
+            else if (prev.includes(e.key)) { e.preventDefault(); this.show(this.current - 1); }
+            else if (e.key === 'Home') this.show(0);
+            else if (e.key === 'End') this.show(this.slides.length - 1);
+            else if (e.key === 'n' || e.key === 'N') this.notesPanel.classList.toggle('show');
+            else if (e.key === 'e' || e.key === 'E') this.toggleEdit(true);
+        });
+    }
+
+    setupTouchNav() {
+        let x0 = null;
+        addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+        addEventListener('touchend', (e) => {
+            if (x0 === null || this.editing) return;
+            const dx = e.changedTouches[0].clientX - x0;
+            if (Math.abs(dx) > 50) this.show(this.current + (dx < 0 ? 1 : -1));
+            x0 = null;
+        });
+    }
+
+    setupWheelNav() {
+        let locked = false;
+        addEventListener('wheel', (e) => {
+            if (locked || this.editing || Math.abs(e.deltaY) < 30) return;
+            locked = true;
+            this.show(this.current + (e.deltaY > 0 ? 1 : -1));
+            setTimeout(() => { locked = false; }, 700);
+        }, { passive: true });
+    }
+
+    show(index) {
+        this.current = Math.max(0, Math.min(index, this.slides.length - 1));
+        this.slides.forEach((s, i) => {
+            s.classList.toggle('active', i === this.current);
+            s.classList.toggle('visible', i === this.current);
+        });
+        this.progress.style.width = `${((this.current + 1) / this.slides.length) * 100}%`;
+        const notes = this.slides[this.current].querySelector('.notes');
+        this.notesText.textContent = notes ? notes.textContent : '';
+        history.replaceState(null, '', `#${this.current + 1}`);
+        this.runCountdown(this.slides[this.current]);
+    }
+
+    /* Slide 3 widget: arms light up one by one and the planned finish time drops */
+    runCountdown(slide) {
+        this.timers.forEach(clearTimeout);
+        this.timers = [];
+        if (!slide.hasAttribute('data-countdown')) return;
+        const time = slide.querySelector('#clockTime');
+        const limit = slide.querySelector('#clockLimit');
+        const lanes = slide.querySelectorAll('.lane');
+        const rows = fact('scaling.rows');
+        const steps = rows && rows.length >= 3
+            ? rows.slice(0, 3).map((r) => [mmss(r.planned), `Limit: ${r.limit}`])
+            : [['2:00', 'Limit: arms'], ['1:04', 'Limit: arms'], ['0:54', 'Limit: input bin']];
+        const apply = (n) => {
+            lanes.forEach((l, i) => l.classList.toggle('on', i <= n));
+            [time.textContent, limit.textContent] = steps[n];
+        };
+        apply(0);
+        this.timers.push(setTimeout(() => apply(1), 1600));
+        this.timers.push(setTimeout(() => apply(2), 3200));
+    }
+
+    /* ===========================================
+       INLINE EDITING: hover top-left corner or press E; Esc exits; Ctrl+S downloads the HTML
+       =========================================== */
+    setupEditing() {
+        const hotzone = document.getElementById('editHotzone');
+        this.editBtn = document.getElementById('editToggle');
+        let hide = null;
+        const arm = () => { hide = setTimeout(() => { if (!this.editing) this.editBtn.classList.remove('show'); }, 400); };
+        hotzone.addEventListener('mouseenter', () => { clearTimeout(hide); this.editBtn.classList.add('show'); });
+        hotzone.addEventListener('mouseleave', arm);
+        this.editBtn.addEventListener('mouseenter', () => clearTimeout(hide));
+        this.editBtn.addEventListener('mouseleave', arm);
+        hotzone.addEventListener('click', () => this.toggleEdit(!this.editing));
+        this.editBtn.addEventListener('click', () => this.toggleEdit(!this.editing));
+    }
+
+    editableNodes() {
+        return this.stage.querySelectorAll('h1, h2, p, .lab, .ch, .h3, .stat, .stat-lg, .stat-sm, .secnum, .beats .t, .chip');
+    }
+
+    toggleEdit(on) {
+        this.editing = on;
+        document.body.classList.toggle('editing', on);
+        this.editBtn.classList.toggle('active', on);
+        this.editBtn.textContent = on ? 'Done (Esc) · Save (Ctrl+S)' : 'Edit';
+        this.editableNodes().forEach((n) => {
+            if (on) n.setAttribute('contenteditable', 'true');
+            else n.removeAttribute('contenteditable');
+        });
+    }
+
+    saveHtml() {
+        this.toggleEdit(false);
+        const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+        a.download = 'index.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+}
+
+new SlidePresentation();
+</script>
+</body>
+</html>

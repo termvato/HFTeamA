@@ -29,7 +29,7 @@ flowchart LR
 
 Green: Operations (#21). Blue: Action (#20). Red: Hardware (#19). Full plan: [`docs/plan.md`](docs/plan.md).
 More detail (what happens when an arm is plugged in, speed-up limits, who builds what):
-[`docs/README.md`](docs/README.md), and the one-page map at https://termvato.github.io/HFTeamA/map.html
+[`docs/README.md`](docs/README.md), the one-page map at https://termvato.github.io/HFTeamA/map.html, and the pitch deck at https://termvato.github.io/HFTeamA/deck/
 
 ## Requirements
 
