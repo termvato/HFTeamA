@@ -1378,7 +1378,7 @@ def add_parser(sub) -> None:
     e.add_argument("--image", help="Use a saved frame instead of the camera")
     e.add_argument("--out", default=str(PROJECT_ROOT / "tasks" / "sorter_boxes"))
     e.add_argument("--place-above", type=float, default=0.03, help="Place height over the rim (m)")
-    e.add_argument("--duration", type=float, default=30.0, help="Expected s per box (pick + place)")
+    e.add_argument("--duration", type=float, default=40.0, help="Expected s per box (pick + place)")
     e.add_argument("--no-vlm", action="store_true", help="Skip Qwen's sorting (positions only)")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
