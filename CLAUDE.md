@@ -94,6 +94,29 @@ confirming in that moment. Prefer fake or MuJoCo arms for any development and te
   the arm raised. Never `kill -9` / Ctrl-C-spam a process that is driving an arm.
 - New motion types: tell the team before their first real run.
 
+## Real arms through the sorter (Hardware, issue #19)
+
+How the orchestration runs on the two real SO-101 followers (`rakesh`, `hacklab`) with the
+overhead camera: `docs/hardware/sorter.md`, section "With main's orchestration".
+
+- **Setting up a machine** (after a pull, or when asked to install what is needed): run
+  `bash scripts/setup_sorter.sh`. It creates `.venv` (Python >= 3.12, LeRobot 0.7), installs
+  `-e ".[sorter,dev]"`, then checks read-only: camera, the followers' USB serials, calibration
+  files. It never connects to an arm. Fix what it reports (e.g. `sudo apt install v4l-utils`,
+  group `dialout`); ask the human for anything needing sudo.
+- **Never calibrate** and never write calibration to the servos. The calibration files are in
+  `configs/calibration/`. If LeRobot ever prompts "Press ENTER to use provided calibration file",
+  stop and tell the human.
+- **The human runs every command that moves an arm**: `hfteama sort goto|jog|touch|run` and
+  `python -m hfteama.runner --backend sorter`. Give them the command; do not run it. Read-only is
+  fine for Claude: `hfteama sort preview` and `hfteama sort export` (camera only), the setup
+  checks, the event logs in `runs/`.
+- The sequence the human runs: `hfteama sort export` (camera -> `tasks/sorter_boxes/`), check its
+  output, then the runner with `--arms rakesh_follower,vato_follower` (or one of them), typing
+  `yes` and `go`. To stop: one Ctrl-C (slow stop: finish the step, home, torque off).
+- Commands need `env -u PYTHONPATH` on machines with ROS on `PYTHONPATH` (it breaks pytest and
+  imports).
+
 ## Workflow
 
 - Each person works on a branch named after their GitHub login (e.g. `VivekSai07`) and merges to
