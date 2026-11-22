@@ -52,6 +52,9 @@ episode. Episodes have no time limit by default: press **Stop & save** when the 
 | `studio.sh single\|dual` | the same recording from a local web page: live cameras, buttons, upload |
 | `cameras.sh list\|check` | list the cameras; check the configured ones together before recording |
 | `train.sh smolvla\|act` | train with held-out episodes and early stopping (`train_watch.py`) |
+| `train_xvla.sh` | fine-tune X-VLA on the dual-arm dataset, with `gpu_guard.sh` keeping the GPU cool |
+| `gpu_guard.sh <pid>` | pause a training process when the GPU gets too hot, resume it when it has cooled |
+| `check_policy.py <checkpoint>` | open-loop check: a checkpoint's predicted actions against the recorded ones |
 | `multi_arm_policy.md` | research: one trained policy on any number of arms, with the orchestrator splitting the work |
 
 ## Cameras
@@ -245,6 +248,90 @@ tail -f ~/vla_runs/<run>.watch.log
 Validation loss by step: 0.501 (1000), **0.404 (2000)**, 0.397 (3000), 0.424 (4000), 0.423 (5000).
 Over the same steps the training loss kept falling, from 0.36 to 0.18. That is overfitting: 18
 episodes are too few, so the next gain comes from more data, not from longer training.
+
+## Part 5b: X-VLA on the dual-arm dataset
+
+One model drives both arms (12 joint targets) for a step that needs two arms: lifting a box
+together.
+
+| Dataset (Hugging Face, public) | Arms | Episodes | Frames | Task text | Cameras |
+|---|---|---|---|---|---|
+| [`diegoloayza789/hfteam_box_middle`](https://huggingface.co/datasets/diegoloayza789/hfteam_box_middle) | dual: both followers | 41 | 20,556 (11.4 min at 30 fps) | "Lift the box with both arms and place it in the middle" | `front`, `left_wrist`, `right_wrist` |
+
+Episodes are 12-33 s long (17 s on average). State and action are the 12 joint positions,
+`left_*` then `right_*`.
+
+### Machine setup (RTX 6000 Ada workstation)
+
+```bash
+mamba create -y -n lerobot -c conda-forge python=3.12 ffmpeg=7
+git clone https://github.com/huggingface/lerobot.git ~/lerobot && git -C ~/lerobot checkout v0.7.0
+uv pip install --python ~/miniforge3/envs/lerobot/bin/python -e "$HOME/lerobot[xvla,training,dataset]"
+```
+- **PyTorch must match the driver.** The default wheel is built for CUDA 13.2, and this
+  machine's driver (570) only goes up to CUDA 12.8: `torch.cuda.is_available()` is then false.
+  Install `torch 2.14.1+cu126` and `torchvision 0.29.1+cu126` instead.
+- **Behind the proxy** `uv`/`pip` cannot use the PyTorch index (it redirects to a host the proxy
+  refuses). Download the two wheels with `curl` from `https://download.pytorch.org/whl/cu126/`
+  and install the files.
+
+### Train
+
+```bash
+./vla/train_xvla.sh                  # STEPS=7000 BATCH=16 by default
+tail -f ~/vla_runs/<run>.log         # progress;  <run>.gpu.log: temperature and pauses
+```
+What the script sets, and why:
+- **Start:** `lerobot/xvla-base`, everything trainable, as the LeRobot X-VLA guide recommends.
+  The language model part learns at 1/10 of the learning rate (LeRobot's default for X-VLA).
+- **Cameras:** `front` is mapped to the base model's main view (`image`), which goes through
+  the language model with the instruction. The wrist cameras are the extra views
+  (`image2`, `image3`). Images are resized to 224x224 with padding.
+- **Actions:** `action_mode=auto`. The 12 joint targets are padded to the base model's 20, and
+  the loss counts only the 12. The `so101_bimanual` mode was not used: it trains the grippers
+  as plain numbers but squashes them to 0-1 at inference.
+- **Normalisation:** state and action by mean and standard deviation. The base model leaves the
+  state raw, but our state is in degrees (up to ±130).
+- **Precision:** float32 weights with bf16 autocast (`--accelerator.mixed_precision=bf16`).
+  The guide's `--policy.dtype=bfloat16` stores the weights themselves in bf16, where most
+  small updates round away.
+- **Batch size 16:** 35 GB of GPU memory. 32 does not fit in 48 GB.
+- **All 41 episodes are trained on.** No episodes are held out: the time allowed only about 6
+  passes over the data, so too little training is the risk, not overfitting.
+- **GPU temperature:** at full load (300 W) the card reaches 86 °C within a minute, with its
+  fan at only 60%. `gpu_guard.sh` reads the temperature 4 times a second, pauses the training
+  at `MAX_C` and resumes it at `RESUME_C`. This run used 87 °C and 85 °C: the card's own
+  slowdown starts at 88 °C. The pauses took about a quarter of the time.
+
+### Check a checkpoint without the arms
+
+```bash
+python vla/check_policy.py ~/vla_runs/<run>/checkpoints/last/pretrained_model
+```
+It predicts action chunks for recorded frames and prints the error per joint. A low error means
+the checkpoint loads and reproduces the demonstrations. It is not a success rate: that needs
+10-20 trials on the arms.
+
+### Run it on the arms
+
+A person at the rig runs this, never an agent (see "Real-arm safety" in `AGENTS.md`):
+
+```bash
+lerobot-rollout --strategy.type=base \
+    --policy.path=VivekSai07/xvla_hfteam_box_middle \
+    --robot.type=bi_so_follower <the other --robot.* flags the dataset was recorded with> \
+    --rename_map='{"observation.images.front":"observation.images.image","observation.images.left_wrist":"observation.images.image2","observation.images.right_wrist":"observation.images.image3"}' \
+    --task="Lift the box with both arms and place it in the middle" --duration=30
+```
+- **Same robot setup as the recording:** the cameras must arrive as `front`, `left_wrist` and
+  `right_wrist` at 640x480, and the joints in the dataset's order (`left_*`, then `right_*`).
+  `--rename_map` is the same camera mapping as in training, and `lerobot-rollout` needs it
+  again. The checkpoint normalises state and actions by itself.
+- **Same task text** as in the dataset. The model has seen no other.
+- **Start as the episodes start:** arms in the recorded start pose, the box where it was during
+  recording. Keep `max_relative_target` set on the followers and a hand on the power switch.
+- The model plans 30 steps (1 s) at a time and runs them all before it looks again
+  (`n_action_steps=30`). If the motion is too blind, pass `--policy.n_action_steps=15`.
 
 ## Part 6 (later): Use the policy in our architecture
 
