@@ -125,12 +125,22 @@ class SorterArmDriver:
         z = float(p[2])
         max_tilt = np.radians(self._mc.get("max_tilt_deg", 30.0))
         if mode == "drop":
+            # as the sorter's plan_drop: gripper down, the point moved towards the arm (up to
+            # drop_shift_max_m, e.g. 3 cm inside a bowl's rim) when straight down can't reach it
+            toward = np.array([self._arm.placement.x, self._arm.placement.y]) - p[:2]
+            toward /= max(float(np.linalg.norm(toward)), 1e-9)
+            shift_max = float(self._mc.get("drop_shift_max_m", 0.0))
+            for shift in np.arange(0.0, shift_max + 1e-9, 0.01):
+                x, y = p[:2] + shift * toward
+                sol = drop_solve(self._arm, float(x), float(y), z, True, max_tilt)
+                if sol.ok:
+                    return sol, p[:2], None, True
             drop_tilt = np.radians(self._mc.get("drop_max_tilt_deg", 60.0))
-            for down, tilt in ((True, max_tilt), (True, drop_tilt), (False, drop_tilt)):
-                sol = drop_solve(self._arm, float(p[0]), float(p[1]), z, down, tilt)
+            for down in (True, False):  # else tilted at the point itself
+                sol = drop_solve(self._arm, float(p[0]), float(p[1]), z, down, drop_tilt)
                 if sol.ok:
                     break
-            return sol, p[:2], None, sol.ok and down and tilt == max_tilt
+            return sol, p[:2], None, False
         same_spot = self._last_xy is not None and np.hypot(*(p[:2] - self._last_xy)) < 0.01
         if yaw_main is not None:
             # main's yaw is the jaws' closing heading (generic_skills.pick_yaw), as Piece.yaw

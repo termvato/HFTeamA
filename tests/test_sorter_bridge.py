@@ -110,6 +110,7 @@ def test_carrying_to_the_bowl_uses_the_sorters_drop_and_no_tilted_straight_line(
     from hfteama.vision.detect import Box
 
     d, low, cfg = make()
+    d._mc = {**cfg["motion"], "drop_shift_max_m": 0.0}  # the approach stays tilted (no shift)
     frame, bc = MainFrame.from_config(cfg), cfg["box"]
     bowl = Box(0.367, 0.252, 0.09)
     x, y, z, _ = drop_target(d._arm, bowl, bc["height"], 0.03, np.radians(60))

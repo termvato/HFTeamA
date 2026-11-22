@@ -191,6 +191,8 @@
     "rate_hz": 50,
     "max_tilt_deg": 30.0,
     "drop_max_tilt_deg": 60.0,
+    "drop_shift_max_m": 0.05,
+    "drop_shift_note": "main's place over the bowl (bridge): the drop point may move this far from the asked point towards the arm, to keep the gripper down. 5 cm keeps a 5.8 cm box inside the 18 cm bowl.",
     "gripper_open": 100.0,
     "gripper_closed": 2.0,
     "gripper_wait_s": 0.6,
