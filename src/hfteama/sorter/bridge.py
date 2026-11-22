@@ -32,6 +32,8 @@ from hfteama.vision.detect import Piece
 
 MAIN_TABLE = PROJECT_ROOT / "configs" / "hacklab_table.json"
 HEARTBEAT_POLL_S = 0.5
+LINE_STEPS = 4  # IK waypoints of a vertical line (as `sort run`'s lift); 2 cm apart on 8 cm
+STEP_CAP_S = 120.0  # SkillWorker's hard cap on one step (its default, 30 s, cut real picks)
 
 
 class MainFrame:
@@ -89,7 +91,7 @@ class SorterArmDriver:
         self._last_down = False  # its pose had the gripper down (within max_tilt)
         self._last_mode = "grasp"  # how its pose was solved: "grasp" or "drop" (see _command)
         self._carrying = False  # the last close_gripper held a piece (until open_gripper)
-        self._aims: dict = {}  # grasp_aim cache (see _grasp_aim)
+        self._aims: dict = {}  # IK cache (see _ik, _drop, _grasp_aim): a few entries a step
 
     # ---- helpers
 
@@ -132,12 +134,12 @@ class SorterArmDriver:
             shift_max = float(self._mc.get("drop_shift_max_m", 0.0))
             for shift in np.arange(0.0, shift_max + 1e-9, 0.01):
                 x, y = p[:2] + shift * toward
-                sol = drop_solve(self._arm, float(x), float(y), z, True, max_tilt)
+                sol = self._drop(float(x), float(y), z, True, max_tilt)
                 if sol.ok:
                     return sol, p[:2], None, True
             drop_tilt = np.radians(self._mc.get("drop_max_tilt_deg", 60.0))
             for down in (True, False):  # else tilted at the point itself
-                sol = drop_solve(self._arm, float(p[0]), float(p[1]), z, down, drop_tilt)
+                sol = self._drop(float(p[0]), float(p[1]), z, down, drop_tilt)
                 if sol.ok:
                     break
             return sol, p[:2], None, False
@@ -149,21 +151,52 @@ class SorterArmDriver:
             piece_yaw = 0.0
         w = self._pc.get("object_width", 0.03)
         L = self._pc.get("object_length", w)
+        # the aim at the approach height for every height over this spot, as plan_pick (the
+        # corrections were fitted that way): one aim down, grasp and up
+        aim_z = round(float(self._pc.get("approach_z", 0.08)), 4)
         ax, ay, yaw_arm, _, dz = self._grasp_aim(
-            round(float(p[0]), 4), round(float(p[1]), 4), round(z, 4), float(piece_yaw), L, w
+            round(float(p[0]), 4), round(float(p[1]), 4), aim_z, float(piece_yaw), L, w
         )
         if same_spot and yaw_main is None and self._last_yaw is not None:
             yaw_arm = self._last_yaw  # same wrist all the way down and up again
         target = self._arm.placement.to_arm([ax, ay, z + dz])
-        sol = solve_ik(target, yaw=yaw_arm, limits=self._arm.limits, max_tilt=max_tilt)
+        sol = self._ik(target, yaw_arm, True, max_tilt)
         down = sol.ok
         if not sol.ok and self._high(z):  # above the pieces: any gripper orientation
-            sol = solve_ik(target, down=False, limits=self._arm.limits)
+            sol = self._ik(target, None, False, max_tilt)
         return sol, p[:2], yaw_arm, down
+
+    def _stop_check(self) -> None:
+        """A stop (cancel, timeout, park) between two IK solves: IK takes ~0.2 s a solve and
+        a step dozens of them, so a stop must not wait for the next motion to be seen."""
+        if self._drv.stop_event.is_set():
+            raise MotionError("stopped")
+
+    def _ik(self, target, yaw, down: bool, max_tilt: float):
+        """solve_ik, cached: deterministic without a seed, and a step solves each point twice
+        (reachable before moving, then move_to)."""
+        self._stop_check()
+        t = np.round(np.asarray(target, float), 5)
+        key = ("ik", *t, None if yaw is None else round(float(yaw), 6), down, round(max_tilt, 6))
+        if key not in self._aims:
+            if down:
+                self._aims[key] = solve_ik(t, yaw=yaw, limits=self._arm.limits, max_tilt=max_tilt)
+            else:
+                self._aims[key] = solve_ik(t, down=False, limits=self._arm.limits)
+        return self._aims[key]
+
+    def _drop(self, x: float, y: float, z: float, down: bool, tilt: float):
+        """plan.drop_solve, cached as _ik."""
+        self._stop_check()
+        key = ("drop", round(x, 5), round(y, 5), round(z, 5), down, round(tilt, 6))
+        if key not in self._aims:
+            self._aims[key] = drop_solve(self._arm, x, y, z, down, tilt)
+        return self._aims[key]
 
     def _grasp_aim(self, x, y, z, yaw, length, width):
         """`ArmModel.grasp_aim`, cached: a step checks every point before moving (reachable),
         then moves through the same points, and each costs ~1 s of IK."""
+        self._stop_check()
         key = (x, y, z, yaw, length, width)
         if key not in self._aims:
             piece = Piece(x=x, y=y, length=length, width=width, yaw=yaw, area_cm2=0)
@@ -218,7 +251,7 @@ class SorterArmDriver:
             line_yaw = yaw_arm if yaw_arm is not None else self._last_yaw
             q0 = self._run(self._drv.q)
             try:  # the line's IK outside the bus lock: ~1 s with no bus traffic (heartbeat)
-                path = self._drv.line_path(q0, fk(sol.q)[:3, 3], line_yaw, 8)
+                path = self._drv.line_path(q0, fk(sol.q)[:3, 3], line_yaw, LINE_STEPS)
             except RuntimeError as exc:
                 raise MotionError(str(exc)) from exc
             self._run(self._drv.move_path, path, deg_s)
@@ -313,6 +346,14 @@ def sorter_worker_factory(poses, sorter_config=None, pairs_config=None):
     from hfteama.arms.worker import SkillWorker
 
     def make(arm_id: str) -> SkillWorker:
-        return SkillWorker(arm_id, from_sorter(arm_id, sorter_config, pairs_config), poses, "real")
+        # the worker's hard cap per step: a real pick or place takes 15-30 s (IK for two arms
+        # shares one CPU core); the executor's own timeout (x the estimate) comes first
+        return SkillWorker(
+            arm_id,
+            from_sorter(arm_id, sorter_config, pairs_config),
+            poses,
+            "real",
+            deadline_s=STEP_CAP_S,
+        )
 
     return make

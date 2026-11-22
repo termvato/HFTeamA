@@ -311,3 +311,24 @@ def test_export_passes_the_box_yaw_and_the_jaws_close_on_its_sides(monkeypatch, 
     heading = jaw_yaw(fk(low.q())) + d._arm.placement.yaw  # jaws' closing heading, table
     off = np.degrees(heading - closing) % 90.0  # square box: any of its four sides
     assert min(off, 90.0 - off) < 3.0
+
+
+def test_a_stop_during_the_ik_is_seen_before_any_motion() -> None:
+    """Live run 22 Nov: a cancelled step kept computing IK for seconds ("arm unresponsive"):
+    a stop is checked between IK solves, not only by the motion loops."""
+    d, low, cfg = make()
+    p = MainFrame.from_config(cfg).to_main([0.62, 0.2, 0.08])
+    d.stop()
+    with pytest.raises(MotionError, match="stopped"):
+        d._command(p, None)
+    assert low.calls == []
+
+
+def test_sorter_workers_get_a_step_cap_longer_than_a_real_pick(monkeypatch) -> None:
+    """Live run 22 Nov: SkillWorker's default 30 s cap cut two-arm picks (~29 s) at the limit."""
+    import hfteama.sorter.bridge as bridge
+
+    d, low, cfg = make()
+    monkeypatch.setattr(bridge, "from_sorter", lambda arm_id, *a: d)
+    w = bridge.sorter_worker_factory(None)("rakesh_follower")
+    assert w._deadline_s == bridge.STEP_CAP_S >= 90.0
