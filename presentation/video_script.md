@@ -51,3 +51,28 @@ of shot 2 or the last of shot 9.
 - The arms pick the tagged 5.8 cm boxes (that is what the camera and the grasp are tuned for).
   Call them "things on the desk" only if they look the part; otherwise say "objects".
 - Shot 1 is a real messy desk and a person in a hurry, not the rig.
+
+## Voice-over, version 3 (the one to record)
+
+The pitch: **modular skills**. Build a skill once, for one arm; plug in more arms and Orchestra
+deploys it across all of them, with no new training and no re-programming. This replaces the
+voice-over column of the table at the top; the cut is about 2:40 with the two-arm bowl shot.
+
+| Time | Say |
+|---|---|
+| 0:00 | Your desk is a mess, and your call starts in two minutes. |
+| 0:12 | This robot arm costs about a hundred dollars. The expensive part is teaching it. |
+| 0:18 | And today, every new arm setup means new data and new training. |
+| 0:27 | Orchestra makes robot skills modular. Build a skill once, for one arm. |
+| 0:35 | Plug in more arms, and Orchestra deploys it across all of them: it splits the work by reach and by time, and tells you when it will be done. |
+| 0:47 | Here it is on real arms. One arm starts tidying the desk. |
+| 1:05 | In a hurry? Plug in another arm. |
+| 1:12 | It is found by its USB and joins the plan in under a second. No new training, no re-programming. It takes on the rest of the desk. |
+| 1:27 | Two arms, one skill. They pick at the same time and take turns at the tray, so they never collide. |
+| 1:40 | The whole desk, tidied. |
+| 1:58 | And when a job needs two arms as one, a learned two-arm policy plugs in as a single worker. |
+| 2:06 | Same code, three arms, another job. Arms join as the work goes on. |
+| 2:24 | One skill, more arms, no retraining. Your desk, tidied in under three minutes. Built in 48 hours by six people. |
+| 2:36 | Plug in an arm. Watch the clock drop. |
+
+The line at 1:58 goes with the shot of the learned two-arm policy moving the bowl.
