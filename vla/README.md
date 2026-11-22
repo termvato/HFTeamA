@@ -315,6 +315,22 @@ What the script sets, and why:
   at `MAX_C` and resumes it at `RESUME_C`. This run used 87 °C and 85 °C: the card's own
   slowdown starts at 88 °C. The pauses took a quarter to a third of the time.
 
+### Model trained
+
+| Model (Hugging Face, public) | Data | Steps | Time | Training loss | Open-loop error |
+|---|---|---|---|---|---|
+| [`VivekSai07/xvla_hfteam_box_middle`](https://huggingface.co/VivekSai07/xvla_hfteam_box_middle) | all 41 episodes | 7000 at batch 16 (5.5 passes) | 1 h 42 min (12:14-13:56) | 0.003 | 0.9 |
+
+- Training loss by step: 0.79 (100), 0.041 (1000), 0.022 (2000), 0.012 (3000), 0.007 (4000),
+  0.004 (5000-6000), 0.003 (7000).
+- Open-loop error: the mean error of the predicted 1 s chunks on 64 recorded frames, in degrees
+  (gripper 0-100). It was 5.4 at step 1000 and 0.9 at step 7000, at most 1.65 for any joint.
+  These frames were trained on: the numbers show the model fits the demonstrations, not that
+  it generalises. The success rate on the arms is not measured yet.
+- One chunk takes about 1 s to compute with another training sharing the GPU.
+- Steps 0-2000 ran on the host, steps 2000-7000 in a container resumed from the step-2000
+  checkpoint. The checkpoints kept are steps 6000 (weights only) and 7000 (resumable).
+
 ### Checkpoints and disk space
 
 The system disk is nearly full, and a full disk locks everyone out of the machine. One X-VLA
