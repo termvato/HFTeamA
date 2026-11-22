@@ -16,7 +16,10 @@ Then open http://127.0.0.1:8050 and press Go.
   from reach, and the screen shows a top view of who takes what.
 - What the batch is: a task file (`--task`), or a planner hook `module:function` returning a
   `TaskGraph` (the camera + VLM pipeline plugs in here), optionally with `--verifier
-  module:function` returning the executor's step-check function.
+  module:function` returning the executor's step-check function and `--rescan module:function`
+  (called with the executor and the log) returning the re-scan; `--rescan-every S` also re-scans
+  every S seconds. The camera pipeline: `hfteama.perception.live` (plan_from_camera, verifier,
+  rescan_hook). A planner's graph is already resolved, so `--table` then only draws the map.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -98,14 +102,23 @@ def with_table(
 ) -> tuple[TaskGraph, dict]:
     """Fill each step's allowed arms from reach on the real table layout, and describe the table
     for the screen's top view (arms with their reach, bins, objects with their steps)."""
-    import json
-
     from hfteama.registry import load_catalog, resolve
 
     catalog = {a: n for a, n in load_catalog(table).items() if a in arm_ids}
     resolved = resolve(graph, catalog.values(), travel_s_per_m=10.0, clearance_m=clearance_m).graph
+    return resolved, table_scene(resolved, table, arm_ids)
+
+
+def table_scene(graph: TaskGraph, table: str, arm_ids: list[str]) -> dict:
+    """The screen's top view of an already resolved graph: arms with their reach, bins, and the
+    objects with their steps (the `scene` event). The camera pipeline writes one per re-scan."""
+    import json
+
+    from hfteama.registry import load_catalog
+
+    catalog = {a: n for a, n in load_catalog(table).items() if a in arm_ids}
     objects: dict[str, dict] = {}
-    for t in resolved.tasks.values():
+    for t in graph.tasks.values():
         oid = t.args.get("object")
         if oid is None:
             continue
@@ -129,7 +142,36 @@ def with_table(
         ],
         "objects": [o for o in objects.values() if "xy" in o],
     }
-    return resolved, scene
+    return scene
+
+
+def periodic_rescan(
+    executor: Executor,
+    rescan: Callable[[], TaskGraph | None],
+    every_s: float,
+    started: Callable[[], bool] = lambda: True,
+) -> threading.Thread:
+    """Every `every_s` seconds after Go, until the batch is done: re-scan and hand a changed
+    graph to the executor. A failing scan is logged and skipped, never fatal."""
+
+    def loop() -> None:
+        while not executor.finished:
+            time.sleep(every_s)
+            if not started() or executor.finished:
+                continue
+            try:
+                graph = rescan()
+            except Exception as e:  # camera or VLM trouble: keep running on the old graph
+                executor.log.write(
+                    Event("replan", data={"reason": "rescan_failed", "error": str(e)})
+                )
+                continue
+            if graph is not None:
+                executor.update_graph(graph)
+
+    t = threading.Thread(target=loop, name="periodic-rescan", daemon=True)
+    t.start()
+    return t
 
 
 class Rig:
@@ -221,6 +263,17 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--task", default="tasks/sort/sort12.json")
     ap.add_argument("--planner", help="module:function returning a TaskGraph (overrides --task)")
     ap.add_argument("--verifier", help="module:function returning verifier(task, result)")
+    ap.add_argument(
+        "--rescan",
+        help="module:function(executor, log) returning rescan() -> TaskGraph | None",
+    )
+    ap.add_argument(
+        "--rescan-every",
+        type=float,
+        default=0.0,
+        help="seconds between periodic re-scans after Go (needs --rescan; 0 = only after a lost "
+        "part)",
+    )
     ap.add_argument("--pairs", default="configs/teleop_pairs.json")
     ap.add_argument("--arms-config", default="configs/real_arms.json")
     ap.add_argument("--poses", default="tasks/sort/poses.json")
@@ -255,7 +308,9 @@ def main(argv: list[str] | None = None) -> None:
     graph = hook(args.planner)() if args.planner else load(args.task)
     verifier = hook(args.verifier)() if args.verifier else None
     scene = None
-    if args.table:
+    if args.table and args.planner:  # the planner hook resolves on its own table: draw only
+        scene = table_scene(graph, args.table, list(known.values()))
+    elif args.table:
         graph, scene = with_table(graph, args.table, list(known.values()), args.clearance or None)
     if args.backend == "fake":
         factory = fake_factory(clock)
@@ -278,6 +333,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     if scene:
         log.write(Event("scene", data=scene))
+    if args.rescan:
+        ex.rescan = hook(args.rescan)(ex, log)
+        if args.rescan_every > 0:
+            periodic_rescan(ex, ex.rescan, args.rescan_every, started=rig.started)
     for arm_id in filter(None, args.plugged.split(",")):
         watcher.plug(arm_id.strip())
     if not watcher.joined():

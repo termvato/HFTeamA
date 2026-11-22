@@ -22,7 +22,7 @@ from typing import Any
 
 from hfteama.perception.annotate import label_objects
 from hfteama.perception.prompts import SYSTEM, sort_prompt
-from hfteama.perception.scene import Scene, SceneObject
+from hfteama.perception.scene import Scene, SceneObject, axis_deg
 from hfteama.perception.vlm import VLM, ParseError, VLMError, parse_json
 from hfteama.taskgraph import Task, TaskGraph
 
@@ -164,6 +164,16 @@ class Decomposition:
         }
 
 
+def pick_pose_args(obj: SceneObject) -> dict[str, Any]:
+    """Where the pick goes: position, orientation and, when measured, `pick_yaw_deg` (the
+    object's long axis in the table frame, [-90, 90) degrees; the pick skill closes across it)."""
+    args: dict[str, Any] = {"pick_xyz": list(obj.xyz), "pick_quat_wxyz": list(obj.quat_wxyz)}
+    yaw = obj.yaw_deg
+    if yaw is not None:
+        args["pick_yaw_deg"] = round(axis_deg(yaw), 1)
+    return args
+
+
 def sort_steps(
     obj: SceneObject,
     category: str,
@@ -183,8 +193,7 @@ def sort_steps(
                 "model": obj.model,
                 "label": obj.label,
                 "category": category,
-                "pick_xyz": list(obj.xyz),
-                "pick_quat_wxyz": list(obj.quat_wxyz),
+                **pick_pose_args(obj),
             },
             duration=d["pick"],
         ),

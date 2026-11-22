@@ -28,6 +28,7 @@ class Detection:
     pixel: tuple[float, float] | None = None  # centre in the image, for labelling it to the VLM
     label: str = ""  # free description from the detector, e.g. "red cube" (shown to the VLM)
     key: str = ""  # identity the detector knows (e.g. "tag_05"); used as the object id as is
+    has_yaw: bool = False  # the pose's rotation about z is measured (else identity = unknown)
 
 
 class ObjectDetector(Protocol):
@@ -45,6 +46,20 @@ class SceneObject:
     pixel: tuple[float, float] | None = None
     score: float = 1.0
     label: str = ""
+    has_yaw: bool = False  # quat_wxyz holds a measured yaw (tags, VLM axis points)
+
+    @property
+    def yaw_deg(self) -> float | None:
+        """Yaw of the object's x axis about table z, degrees in (-180, 180]; None if unknown."""
+        if not self.has_yaw:
+            return None
+        w, x, y, z = self.quat_wxyz
+        return math.degrees(math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)))
+
+
+def axis_deg(deg: float) -> float:
+    """A long axis has no direction: fold a heading into [-90, 90) degrees."""
+    return (deg + 90.0) % 180.0 - 90.0
 
 
 @dataclass
@@ -105,7 +120,7 @@ def build_scene(
         if oid is None:
             oid = f"obj_{index:02d}"
             index += 1
-        objects[oid] = SceneObject(oid, d.model, xyz, q, d.pixel, d.score, d.label)
+        objects[oid] = SceneObject(oid, d.model, xyz, q, d.pixel, d.score, d.label, d.has_yaw)
     return Scene(objects=objects, next_index=index)
 
 

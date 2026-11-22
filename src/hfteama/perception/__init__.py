@@ -40,7 +40,13 @@ from hfteama.perception.scene import (
     build_scene,
     diff_scenes,
 )
-from hfteama.perception.tags import TagBox, TagConfig, TagDetector, tag_sorting
+from hfteama.perception.tags import (
+    TagBox,
+    TagConfig,
+    TagDetector,
+    tag_decomposer,
+    tag_sorting,
+)
 from hfteama.perception.vlm import VLM, FakeVLM, QwenVLM, VLMError
 
 __all__ = [
@@ -73,5 +79,6 @@ __all__ = [
     "graph_to_dict",
     "load_bins",
     "rescan",
+    "tag_decomposer",
     "tag_sorting",
 ]

@@ -131,10 +131,13 @@ def point_prompt(errors: list[str] | None = None) -> str:
         "Point to every separate object lying on the table that a robot arm could pick up and "
         "sort. Do not point at bins, trays, boxes used as containers, robot arms, cables, "
         "markers or the table itself. Give exactly one point per object, at its centre.",
+        "For an object that is longer than it is wide (or a square block), also give "
+        '"axis_2d": two points at the middle of its two opposite short ends, so the line '
+        "between them runs along the object. Leave axis_2d out for round objects.",
         'Answer with JSON exactly in this form: {"objects": [{"label": "<short description, '
-        'e.g. red cube>", "point_2d": [x, y]}]}',
-        "x and y are relative coordinates from 0 to 1000: [0, 0] is the top-left corner of the "
-        "image and [1000, 1000] the bottom-right corner.",
+        'e.g. red cube>", "point_2d": [x, y], "axis_2d": [[x1, y1], [x2, y2]]}]}',
+        "All x and y are relative coordinates from 0 to 1000: [0, 0] is the top-left corner of "
+        "the image and [1000, 1000] the bottom-right corner.",
     ]
     if errors:
         lines.append("Your previous answer was rejected: " + "; ".join(errors))

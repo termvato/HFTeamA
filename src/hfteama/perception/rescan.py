@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from hfteama.perception.decomposer import Decomposer, Sorting, sort_steps
+from hfteama.perception.decomposer import Decomposer, Sorting, pick_pose_args, sort_steps
 from hfteama.perception.scene import Scene, SceneDiff, diff_scenes
 from hfteama.taskgraph import TaskGraph
 
@@ -82,8 +82,8 @@ def rescan(
             for tid in pending:
                 t = tasks[tid]
                 if "pick_xyz" in t.args:
-                    args = {**t.args, "pick_xyz": list(o.xyz), "pick_quat_wxyz": list(o.quat_wxyz)}
-                    tasks[tid] = replace(t, args=args)
+                    args = {k: v for k, v in t.args.items() if k != "pick_yaw_deg"}
+                    tasks[tid] = replace(t, args={**args, **pick_pose_args(o)})
                     updated.append(tid)
 
     # objects that need (new) steps: never seen, or finished but outside the bins again

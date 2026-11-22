@@ -16,17 +16,14 @@ Needs: pip install -e ".[vlm,camera]".
 from __future__ import annotations
 
 import argparse
-import io
 import math
-import subprocess
 import sys
 import tempfile
 import time
-import urllib.request
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import ImageDraw
 
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
@@ -45,35 +42,13 @@ from hfteama.perception import (
     load_bins,
     tag_sorting,
 )
+from hfteama.perception.camera import grab, load
 from hfteama.perception.markers import calibrate_from_markers
 from hfteama.perception.tags import tag_yaw_deg
 from hfteama.registry import load_catalog, resolve
 
 ROOT = Path(__file__).resolve().parent.parent
 PALETTE = [(30, 30, 30), (40, 200, 90), (40, 90, 220), (220, 120, 30)]
-
-
-def grab(device: str, size: tuple[int, int]) -> Image.Image:
-    """One frame from a camera through ffmpeg (DirectShow on Windows, V4L2 on Linux)."""
-    import imageio_ffmpeg
-
-    ff = imageio_ffmpeg.get_ffmpeg_exe()
-    src = ["-f", "dshow", "-i", f"video={device}"] if sys.platform == "win32" else [
-        "-f", "v4l2", "-i", device]  # fmt: skip
-    cmd = [ff, "-hide_banner", "-loglevel", "error", "-video_size", f"{size[0]}x{size[1]}", *src,
-           "-ss", "2", "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"]  # fmt: skip
-    out = subprocess.run(cmd, capture_output=True, timeout=30, check=True).stdout
-    return Image.open(io.BytesIO(out)).convert("RGB")
-
-
-def load(src: str) -> Image.Image:
-    if not src.startswith(("http://", "https://")):
-        return Image.open(src).convert("RGB")
-    with urllib.request.urlopen(src, timeout=10) as r:
-        buf = r.read(5_000_000)
-    s = buf.find(b"\xff\xd8")
-    e = buf.find(b"\xff\xd9", s + 2)
-    return Image.open(io.BytesIO(buf[s : e + 2])).convert("RGB")
 
 
 def main() -> int:
