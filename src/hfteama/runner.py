@@ -211,6 +211,13 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     ap.add_argument("--port", "--orchestra-port", dest="port", type=int, default=8050)
     ap.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="dashboard address: 0.0.0.0 shows it to other laptops on the network (view only; "
+        "the buttons need --token, made up and printed if not given)",
+    )
+    ap.add_argument("--token", default=None, help="operator token for the dashboard's buttons")
+    ap.add_argument(
         "--no-rescan",
         action="store_true",
         help="sorter: retry a missed grasp at the old spot instead of re-scanning first",
@@ -332,10 +339,15 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         rig = _RealRig(ex, watcher, made, arm_ids or list(known.values()), stop_requested.set)
         if args.view:
             _serve(log, ex, watcher, rig, clock, args)
-            print(
-                f"dashboard: http://127.0.0.1:{args.port}  (Go there starts the run; "
-                "Stop all = slow stop, then park)"
-            )
+            local = f"http://127.0.0.1:{args.port}/"
+            if args.token:
+                local += f"?token={args.token}"
+            print(f"dashboard: {local}  (Go there starts the run; Stop all = slow stop, then park)")
+            if args.host not in ("127.0.0.1", "localhost", "::1"):
+                print(
+                    f"other laptops (view only, no buttons): http://{_lan_ip()}:{args.port}/  "
+                    "(same network; allow Python through the Windows firewall if asked)"
+                )
         screen = args.view  # the dashboard's Go button starts the run
         if not screen and real and ask("Type 'go' to start the batch: ").strip() != "go":
             print("not started: parking the arms.")
@@ -406,7 +418,27 @@ def _serve(log, ex, watcher, rig, clock, args) -> None:
         watching=args.watch,
         task_name=Path(args.task).stem,
     )
-    start(hub, rig, "127.0.0.1", args.port)
+    host = getattr(args, "host", "127.0.0.1")
+    if host not in ("127.0.0.1", "localhost", "::1") and not getattr(args, "token", None):
+        import secrets
+
+        # on the network the buttons (Go, Stop all, Plug) need a token; viewing does not
+        args.token = secrets.token_urlsafe(8)
+    start(hub, rig, host, args.port, getattr(args, "token", None))
+
+
+def _lan_ip() -> str:
+    """This laptop's address on the local network (no packet is sent: UDP connect only)."""
+    import socket
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))
+        return s.getsockname()[0]
+    except OSError:
+        return socket.gethostbyname(socket.gethostname())
+    finally:
+        s.close()
 
 
 if __name__ == "__main__":
