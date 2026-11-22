@@ -1,9 +1,121 @@
-# Orchestra: plug and produce
+# Orchestra: plug-and-produce orchestration for teams of low-cost robot arms
 
-Finish a batch of work faster by plugging in more SO-101 arms. When an arm is added, removed or
-fails, the orchestrator re-splits the remaining work live and shows the new predicted finish time
-and what limits further speed-up. Task-agnostic: any job that splits into steps, order and shared
-zones (see `tasks/README.md`). Plan and teams: `docs/plan.md`. Who is doing what right now: [`STATUS.md`](STATUS.md). Visual map: `docs/README.md`.
+**Build a skill once, for one arm. Plug in more arms, and Orchestra deploys it across all of them:**
+it splits the work by reach and time, keeps the arms out of each other's way, and re-plans live
+when an arm joins, a grasp misses or an arm drops out. No new training and no re-programming per
+arm setup.
+
+Built by six people in a 34-hour hackathon (HackLab #2, Berlin, 21-22 November 2026, Hugging Face
+"Desk Hero" track) on SO-101 arms that cost about 100 dollars each.
+
+| | |
+|---|---|
+| Pitch deck | https://termvato.github.io/HFTeamA/deck/ |
+| Video, click-through | https://termvato.github.io/HFTeamA/video/ |
+| System map | https://termvato.github.io/HFTeamA/map.html |
+| Fine-tuned X-VLA (0.9B) | https://huggingface.co/VivekSai07/xvla_hfteam_box_middle |
+| Two-arm dataset (41 episodes) | https://huggingface.co/datasets/diegoloayza789/hfteam_box_middle |
+| Three arms in simulation | [`docs/media/pyramid_isaac_sim.mp4`](docs/media/pyramid_isaac_sim.mp4) |
+
+## Abstract
+
+A robot arm is now cheap; putting several to work together is not. Learned policies are trained
+for one arm setup and one scene, and industrial multi-robot cells are synchronised by hand-written
+programs. Orchestra separates the two problems. A **skill** (a scripted inverse-kinematics routine
+or a learned vision-language-action policy) is built once, for a single arm, behind one contract:
+`execute(task) -> ok | failed | timeout | arm_down`. A **scheduler and executor** then treat any
+number of arms as interchangeable workers: a reach model decides which arm can take which object,
+a planner assigns every step and predicts the finish time, runtime locks keep two arms out of a
+shared space, and every event (an arm plugged in, a missed grasp, a lost heartbeat) triggers a
+re-plan of the steps that have not started. The same code drove one and two real arms and three
+simulated arms, on two different tasks, with no change per configuration.
+
+## Contributions
+
+1. **Skill-level modularity for multi-arm systems.** One arm contract for real (LeRobot), MuJoCo
+   and fake arms; scripted and learned skills are interchangeable behind it. Adding an arm needs
+   zero extra demonstrations and zero extra code.
+2. **Online re-scheduling with a named bottleneck.** HEFT list scheduling for live re-plans (well
+   under a millisecond per solve in the logged runs) with a CP-SAT flexible job-shop model behind
+   it, and a lower bound, `finish >= max(work / arms, longest ordered chain, busiest shared
+   area)`, that says in words what limits further speed-up: arms, order, or a shared area.
+3. **Plug-and-produce on commodity hardware.** A follower arm is recognised by its USB serial,
+   homed, and working on its share of the plan in under one second, mid-run.
+4. **Closed-loop execution.** Shared-area locks, a 1.5 s heartbeat per arm, step timeouts from
+   measured durations, camera re-scan after a missed grasp, and re-planning that never moves a
+   step that is already running.
+5. **Perception without per-object training.** An overhead camera calibrated by ArUco tags; boxes
+   localised from tags, and a Qwen3-VL pointing pipeline that names and locates arbitrary objects
+   (6 of 6 objects at 0.6 cm mean error in its first run on a laptop GPU, synthetic image).
+6. **Calibrated manipulation on 100-dollar arms.** Numerical IK inside each arm's calibrated
+   joint limits, with per-arm aim corrections fitted from logged grasps (0.9 cm rms).
+7. **A learned-policy path.** A LeRobot recording studio, public datasets, and X-VLA (0.9B
+   parameters) fine-tuned on 41 teleoperated two-arm episodes in 1 h 42 min; ACT and SmolVLA
+   trained alongside. Policies run on the arms through the same step interface (Step 8 below).
+8. **Instrumentation.** Per-move timing of the 50 Hz control loops (tick lateness, bus time, IK
+   time, tracking error) and a process probe, written to every run folder.
+
+## Results
+
+All numbers are from this repository's logs, recordings and model cards.
+
+| Experiment | Setup | Result |
+|---|---|---|
+| Tidy the table, filmed run | 2 real SO-101 arms, same pick-and-place skill | 5 of 5 objects, 10 of 10 steps, 2:49; one missed grasp retried automatically |
+| Tidy the table, best run | 2 real arms | 5 of 5 objects in 106 s |
+| Arm joins mid-run | 1 real arm, second plugged in by USB | joins the plan in under 1 s; steps the first arm could not reach become possible |
+| Build a 14-box pyramid | 3 simulated arms (MuJoCo, rendered in Isaac Sim), arms join after 3 and 7 boxes | 28 of 28 steps in 110.5 s, no arm-to-arm contact (closest 6.3 cm) |
+| Planner | 6 desk objects, measured step times | 1 arm reaches 4 of 6 (1:56); 2 arms tidy 6 of 6 (2:12), limit: the shared tray |
+| X-VLA fine-tune | 41 episodes, 7000 steps, batch 16 | open-loop error 0.9 degrees on recorded frames (training frames) |
+| Grasp aim | per-arm correction fitted on 26 logged grasps | 0.9 cm rms |
+
+**What the measurements taught us.** With every arm's 50 Hz loop, the IK and the executor in one
+Python process, a long IK solve on one arm delays the other arm's commands (bus commands rise from
+about 1.7 ms to over 20 ms, and single ticks stall). The logs separate this from bus faults and
+from an arm lagging its commands, and point to the next step: one process per arm behind the same
+contract (`docs/PHASE_IMPROVEMENT_PLAN.md`).
+
+## The weekend in numbers
+
+| | |
+|---|---|
+| Time | 34 hours, first commit Saturday 10:09 |
+| People | 6, in three teams (Hardware, Action, Operations) |
+| Commits | 318 on `main`, 361 across branches |
+| Pull requests and issues | 28 and 23 |
+| Code | 82 Python source files, about 15,000 lines |
+| Tests | 397 test functions in 46 files, run on every push |
+| Models and data | 1 X-VLA, 1 SmolVLA and 1 ACT policy trained; 2 public datasets |
+
+## Team
+
+| Team | People | Built |
+|---|---|---|
+| Hardware | Diego, Om | The rig and its calibration; the vision-guided sorter (tag-based box localisation, calibrated IK, grasp aim fitting, smooth straight-line motion, stop latch); the bridge that puts the real arms behind the common contract; sim-to-real checks |
+| Action | Vivek, Sahil | The skill layer (`pick`, `place`, the `SkillWorker`), the MuJoCo arms, measured durations; the recording studio and datasets; X-VLA, SmolVLA and ACT training; the three-arm Isaac Sim demonstration |
+| Operations | Vato, Aravind | The task format, the planners (greedy, HEFT, CP-SAT) and lower bound, the executor with live re-split, plug-in detection, the Orchestra dashboard, the Qwen3-VL perception pipeline and reachability, real-arm integration and the run analysis |
+
+## Related work
+
+Multi-arm task allocation has been studied as scheduling with temporal and spatial constraints
+([Tercio](https://people.csail.mit.edu/gombolay/Publications/Gombolay_TRO_2018.pdf)), as LLM
+dialogue between per-arm agents ([RoCo](https://arxiv.org/html/2307.04738)), and as LLM-built
+dependency graphs scheduled across robots ([SMART-LLM](https://arxiv.org/html/2309.10062),
+[RoboPARA](https://arxiv.org/html/2506.06683v2)). Industrial controllers such as
+[ABB MultiMove](https://library.e.abb.com/public/734fb908d1c8ee50c12576dd005b69d0/ABB%20MultiMove%20functionality.pdf)
+synchronise up to four robots from hand-written programs. Orchestra's focus is different: arms
+that come and go at run time, a finish-time prediction with its binding constraint named, and
+skills, scripted or learned, that are written for one arm and reused unchanged. Background and
+sources: [`research/`](research/).
+
+## Next
+
+- One process per arm, so no arm's computation can delay another's control loop.
+- Success rates for the learned policies per arm, and a learned single-arm skill deployed across arms.
+- Place steps that lock the shared area only for the drop, to cut waiting at the tray.
+
+The rest of this README is the working manual: how the system fits together, and how to set up
+and run every part. Plan and teams: [`docs/plan.md`](docs/plan.md). Status: [`STATUS.md`](STATUS.md).
 
 ## How it works
 
