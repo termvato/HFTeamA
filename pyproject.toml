@@ -22,6 +22,17 @@ camera = ["opencv-python>=4.7,<5", "imageio-ffmpeg>=0.5"]
 arms = ["pyserial>=3.5"]
 # Orchestra dashboard API (python -m hfteama.demo ... --orchestra).
 orchestra = ["fastapi>=0.115", "uvicorn>=0.30"]
+# Real arms through the sorter (docs/hardware/sorter.md): overhead camera, Feetech followers via
+# LeRobot (the version the rig runs), planner, live screen, Rerun viewer. scripts/setup_sorter.sh
+# (OpenCV comes with LeRobot as opencv-python-headless: with ArUco; a second cv2 would clash.)
+sorter = [
+    "pyserial>=3.5",
+    "lerobot[feetech]==0.7.0",
+    "ortools>=9.10",
+    "dash>=2.17",
+    "plotly>=5.22",
+    "rerun-sdk>=0.33",
+]
 # Real arms: LeRobot installed from source (see docs/plan.md), not pinned here.
 dev = [
     "pytest>=8.0",
@@ -52,3 +63,4 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/validation/*" = ["E501", "E401", "E702", "F401", "I001"]  # one-off check scripts
+"vla/*" = ["E501"]  # LeRobot helper scripts with long command lines

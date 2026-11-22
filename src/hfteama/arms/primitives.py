@@ -111,6 +111,12 @@ def check_joints(q: np.ndarray) -> None:
             raise MotionError(f"joint limit: {name}")
 
 
+def clip_to_limits(q: np.ndarray) -> np.ndarray:
+    """`q` with every joint pulled inside its limit (an arm can rest on a stop past the model's)."""
+    q = np.asarray(q, float)
+    return np.array([np.clip(v, *LIMITS_RAD[n]) for v, n in zip(q, JOINTS, strict=False)])
+
+
 PATH_CLEARANCE_M = 0.005  # the tool centre may not dip closer than this to the table mid-move
 
 

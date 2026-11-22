@@ -61,6 +61,12 @@ class _RealRig:
         return self._started
 
 
+def default_poses(task_dir: Path, real: bool) -> str:
+    """poses_real.json for a real run when the task has one, else poses.json."""
+    real_file = task_dir / "poses_real.json"
+    return str(real_file if real and real_file.exists() else task_dir / "poses.json")
+
+
 def _summary(log: EventLog, graph_size: int) -> tuple[int, list[str]]:
     ends = [e for e in log.read() if e.kind == "task_end"]
     ok = {e.task for e in ends if e.outcome == "ok"}
@@ -70,7 +76,12 @@ def _summary(log: EventLog, graph_size: int) -> tuple[int, list[str]]:
 
 def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--backend", choices=("real", "sim"), default="real")
+    ap.add_argument(
+        "--backend",
+        choices=("real", "sim", "sorter"),
+        default="real",
+        help="sorter: real arms through hfteama.sorter (calibrated IK, per-arm aim corrections)",
+    )
     ap.add_argument("--task", default=str(ROOT / "tasks" / "sort" / "sort12.json"))
     ap.add_argument(
         "--poses", default=None, help="default: poses_real.json (real) / poses.json (sim)"
@@ -85,6 +96,13 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         "--view", action="store_true", help="serve the live screen; its Go button starts"
     )
     ap.add_argument("--port", type=int, default=8050)
+    ap.add_argument(
+        "--timeout-factor",
+        type=float,
+        default=2.5,
+        help="a step is cancelled after this x its arm's measured 80th-percentile time "
+        "(Operations' open decision: 1.5 cancels the occasional slow step)",
+    )
     ap.add_argument("--yes", action="store_true", help="sim only: skip the typed confirmations")
     ap.add_argument(
         "--inject",
@@ -95,22 +113,30 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     args = ap.parse_args(argv)
 
-    real = args.backend == "real"
+    real = args.backend in ("real", "sorter")
     if real and args.yes:
         ap.error("--yes is for the simulator only: real arms always need the typed confirmations")
     if real and args.inject:
         ap.error("--inject is for the simulator only")
     task_dir = Path(args.task).parent
-    poses_path = args.poses or str(task_dir / ("poses_real.json" if real else "poses.json"))
+    poses_path = args.poses or default_poses(task_dir, real)
     graph, poses = load(args.task), Poses.load(poses_path)
     arm_ids = [a for a in args.arms.split(",") if a]
     if not arm_ids and not args.watch:
         ap.error("give --arms (ids) or --watch")
 
     log_path = Path(args.log or ROOT / "runs" / time.strftime("%Y%m%d-%H%M%S") / "events.jsonl")
+    log_path.unlink(missing_ok=True)  # a log is one run: never mix this run's steps with an old one
     log = EventLog(log_path)
     clock = Clock()  # real arms always run on the scale-1 clock (heartbeats are wall times)
-    ex = Executor(graph, log, clock=clock, method=args.method, catalog=arm_ids)
+    ex = Executor(
+        graph,
+        log,
+        clock=clock,
+        method=args.method,
+        catalog=arm_ids,
+        timeout_measured=args.timeout_factor,
+    )
     stop_requested = threading.Event()
     sigints = 0
 
@@ -136,7 +162,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             if ask("Type 'yes' to connect the arms: ").strip() != "yes":
                 print("not confirmed: nothing was connected.")
                 return 2
-            factory = real_worker_factory(args.config, poses)
+            if args.backend == "sorter":
+                from hfteama.sorter.bridge import sorter_worker_factory
+
+                factory = sorter_worker_factory(poses, pairs_config=args.pairs)
+            else:
+                factory = real_worker_factory(args.config, poses)
         else:
             table = SimTable(poses, arm_ids=arm_ids or None, speed=1.0).__enter__()
             factory = sim_worker_factory(table, poses)

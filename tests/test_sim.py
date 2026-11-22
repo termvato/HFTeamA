@@ -197,3 +197,45 @@ def test_bins_are_drawn_as_floor_markers_that_never_collide(table: SimTable) -> 
         assert marker in names, names
         g = m.geom(marker)
         assert g.contype == 0 and g.conaffinity == 0  # decoration only: a block can be set on it
+
+
+REST_POSES = Poses(
+    locations={"bowl": [0.3, 0.1, 0.03]},
+    radii={"bowl": 0.12},
+    objects={"block_01": [0.2, 0.0, 0.015]},
+    arms={
+        "arm_a": {"base": [0.0, 0.0, 0.0], "yaw": 0.0, "rest": [0.0, -1.7, 1.5, 1.2, -1.6]},
+        "arm_b": {"base": [0.0, 0.6, 0.0], "yaw": 0.0},
+    },
+)
+
+
+def test_each_arm_can_have_its_own_rest_pose_and_parks_back_to_it() -> None:
+    with SimTable(REST_POSES, speed=SPEED) as t:
+        a, b = t.driver("arm_a"), t.driver("arm_b")
+        assert a.read_joints()[:5] == pytest.approx([0.0, -1.7, 1.5, 1.2, -1.6], abs=1e-3)
+        assert b.read_joints()[1] == pytest.approx(-1.6, abs=1e-3)  # the default rest pose
+        a.move_to(np.array([0.2, 0.0, 0.1]))
+        a.park()
+        assert a.read_joints()[:5] == pytest.approx([0.0, -1.7, 1.5, 1.2, -1.6], abs=0.03)
+
+
+def test_marker_size_follows_the_poses_radii() -> None:
+    with SimTable(REST_POSES, speed=SPEED) as t:
+        assert t._model.geom("marker_bowl").size[0] == pytest.approx(0.12)
+
+
+def test_aliases_of_one_place_are_drawn_once() -> None:
+    poses = Poses(
+        locations={"bowl": [0.3, 0.1, 0.03]},
+        per_arm={"arm_a": {"own_output_bin": [0.3, 0.1, 0.03]}},  # the same bowl, per arm
+        arms={"arm_a": {"base": [0.0, 0.0, 0.0], "yaw": 0.0}},
+    )
+    with SimTable(poses, speed=SPEED) as t:
+        m = t._model
+        at_bowl = [
+            g
+            for g in range(m.ngeom)
+            if m.geom(g).name.startswith("marker_") and abs(m.geom_pos[g][0] - 0.3) < 1e-6
+        ]
+        assert len(at_bowl) == 1  # two discs at one spot flicker (z-fighting)

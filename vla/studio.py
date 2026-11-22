@@ -73,8 +73,8 @@ def resolve_ports(cfg):
         if serial not in now:
             raise RuntimeError(f"{name} is not plugged in (follower: is its 12 V supply on?)")
         if not os.access(now[serial], os.R_OK | os.W_OK):
-            import grp
             import getpass
+            import grp
 
             if getpass.getuser() in grp.getgrnam("dialout").gr_mem:  # joined after this session began
                 raise RuntimeError(f"{name} is on {now[serial]}. You are in the dialout group, but the "

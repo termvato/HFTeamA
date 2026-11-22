@@ -16,7 +16,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from hfteama.vision.table import CameraPose, Intrinsics, pixel_to_table, project, table_grid
+from hfteama.vision.table import (
+    CameraPose,
+    Intrinsics,
+    centre_pixel,
+    pixel_to_table,
+    project,
+    table_grid,
+)
 
 MM_PER_PX = 1.0
 
@@ -38,6 +45,7 @@ class Piece:
     yaw: float  # rad, table frame: direction of the short side (the closing direction)
     area_cm2: float
     outline: np.ndarray = field(repr=False, default_factory=lambda: np.zeros((0, 2)))  # table xy
+    tag_id: int | None = None  # the tag on its top, if found by tag
 
 
 @dataclass
@@ -164,8 +172,14 @@ def find_pieces(
     max_area_cm2: float = 80.0,
     grasp_z: float = 0.015,
     ignore: dict | None = None,
+    max_length: float = 0.15,
+    box_dims: tuple[float, float, float] | None = None,
 ):
     """Pieces inside `extent` (x0, x1, y0, y1). Returns (pieces, mask, top_down image).
+
+    box_dims: (length, width, height) m of the pieces when they are all the same box: each
+    blob is then fitted with the silhouette such a box casts on the table seen from the
+    camera (top and sides), which gives the centre of its base (fit_box).
 
     ignore: colours of things that are never pieces (the arms, their wrist cameras); see
     _ignored."""
@@ -199,6 +213,8 @@ def find_pieces(
         if not (min_area_cm2 <= area <= max_area_cm2):
             continue
         (u, v), (w, h), ang = cv2.minAreaRect(c)
+        if max(w, h) * MM_PER_PX / 1000 > max_length:
+            continue  # a cable or the table's edge, not a piece
         xy = _from_px(np.array([[u, v]]), extent)[0]
         # the blob is drawn on z = 0, but the camera sees the piece's top: re-cast the
         # centre at the grasp height so the grasp point sits over the piece
@@ -209,23 +225,86 @@ def find_pieces(
         a = np.radians(ang)
         side_w = np.array([np.cos(a), -np.sin(a)])
         short = side_w if w <= h else np.array([-side_w[1], side_w[0]])
+        yaw = float(np.arctan2(short[1], short[0]))
+        length, width = max(w, h) * MM_PER_PX / 1000, min(w, h) * MM_PER_PX / 1000
+        outline = _from_px(c.reshape(-1, 2).astype(float), extent)
+        if box_dims is not None:
+            bx, by, byaw = fit_box(outline, box_dims, pose.position, xy, yaw)
+            xy, yaw = np.array([bx, by]), byaw
+            length, width = max(box_dims[:2]), min(box_dims[:2])
         pieces.append(
             Piece(
                 x=float(xy[0]),
                 y=float(xy[1]),
-                length=max(w, h) * MM_PER_PX / 1000,
-                width=min(w, h) * MM_PER_PX / 1000,
-                yaw=float(np.arctan2(short[1], short[0])),
+                length=length,
+                width=width,
+                yaw=yaw,
                 area_cm2=float(area),
-                outline=_from_px(c.reshape(-1, 2).astype(float), extent),
+                outline=outline,
             )
         )
     return pieces, mask, top
 
 
+def box_silhouette(x, y, yaw, dims, camera_position) -> np.ndarray:
+    """Table outline (z = 0) of what a box (length, width, height) standing at (x, y), turned
+    by yaw (its width axis heading, rad), hides from the camera: the hull of its base and of
+    its top corners cast along the camera rays onto the table."""
+    L, W, H = dims
+    u = np.array([np.cos(yaw), np.sin(yaw)])  # width axis
+    v = np.array([-u[1], u[0]])  # length axis
+    base = np.array([[x, y] + su * W / 2 * u + sv * L / 2 * v for su in (-1, 1) for sv in (-1, 1)])
+    o = np.asarray(camera_position, float)
+    top = o[:2] + (base - o[:2]) * o[2] / (o[2] - H)
+    return _hull(np.concatenate([base, top]))
+
+
+def fit_box(outline, dims, camera_position, xy0, yaw0, mm: float = 1.0):
+    """(x, y, yaw) of the box base whose silhouette best overlaps `outline` (table xy, the
+    blob's contour), searched around (xy0, yaw0). The silhouette is the box's base plus its
+    top seen from the camera, so the result is the base centre, not the blob centre."""
+    import cv2
+
+    outline = np.asarray(outline, float)
+    pad = 0.05
+    x0, y0 = outline.min(0) - pad
+    x1, y1 = outline.max(0) + pad
+    shape = (int((y1 - y0) * 1000 / mm) + 1, int((x1 - x0) * 1000 / mm) + 1)
+
+    def raster(poly):
+        img = np.zeros(shape, np.uint8)
+        px = np.round((np.asarray(poly) - [x0, y0]) * 1000 / mm).astype(np.int32)
+        cv2.fillPoly(img, [px], 1)
+        return img
+
+    blob = raster(outline).astype(bool)
+
+    def iou(x, y, yaw):
+        sil = raster(box_silhouette(x, y, yaw, dims, camera_position)).astype(bool)
+        return (blob & sil).sum() / max((blob | sil).sum(), 1)
+
+    # start from the blob centre pulled back by the top's shift, then refine on a grid
+    o = np.asarray(camera_position, float)
+    k = o[2] / (o[2] - dims[2] / 2)
+    best = (iou(*xy0, yaw0), *xy0, yaw0)
+    start = o[:2] + (np.asarray(xy0) - o[:2]) / k
+    best = max(best, (iou(*start, yaw0), *start, yaw0))
+    for step, span in ((0.004, 0.03), (0.001, 0.005)):
+        _, bx, by, byaw = best
+        for dyaw in np.radians([-8, -4, 0, 4, 8]) if step > 0.002 else [0.0]:
+            for dx in np.arange(-span, span + 1e-9, step):
+                for dy in np.arange(-span, span + 1e-9, step):
+                    cand = (iou(bx + dx, by + dy, byaw + dyaw), bx + dx, by + dy, byaw + dyaw)
+                    if cand[0] > best[0]:
+                        best = cand
+    _, bx, by, byaw = best
+    return float(bx), float(by), float(byaw)
+
+
 def _ignored(top, lab, ig: dict):
-    """Mask of large dark grey/black or green regions (the black and the green arm, the
-    wrist cameras, cables), grown by ig["grow"] m so their edges and servo wires go too.
+    """Mask of large dark grey/black or green regions reaching the back edge (the black and
+    the green arm, the wrist cameras, cables), grown by ig["grow"] m so their edges and servo
+    wires go too.
     Small dark or green spots (a cap, a logo) stay: pieces are never removed for a detail."""
     import cv2
 
@@ -239,9 +318,14 @@ def _ignored(top, lab, ig: dict):
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((15, 15), np.uint8))
     n, lab_cc, stats, _ = cv2.connectedComponentsWithStats(m)
     min_px = ig.get("min_area_cm2", 15.0) / (MM_PER_PX / 10) ** 2
+    # the arms come in from the back of the table (the image's last rows): a dark or green
+    # region that doesn't reach that edge is a piece's print, not an arm
+    band = int(ig.get("back_band", 0.03) * 1000 / MM_PER_PX)
+    rows = m.shape[0]
     big = np.zeros_like(m)
     for i in range(1, n):
-        if stats[i, cv2.CC_STAT_AREA] >= min_px:
+        reaches_back = stats[i, cv2.CC_STAT_TOP] + stats[i, cv2.CC_STAT_HEIGHT] >= rows - band
+        if stats[i, cv2.CC_STAT_AREA] >= min_px and (reaches_back or not ig.get("from_back", True)):
             big[lab_cc == i] = 255
     g = max(1, int(ig.get("grow", 0.02) * 1000 / MM_PER_PX))
     return cv2.dilate(big, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * g + 1, 2 * g + 1)))
@@ -286,14 +370,61 @@ def _from_px(uv, extent):
     )
 
 
-def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chains=()) -> Scene:
+def pieces_from_tags(dets, pose: CameraPose, intr: Intrinsics, pc: dict, extent) -> list[Piece]:
+    """One piece per small tag lying on a box top: the tag centre cast onto the plane of the
+    top (object_height) is the box centre; the tag's edge gives its turn. A tag whose side
+    on that plane is not about tag_size (tolerance tag_size_tol) is not on a box top."""
+    t = pc["tags"]
+    size, tol = t.get("size", 0.03), t.get("size_tol", 0.2)
+    H = pc["object_height"]
+    L, W = pc.get("object_length", pc["object_width"]), pc["object_width"]
+    x0, x1, y0, y1 = extent
+    out = []
+    for tag_id, c in dets:
+        # centre = crossing of the diagonals (exact under perspective, unlike the mean)
+        P = pixel_to_table(np.vstack([c, [centre_pixel(c)]]), pose, intr, H)[:, :2]
+        corners, centre = P[:4], P[4]
+        side = float(np.mean(np.linalg.norm(corners - np.roll(corners, 1, axis=0), axis=1)))
+        if abs(side - size) > tol * size or not (x0 <= centre[0] <= x1 and y0 <= centre[1] <= y1):
+            continue
+        e = corners[1] - corners[0]
+        yaw = float(np.arctan2(e[1], e[0]))
+        u = np.array([np.cos(yaw), np.sin(yaw)])
+        v = np.array([-u[1], u[0]])
+        base = [
+            centre + su * W / 2 * u + sv * L / 2 * v
+            for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+        ]
+        out.append(
+            Piece(
+                x=float(centre[0]),
+                y=float(centre[1]),
+                length=max(L, W),
+                width=min(L, W),
+                yaw=yaw,
+                area_cm2=L * W * 1e4,
+                outline=np.array(base),
+                tag_id=tag_id,
+            )
+        )
+    return out
+
+
+def detect_scene(
+    image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chains=(), piece_tags=None
+) -> Scene:
     """Box and pieces, with the masks from the sorter config (configs/sorter.json).
 
     arm_chains: the arms' current polylines in the table frame (from FK), masked out with
-    their shadows; without them only a disc around each base is masked."""
+    their shadows; without them only a disc around each base is masked.
+    piece_tags: [(id, corners)] of the small tags seen (not the reference ones); with
+    pieces.tags.enabled the pieces come from them (pieces_from_tags) instead of colour."""
     tags = {int(k): tuple(v) for k, v in cfg["table"]["tags"].items()}
-    extent = region_extent(tags)
     bc, pc = cfg["box"], cfg["pieces"]
+    # the area searched for pieces: the tag rectangle grown by region_margin on every side
+    m = pc.get("region_margin", 0.0)
+    x0, x1, y0, y1 = region_extent(tags)
+    extent = (x0 - m, x1 + m, y0 - m, y1 + m)
     box = find_box(image, pose, intr, extent, bc["diameter"], bc["height"])
     discs = [(*a["base"], a.get("mask_radius", 0.12)) for a in cfg["arms"].values()]
     polys = []
@@ -314,7 +445,17 @@ def detect_scene(image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chain
         colour_threshold=pc.get("colour_threshold", 25.0),
         min_area_cm2=pc.get("min_area_cm2", 1.0),
         max_area_cm2=pc.get("max_area_cm2", 80.0),
-        grasp_z=pc.get("grasp_z", 0.015),
+        grasp_z=pc.get("centre_z", pc.get("grasp_z", 0.015)),
         ignore=pc.get("ignore"),
+        max_length=pc.get("max_length", 0.15),
+        box_dims=(
+            (pc["object_length"], pc["object_width"], pc["object_height"])
+            if pc.get("fit_box") and "object_height" in pc
+            else None
+        ),
     )
+    if pc.get("tags", {}).get("enabled") and piece_tags is not None:
+        pieces = pieces_from_tags(piece_tags, pose, intr, pc, extent)
+    if box is not None:  # pieces already dropped in the box are done
+        pieces = [p for p in pieces if np.hypot(p.x - box.x, p.y - box.y) > box.radius]
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)

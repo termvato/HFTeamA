@@ -132,8 +132,9 @@ def _pick_waypoints(p: np.ndarray, yaw: float | None, carry: np.ndarray | None) 
     return points + ([(carry, None)] if carry is not None else [])
 
 
-def _place_waypoints(p: np.ndarray) -> list[Waypoint]:
-    return [(_above(p, APPROACH_DZ), None), (_above(p, GRASP_DZ), None)]
+def _place_waypoints(p: np.ndarray, carry: np.ndarray | None = None) -> list[Waypoint]:
+    points: list[Waypoint] = [(_above(p, APPROACH_DZ), None), (_above(p, GRASP_DZ), None)]
+    return points + ([(carry, None)] if carry is not None else [])
 
 
 def _retreat_on_failure(
@@ -188,14 +189,16 @@ def _do_pick(
     _retreat_on_failure(arm, p, run, yaw, safe=carry)
 
 
-def _do_place(arm: ArmDriver, p: np.ndarray) -> None:
+def _do_place(arm: ArmDriver, p: np.ndarray, carry: np.ndarray | None = None) -> None:
     def run() -> None:
         _move(arm, _above(p, APPROACH_DZ))
         _move(arm, _above(p, GRASP_DZ))
         arm.open_gripper()
-        _move(arm, _above(p, APPROACH_DZ))
+        _move(arm, _above(p, APPROACH_DZ))  # straight up first,
+        if carry is not None:  # then out of the shared area: the executor frees its lock now
+            _move(arm, carry)
 
-    _retreat_on_failure(arm, p, run)
+    _retreat_on_failure(arm, p, run, safe=carry)
 
 
 @_register("pick")
@@ -208,18 +211,18 @@ def pick(arm: ArmDriver, task: Task, poses: Poses) -> None:
 
 @_register("place")
 def place(arm: ArmDriver, task: Task, poses: Poses) -> None:
-    p = place_point(task, poses, arm.arm_id)
-    _validate(arm, _place_waypoints(p))
-    _do_place(arm, p)
+    p, carry = place_point(task, poses, arm.arm_id), _carry_point(poses, arm.arm_id)
+    _validate(arm, _place_waypoints(p, carry))
+    _do_place(arm, p, carry)
 
 
 @_register("pick_place")
 def pick_place(arm: ArmDriver, task: Task, poses: Poses) -> None:
     pp, qq = pick_point(task, poses, arm.arm_id), place_point(task, poses, arm.arm_id)
     carry, yaw = _carry_point(poses, arm.arm_id), pick_yaw(task)
-    _validate(arm, _pick_waypoints(pp, yaw, carry) + _place_waypoints(qq))  # before a part is held
+    _validate(arm, _pick_waypoints(pp, yaw, carry) + _place_waypoints(qq, carry))  # before a grasp
     _do_pick(arm, pp, carry, yaw)
-    _do_place(arm, qq)
+    _do_place(arm, qq, carry)
 
 
 @_register("inspect")

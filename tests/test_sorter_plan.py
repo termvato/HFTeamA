@@ -123,3 +123,76 @@ def test_grasp_aim_turns_with_the_jaws() -> None:
     a90 = np.subtract(arm.aim(0.2, 0.2, np.pi / 2), (0.2, 0.2))
     assert a0 == pytest.approx([0.02, 0.0])
     assert a90 == pytest.approx([0.0, 0.02])
+
+
+def test_aim_table_interpolates_by_bearing_and_holds_at_the_ends() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, aim_table=((-20.0, 0.02, 0.06, 0.0), (60.0, -0.02, -0.04, -0.004)))
+    ahead = p.to_table([0.2, 0.0])  # bearing 0: a quarter of the way
+    assert arm.correction(*ahead) == pytest.approx((0.01, 0.035, -0.001))
+    far_right = p.to_table([0.1, -0.2])  # beyond -20 deg: held at the first knot
+    assert arm.correction(*far_right) == pytest.approx((0.02, 0.06, 0.0))
+
+
+def test_arm_only_takes_pieces_in_its_bearing_range() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, bearing_range=(-90.0, 5.0))
+    assert arm.takes(0.65, 0.15)  # to its right
+    assert not arm.takes(0.45, 0.15)  # to its left
+    scene = Scene(box=Box(0.6, 0.25, 0.09), pieces=[piece(0.45, 0.15), piece(0.65, 0.15)])
+    plan = make_plan(scene, {"rakesh": arm}, CFG)
+    assert [round(p.piece.x, 2) for p in plan.picks] == [0.65]
+    assert len(plan.unreachable) == 1
+
+
+def test_fit_aim_affine_recovers_a_turn_about_the_base() -> None:
+    from hfteama.sorter.geometry import fit_aim_affine
+
+    p = Placement(0.571, -0.015, np.radians(90))
+    a = np.radians(10)
+    gain = ((np.cos(a) - 1, -np.sin(a)), (np.sin(a), np.cos(a) - 1))
+    arm = ArmModel("rakesh", p, None, (0.01, 0.03), (0.015, -0.005), aim_gain=gain)
+    entries = []
+    rng = np.random.default_rng(0)
+    for _ in range(12):
+        cam = (0.571 + rng.uniform(-0.15, 0.1), rng.uniform(0.1, 0.25))
+        h = rng.uniform(-np.pi, np.pi)
+        entries.append({"camera": cam, "aim": arm.aim(*cam, h), "heading_deg": np.degrees(h)})
+    aim, jaw, G, rms = fit_aim_affine(entries, p)
+    assert aim == pytest.approx([0.01, 0.03], abs=1e-9)
+    assert jaw == pytest.approx([0.015, -0.005], abs=1e-9)
+    assert G == pytest.approx(np.array(gain), abs=1e-9)
+    assert rms < 1e-9
+
+
+def test_z_by_distance_lowers_close_pieces() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, z_by_distance=((0.18, -0.005), (0.28, 0.0)))
+    near, mid, far = (p.to_table([r, 0.0]) for r in (0.15, 0.23, 0.30))
+    assert arm.correction(*near)[2] == pytest.approx(-0.005)
+    assert arm.correction(*mid)[2] == pytest.approx(-0.0025)
+    assert arm.correction(*far)[2] == pytest.approx(0.0)
+
+
+def test_arm_only_takes_pieces_on_its_half_of_the_table() -> None:
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, x_range=(0.367, 1.0))
+    assert arm.takes(0.45, 0.2)
+    assert not arm.takes(0.30, 0.2)  # reachable, but hacklab's half
+
+
+def test_square_piece_keeps_the_wrist_near_its_middle() -> None:
+    from hfteama.arms.kinematics import ArmFrame
+    from hfteama.arms.so101_ik import LOWER, UPPER, roll_window, solve_ik
+
+    frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, "wrist_roll": 90.0})
+    limits = roll_window((LOWER, UPPER), frame, 0.0, 90.0)
+    p = Placement(0.571, -0.015, np.radians(90))
+    arm = ArmModel("rakesh", p, limits, square=True)
+    mid = (limits[0][4] + limits[1][4]) / 2
+    x, y = p.to_table([0.2, -0.05])[:2]
+    for yawdeg in range(0, 180, 15):
+        sq = Piece(x, y, 0.058, 0.058, np.radians(yawdeg), 33.6)
+        ax, ay, yaw, _, _ = arm.grasp_aim(sq, 0.08)
+        q = solve_ik(p.to_arm([ax, ay, 0.08]), yaw=yaw, limits=limits).q
+        assert abs(np.degrees(q[4] - mid)) <= 47, yawdeg

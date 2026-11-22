@@ -1,8 +1,8 @@
-"""Record the simulated arms sorting a batch to an .mp4, driven by the real executor.
+"""Record the simulated arms sorting a batch to an .mp4 (default: the real table).
 
-    python scripts/record_sim_video.py                     # sort12, 3 arms, one injected grasp miss
-    python scripts/record_sim_video.py --out runs/demo.mp4 --inject arm_b:grasp --inject arm_c:grasp
-    python scripts/record_sim_video.py --arms arm_a --task tasks/sort/sort12.json   # one arm
+    python scripts/record_sim_video.py                     # the real table (hacklab), a grasp miss
+    python scripts/record_sim_video.py --layout sort        # the original 3-arm ring
+    python scripts/record_sim_video.py --inject rakesh_follower:grasp --inject vato_follower:grasp
 
 It is the same wiring as `python -m hfteama.runner --backend sim`: executor, planner, SkillWorker,
 simulated arms. Frames are taken every 1/fps seconds of SIMULATED time, so the video plays at true
@@ -30,10 +30,31 @@ from hfteama import runner  # noqa: E402
 from hfteama.arms.sim import SimTable  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
-CAPTION = "HFTeamA | MuJoCo {ver} | 3 x SO-101 | sim t = {t:5.1f} s"
+CAPTION = "HFTeamA | MuJoCo {ver} | {n} x SO-101 | sim t = {t:5.1f} s"
 
 
-def _make_recorder(out: Path, fps: int, width: int, height: int, shadows: bool) -> type[SimTable]:
+# Camera per layout: lookat (x, y, z), distance, azimuth, elevation. 'hacklab' is the real table.
+LAYOUTS: dict[str, dict] = {
+    "sort": {
+        "task": "tasks/sort/sort12.json",
+        "poses": "tasks/sort/poses.json",
+        "arms": "arm_a,arm_b,arm_c",
+        "inject": ["arm_b:grasp"],
+        "cam": ((0.0, 0.0, 0.04), 0.95, 90.0, -52.0),
+    },
+    "hacklab": {
+        "task": "tasks/hacklab/hacklab12.json",
+        "poses": "tasks/hacklab/poses.json",
+        "arms": "rakesh_follower,vato_follower",
+        "inject": ["vato_follower:grasp"],
+        "cam": ((0.29, 0.26, 0.04), 1.05, 90.0, -48.0),
+    },
+}
+
+
+def _make_recorder(
+    out: Path, fps: int, width: int, height: int, shadows: bool, cam_spec: tuple
+) -> type[SimTable]:
     import imageio.v2 as imageio
     from PIL import Image, ImageDraw
 
@@ -55,8 +76,8 @@ def _make_recorder(out: Path, fps: int, width: int, height: int, shadows: bool) 
             writer = imageio.get_writer(str(out), fps=fps, codec="libx264", macro_block_size=1)
             renderer = mujoco.Renderer(self._model, height, width)  # created in this thread (GL)
             cam = mujoco.MjvCamera()
-            cam.lookat[:] = [0.0, 0.0, 0.04]
-            cam.distance, cam.azimuth, cam.elevation = 0.95, 90.0, -52.0
+            lookat, cam.distance, cam.azimuth, cam.elevation = cam_spec
+            cam.lookat[:] = lookat
             next_t = self.sim_time()
             try:
                 while not self._quit.is_set():
@@ -70,7 +91,9 @@ def _make_recorder(out: Path, fps: int, width: int, height: int, shadows: bool) 
                         renderer.scene.flags[mujoco.mjtRndFlag.mjRND_SHADOW] = 0
                     img = Image.fromarray(renderer.render())
                     ImageDraw.Draw(img).text(
-                        (12, 10), CAPTION.format(ver=mujoco.__version__, t=t), fill=(255, 255, 255)
+                        (12, 10),
+                        CAPTION.format(ver=mujoco.__version__, n=len(self.arm_ids), t=t),
+                        fill=(255, 255, 255),
                     )
                     writer.append_data(np.asarray(img))
                     self._frames += 1
@@ -85,11 +108,12 @@ def _make_recorder(out: Path, fps: int, width: int, height: int, shadows: bool) 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--out", default=str(ROOT / "runs" / "sim_sort12.mp4"))
-    ap.add_argument("--task", default=str(ROOT / "tasks" / "sort" / "sort12.json"))
-    ap.add_argument("--poses", default=str(ROOT / "tasks" / "sort" / "poses.json"))
-    ap.add_argument("--arms", default="arm_a,arm_b,arm_c")
-    ap.add_argument("--inject", action="append", default=["arm_b:grasp"], metavar="ARM:KIND")
+    ap.add_argument("--layout", choices=sorted(LAYOUTS), default="hacklab")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--task", default=None)
+    ap.add_argument("--poses", default=None)
+    ap.add_argument("--arms", default=None)
+    ap.add_argument("--inject", action="append", default=None, metavar="ARM:KIND")
     ap.add_argument("--fps", type=int, default=12)
     ap.add_argument(
         "--shadows", action="store_true", help="prettier, but only ~5 fps: a time-lapse"
@@ -98,12 +122,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--height", type=int, default=720)
     args = ap.parse_args(argv)
 
-    out = Path(args.out)
+    lay = LAYOUTS[args.layout]
+    out = Path(args.out or ROOT / "runs" / f"sim_{args.layout}.mp4")
+    task = args.task or str(ROOT / lay["task"])
+    poses = args.poses or str(ROOT / lay["poses"])
+    arms = args.arms or lay["arms"]
+    inject = args.inject if args.inject is not None else lay["inject"]
     out.parent.mkdir(parents=True, exist_ok=True)
-    runner.SimTable = _make_recorder(out, args.fps, args.width, args.height, args.shadows)  # type: ignore[misc]
-    argv2 = ["--backend", "sim", "--yes", "--task", args.task, "--poses", args.poses]
-    argv2 += ["--arms", args.arms, "--log", str(out.with_suffix(".events.jsonl"))]
-    for spec in args.inject:
+    runner.SimTable = _make_recorder(
+        out, args.fps, args.width, args.height, args.shadows, lay["cam"]
+    )  # type: ignore[misc]
+    argv2 = ["--backend", "sim", "--yes", "--task", task, "--poses", poses]
+    argv2 += ["--arms", arms, "--log", str(out.with_suffix(".events.jsonl"))]
+    argv2 += [
+        "--timeout-factor",
+        "6",
+    ]  # rendering steals CPU: do not cancel steps that are just late
+    for spec in inject:
         argv2 += ["--inject", spec]
     rc = runner.main(argv2)
     print(f"video: {out} ({out.stat().st_size / 1e6:.1f} MB)")

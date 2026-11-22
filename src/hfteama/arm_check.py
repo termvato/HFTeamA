@@ -28,7 +28,7 @@ import numpy as np
 from hfteama.arms.ik import ArmBase, Kinematics
 from hfteama.arms.kinematics import JOINTS, LIMITS_RAD
 from hfteama.arms.poses import Poses
-from hfteama.arms.primitives import ArmDown, MotionError, check_joints
+from hfteama.arms.primitives import ArmDown, MotionError, check_joints, clip_to_limits
 
 ROOT = Path(__file__).resolve().parents[2]
 SLOW = 0.3
@@ -55,6 +55,7 @@ def check_config(
         return ["no arms in the config"]
     poses = Poses.load(poses_path)
     followers = set(followers_from_pairs(pairs_path).values()) if pairs_path else None
+    reached: set[str] = set()
     for arm_id, a in arms.items():
         tag = f"{arm_id}:"
         if not a.get("pair"):
@@ -83,35 +84,53 @@ def check_config(
             else:
                 if kin.fk(np.asarray(park, float))[0][2] < table_z + 0.005:
                     problems.append(f"{tag} the park pose puts the tool centre under the table")
-        problems += _reach_problems(arm_id, kin, poses, table_z)
+        found, can_reach = _reach_problems(arm_id, kin, poses, table_z)
+        problems += found
+        reached |= can_reach
+    problems += [
+        f"no arm can reach {name}: move it into the reach of an arm (or it will never be picked)"
+        for name in poses.objects
+        if name not in reached
+    ]
     return problems
 
 
-def _reach_problems(arm_id: str, kin: Kinematics, poses: Poses, table_z: float) -> list[str]:
+def _reach_problems(
+    arm_id: str, kin: Kinematics, poses: Poses, table_z: float
+) -> tuple[list[str], set[str]]:
+    """What this arm cannot do (bowl, carry pose) and which objects it can pick.
+
+    An object only has to be reachable by one arm, so unreachable objects are reported by the
+    caller once every arm has been looked at.
+    """
     from hfteama.arms.generic_skills import APPROACH_DZ, GRASP_DZ, LIFT_DZ
 
     if not poses.has("own_output_bin", arm_id):
-        return [f"{arm_id}: no entry for arm '{arm_id}' in the poses file (per_arm.{arm_id})"]
+        return [
+            f"{arm_id}: no entry for arm '{arm_id}' in the poses file (per_arm.{arm_id})"
+        ], set()
+
+    def ok(p: np.ndarray, dzs: tuple[float, ...]) -> bool:
+        return all(
+            p[2] + dz >= table_z + 0.01 and kin.solve(p + np.array([0.0, 0.0, dz]), down=True).ok
+            for dz in dzs
+        )
+
     out: list[str] = []
-    picks = (
-        [("input_bin", poses.point("input_bin", arm_id))] if poses.has("input_bin", arm_id) else []
-    )
-    picks += [(n, poses.point(n, arm_id)) for n in poses.objects]
-    checks = [(n, p, (APPROACH_DZ, GRASP_DZ, LIFT_DZ)) for n, p in picks]
-    checks.append(
-        ("own_output_bin", poses.point("own_output_bin", arm_id), (APPROACH_DZ, GRASP_DZ))
-    )
+    places = [("own_output_bin", poses.point("own_output_bin", arm_id), (APPROACH_DZ, GRASP_DZ))]
+    if poses.has("input_bin", arm_id):
+        places.append(("input_bin", poses.point("input_bin", arm_id), (APPROACH_DZ, GRASP_DZ)))
     if poses.has("carry", arm_id):
-        checks.append(("carry", poses.point("carry", arm_id), (0.0,)))
+        places.append(("carry", poses.point("carry", arm_id), (0.0,)))
     else:
         out.append(f"{arm_id}: no 'carry' pose: pick would end hovering over the shared area")
-    for name, p, dzs in checks:
-        for dz in dzs:
-            target = p + np.array([0.0, 0.0, dz])
-            if target[2] < table_z + 0.01 or not kin.solve(target, down=True).ok:
-                out.append(f"{arm_id}: cannot reach {name} at z={target[2]:.3f} m from its base")
-                break
-    return out
+    for name, p, dzs in places:
+        if not ok(p, dzs):
+            out.append(f"{arm_id}: cannot reach {name} from its base")
+    can_reach = {
+        n for n in poses.objects if ok(poses.point(n, arm_id), (APPROACH_DZ, GRASP_DZ, LIFT_DZ))
+    }
+    return out, can_reach
 
 
 # --------------------------------------------------------------------------- passive probe
@@ -169,7 +188,7 @@ def _cmd_read(d: Any, args: argparse.Namespace) -> int:
 
 def _cmd_joint(d: Any, args: argparse.Namespace) -> int:
     idx = JOINTS[:5].index(args.joint)
-    q0 = d.read_joints()[:5]
+    q0 = clip_to_limits(d.read_joints())[:5]  # an arm resting on a stop is past the model limit
     q1 = q0.copy()
     q1[idx] += args.delta
     d.move_joints(q1, speed=SLOW)

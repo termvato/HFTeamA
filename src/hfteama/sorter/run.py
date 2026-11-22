@@ -7,6 +7,7 @@ arm is back at home (its starting, folded pose) and the camera looks again.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +21,7 @@ from hfteama.sorter.geometry import (
     resolve,
     save_placement,
 )
-from hfteama.sorter.plan import ArmModel, Plan, make_plan
+from hfteama.sorter.plan import ArmModel, Plan, make_plan, plan_pick
 
 OUT_DIR = PROJECT_ROOT / "outputs" / "sorter"
 # overlay colour per arm, from the arm's "colour" in the config (BGR)
@@ -61,22 +62,75 @@ class Eye:
         import cv2
 
         from hfteama.vision.detect import detect_scene
-        from hfteama.vision.table import centre_pixel, detect_tags, fit_pose
+        from hfteama.vision.table import (
+            centre_pixel,
+            detect_all_tags,
+            fit_pose,
+            split_reference,
+        )
 
         frame = cv2.imread(self.image) if self.image else self.cam.frame()
         if frame is None:
             raise SystemExit(f"Cannot read {self.image}")
-        found = detect_tags(frame, self.cfg["table"].get("dictionary", "DICT_4X4_50"))
+        all_tags = detect_all_tags(frame, self.cfg["table"].get("dictionary", "DICT_4X4_50"))
+        found, small = split_reference(all_tags, set(self.tags))
+        seen = sorted(i for i in found if i in self.tags)
         pose = fit_pose({i: centre_pixel(c) for i, c in found.items()}, self.tags, self.intr)
         limit = self.cfg["table"].get("max_pose_rms_px", 3.0)
-        if pose is not None and pose.rms_px <= limit:
+        if pose is not None and len(seen) >= 4 and pose.rms_px <= limit:
+            # all 4 tags: a checked pose; keep it for frames where a tag is hidden
             self.pose = pose
-        elif self.pose is None:
-            seen = sorted(i for i in found if i in self.tags)
+            save_pose(pose)
+        elif (cached := self.pose or load_pose()) is not None:
+            # fewer than 4 tags: 3 coplanar points have two solutions and the solver may
+            # pick the wrong one; the camera doesn't move, so use the last 4-tag pose
+            self.pose = cached
+        elif pose is not None and pose.rms_px <= limit:
+            print(
+                f"[camera] only tags {seen} and no saved 4-tag pose: the camera pose may be"
+                " wrong. Uncover all 4 tags once."
+            )
+            self.pose = pose
+        else:
             raise SystemExit(f"Need 3+ reference tags (seen {seen}) to place the camera.")
-        self.found = found
-        scene = detect_scene(frame, self.pose, self.intr, self.cfg, arm_chains)
+        # small tags: on box tops; also kept for `touch` (a tag laid on the table)
+        self.found = {**{i: c for i, c in small}, **found}
+        scene = detect_scene(frame, self.pose, self.intr, self.cfg, arm_chains, small)
         return frame, self.pose, scene
+
+
+POSE_FILE = OUT_DIR / "camera_pose.json"  # the last pose fitted on all 4 tags
+
+
+def save_pose(pose, path=None) -> None:
+    import json
+
+    path = path or POSE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "R": pose.R.tolist(),
+                "t": pose.t.tolist(),
+                "rms_px": pose.rms_px,
+                "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        )
+    )
+
+
+def load_pose(path=None):
+    import json
+
+    from hfteama.vision.table import CameraPose
+
+    path = path or POSE_FILE
+    if not path.exists():
+        return None
+    d = json.loads(path.read_text())
+    return CameraPose(
+        R=np.array(d["R"]), t=np.array(d["t"]), rms_px=d["rms_px"], tags_used=(0, 1, 2, 3)
+    )
 
 
 def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
@@ -85,7 +139,7 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
     import json
 
     from hfteama.arms.kinematics import ArmFrame
-    from hfteama.arms.so101_ik import calibrated_limits
+    from hfteama.arms.so101_ik import calibrated_limits, roll_window
     from hfteama.hardware.pairs import FOLLOWER_CALIBRATION_DIR, read_config
 
     pairs = read_config()["pairs"]
@@ -96,13 +150,31 @@ def arm_models(cfg: dict, sides) -> dict[str, ArmModel]:
         cal = FOLLOWER_CALIBRATION_DIR / f"{pairs[a['pair']]['follower']['id']}.json"
         if cal.exists():
             frame = ArmFrame(offsets_deg={**ArmFrame().offsets_deg, **a.get("offsets_deg", {})})
-            limits = calibrated_limits(json.loads(cal.read_text()), frame)
+            limits = roll_window(
+                calibrated_limits(json.loads(cal.read_text()), frame),
+                frame,
+                a.get("wrist_roll_center_deg", 0.0),
+                cfg["motion"].get("wrist_roll_half_range_deg", 90.0),
+            )
         out[side] = ArmModel(
             side,
             Placement.from_config(a),
             limits,
-            tuple(a.get("aim_offset", (0.0, 0.0))),
-            tuple(a.get("jaw_offset", (0.0, 0.0))),
+            aim_offset=tuple(a.get("aim_offset", (0.0, 0.0))),
+            jaw_offset=tuple(a.get("jaw_offset", (0.0, 0.0))),
+            aim_table=tuple(tuple(r) for r in sorted(a.get("aim_table", []))),
+            aim_gain=tuple(map(tuple, a.get("aim_gain", ((0.0, 0.0), (0.0, 0.0))))),
+            bearing_range=tuple(a.get("bearing_range_deg", (-180.0, 180.0))),
+            z_by_distance=tuple(tuple(r) for r in sorted(a.get("z_by_distance", []))),
+            jaw_ref_width=a.get("jaw_ref_width", 0.025),
+            jaw_width_gain=a.get("jaw_width_gain", 0.0),
+            object_width=cfg["pieces"].get("object_width"),
+            square=abs(
+                cfg["pieces"].get("object_length", 0.0) - cfg["pieces"].get("object_width", 1.0)
+            )
+            < 1e-6,
+            x_range=tuple(a.get("x_range", (-np.inf, np.inf))),
+            drop_offset=tuple(a.get("drop_offset", (0.0, 0.0))),
         )
     return out
 
@@ -124,6 +196,16 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
         poly([[tx - 0.01, ty, 0], [tx + 0.01, ty, 0]], (0, 255, 255), False)
         poly([[tx, ty - 0.01, 0], [tx, ty + 0.01, 0]], (0, 255, 255), False)
     a = np.linspace(0, 2 * np.pi, 60)
+    ty = [v[1] for v in cfg["table"]["tags"].values()]
+    for side, arm in arms.items():
+        for xb in arm.x_range:  # the edge of the arm's half of the table
+            if np.isfinite(xb) and -0.1 < xb < 1.0:
+                poly(
+                    [[xb, min(ty) - 0.035, 0], [xb, max(ty) + 0.035, 0]],
+                    COLOURS.get(side),
+                    False,
+                    2,
+                )
     for side, arm in arms.items():
         p = arm.placement
         circ = [[p.x + 0.30 * np.cos(t), p.y + 0.30 * np.sin(t), 0] for t in a]
@@ -145,21 +227,60 @@ def draw(frame, pose, intr, scene, plan: Plan | None, cfg: dict, arms: dict):
                 img, text, (u + 8, v - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.55 * k, c, int(t * k)
             )
 
+    # the table frame: each tag's id and coordinates, the axes from the origin
+    tags = {int(i): v for i, v in cfg["table"]["tags"].items()}
+    for i, (tx, ty) in tags.items():
+        label([tx, ty, 0], f"tag {i} ({tx:.3f}, {ty:.3f})", (0, 255, 255))
+    o = next((v for v in tags.values() if v[0] == 0 and v[1] == 0), None)
+    if o is not None:
+        for (dx, dy), name in (((0.1, 0), "x"), ((0, 0.1), "y")):
+            a3 = np.round(project([[0, 0, 0], [dx, dy, 0]], pose, intr)).astype(int)
+            cv2.arrowedLine(img, tuple(a3[0]), tuple(a3[1]), (0, 255, 255), int(3 * k))
+            cv2.putText(
+                img,
+                name,
+                tuple(a3[1] + 6),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9 * k,
+                (0, 255, 255),
+                int(2 * k),
+            )
     for side, arm in arms.items():
         p = arm.placement
         u, v = np.round(project([[p.x, p.y, 0]], pose, intr)[0]).astype(int)
         cv2.drawMarker(img, (u, v), COLOURS.get(side), cv2.MARKER_CROSS, int(30 * k), int(3 * k))
         label([p.x, p.y, 0], f"{side} ({p.x:.3f}, {p.y:.3f})", COLOURS.get(side))
+        # how far the arm centre is from the nearest tag, along x and y (what is measured)
+        tx, ty = min(tags.values(), key=lambda t: np.hypot(t[0] - p.x, t[1] - p.y))
+        corner = [p.x, ty, 0]
+        poly([[tx, ty, 0], corner], COLOURS.get(side), False, 2)
+        poly([corner, [p.x, p.y, 0]], COLOURS.get(side), False, 2)
+        label([(tx + p.x) / 2, ty, 0], f"{abs(p.x - tx) * 100:.1f} cm", COLOURS.get(side))
+        label([p.x, (ty + p.y) / 2 - 0.02, 0], f"{abs(p.y - ty) * 100:.1f} cm", COLOURS.get(side))
     if scene.box is not None:
         b = scene.box
         label([b.x, b.y, cfg["box"]["height"]], f"box ({b.x:.3f}, {b.y:.3f})", (255, 0, 255))
     for i, pc in enumerate(scene.pieces, 1):
-        label([pc.x, pc.y, 0], f"   ({pc.x:.3f}, {pc.y:.3f}) {piece_angle(pc):.0f}deg")
+        tag = "" if pc.tag_id is None else f" tag {pc.tag_id}"
+        label([pc.x, pc.y, 0], f"  {tag} ({pc.x:.3f}, {pc.y:.3f})")
         # the piece number, big, just beside the piece: what `sort jog` takes
         u, v = np.round(project([[pc.x, pc.y, 0]], pose, intr)[0]).astype(int)
         org = (u - int(40 * k), v - int(20 * k))
         for c, t in (((0, 0, 0), 6), ((255, 255, 0), 3)):
             cv2.putText(img, str(i), org, cv2.FONT_HERSHEY_SIMPLEX, 1.3 * k, c, int(t * k))
+    pcfg = cfg["pieces"]
+    if pcfg.get("fit_box") and "object_height" in pcfg:
+        # the fitted box: base on the table and top at its height, as the camera sees them
+        L, W, H = pcfg["object_length"], pcfg["object_width"], pcfg["object_height"]
+        for pc in scene.pieces:
+            u = np.array([np.cos(pc.yaw), np.sin(pc.yaw)])
+            v = np.array([-u[1], u[0]])
+            sq = [
+                np.array([pc.x, pc.y]) + su * W / 2 * u + sv * L / 2 * v
+                for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+            ]
+            poly([[*c, 0.0] for c in sq], (255, 0, 255), True, 1)
+            poly([[*c, H] for c in sq], (255, 0, 255), True, 2)
     for pc in scene.pieces:
         # coloured by the arm that takes it; red = nobody can; cyan when there is no plan
         unplanned = (0, 0, 255) if plan else (255, 255, 0)
@@ -198,7 +319,10 @@ def piece_angle(p) -> float:
 
 def report(scene, plan: Plan, arms) -> None:
     """Arm centres, box and every piece (pose in the table frame, metres / degrees)."""
-    print("Table frame: origin tag 0, x -> tag 3, y -> tag 2 (away from the camera), metres.")
+    print(
+        "Table frame (seen from behind the arms): origin tag 1 (back-left), x -> right (tag 2),"
+        " y -> forward to the camera (tags 3, 0), metres."
+    )
     print("\nArm centres (base_link origin):")
     for side, arm in arms.items():
         p = arm.placement
@@ -215,13 +339,14 @@ def report(scene, plan: Plan, arms) -> None:
     print("\nBox:", "not found" if b is None else f"centre x {b.x:.3f}  y {b.y:.3f}")
     side_of = {id(pk.piece): pk for pk in plan.picks}
     print(f"\nPieces: {len(scene.pieces)}")
-    print("   #      x      y   angle   length x width   area  arm    dist")
+    print("   #  tag      x      y   angle   length x width   area  arm    dist")
     for i, p in enumerate(scene.pieces, 1):
         pk = side_of.get(id(p))
         who = pk.side if pk else "-"
         dist = f"{np.hypot(*pk.target_arm[:2]) * 100:.0f} cm" if pk else "unreachable"
         print(
-            f"  {i:2}  {p.x:.3f}  {p.y:.3f}  {piece_angle(p):5.0f}   "
+            f"  {i:2}  {'-' if p.tag_id is None else p.tag_id:>3}  {p.x:.3f}  {p.y:.3f}"
+            f"  {piece_angle(p):5.0f}   "
             f"{p.length * 100:5.1f} x {p.width * 100:4.1f} cm  {p.area_cm2:5.1f}  {who:5}  {dist}"
         )
     for n in plan.notes:
@@ -426,9 +551,10 @@ JOG_HELP = """Commands (directions as seen from BEHIND the arm, looking where it
   f / b   forward (away from the arm) / back      l / r   left / right
   u / d   up / down                                add a number for several steps: f3
   s N     step size in mm (now {step:.0f})          y N     turn the jaws by N deg
-  o / c   open / close the gripper                 g       grasp here: down to grasp_z, close, up
+  o [N] / c  open (to N) / close the gripper    g       grasp here: down to grasp_z, close, up
   g N     grasp going down exactly N cm             z N     the tip is really N cm above the table
   box     over the box and open (drop)             scan    home, look again, renumber
+  log     the last grasp DID hold the piece (if `g` said empty): log it for fit-grasps
   ok      the tip is right over the piece's centre: record camera-vs-arm offset
   h       help                                     q       finish (fit, save) and go home"""
 
@@ -449,6 +575,9 @@ class Jog:
         self.q = drv.q()
         self.pairs_arm, self.pairs_table = [], []
         self.z_changed = False
+        self.last_grasp = None  # (piece, aim, q) of the last `g` not logged yet, for `log`
+        self.dz = 0.0  # height correction of the current piece (ArmModel.aim_table)
+        self.planned = None  # table xy the current piece was aimed at, before nudges
 
     # --- vision -------------------------------------------------------------------------------
 
@@ -466,9 +595,10 @@ class Jog:
         print("box:", "not found" if b is None else f"({b.x:.3f}, {b.y:.3f})")
         for i, p in enumerate(self.scene.pieces, 1):
             d = np.hypot(*self.arm.placement.to_arm([p.x, p.y])[:2])
+            tag = "" if p.tag_id is None else f" tag {p.tag_id},"
             print(
-                f"  {i}: ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f} cm,"
-                f" {d * 100:.0f} cm from the base"
+                f"  {i}:{tag} ({p.x:.3f}, {p.y:.3f}) {p.length * 100:.1f} x {p.width * 100:.1f}"
+                f" cm, {d * 100:.0f} cm from the base"
             )
         if not self.scene.pieces:
             print("  no pieces seen")
@@ -546,8 +676,19 @@ class Jog:
             print("  no such piece (scan to renumber)")
             return
         p = self.scene.pieces[i]
-        ax, ay, yaw, _ = self.arm.grasp_aim(p, self.z)
-        if self.move([ax, ay, self.z], yaw):
+        if not self.arm.takes(p.x, p.y):
+            lo, hi = self.arm.bearing_range
+            x0, x1 = self.arm.x_range
+            print(
+                f"  piece {i + 1} is outside {self.side}'s range: bearing"
+                f" {self.arm.bearing(p.x, p.y):+.0f} deg (takes {lo:+.0f}..{hi:+.0f}),"
+                f" x {p.x:.3f} (takes {x0:.3f}..{x1:.3f}); config bearing_range_deg / x_range"
+            )
+            return
+        ax, ay, yaw, _, dz = self.arm.grasp_aim(p, self.z)
+        if self.move([ax, ay, self.z + dz], yaw):
+            self.dz = dz
+            self.planned = np.array([ax, ay])  # the aim before any nudge, for `ok`
             self.piece = i
             print(
                 f"  over piece {i + 1}: camera says ({p.x:.3f}, {p.y:.3f}),"
@@ -587,11 +728,12 @@ class Jog:
         if self.target is None:
             print("  pick a piece first")
             return
-        z = self.pc.get("grasp_z", 0.005) if depth is None else self.target[2] - depth
-        if z < -0.002:
+        dz = self.dz if self.piece is not None else 0.0
+        z = self.pc.get("grasp_z", 0.005) + dz if depth is None else self.target[2] - depth
+        if z < dz - 0.002:
             print(f"  that would go {-z * 100:.1f} cm into the table")
             return
-        self.drv.gripper(self.mc.get("gripper_open", 60.0), wait=0.3)
+        self.drv.gripper(self.mc.get("gripper_open", 60.0))  # fully open before going down
         up = self.arm.placement.to_arm(self.target)
         low = self.arm.placement.to_arm([*self.target[:2], z])
         try:
@@ -599,8 +741,14 @@ class Jog:
             closed = self.drv.gripper(self.mc.get("gripper_closed", 2.0))
             held = closed > self.mc.get("gripper_closed", 2.0) + self.mc.get("grasp_min_open", 4.0)
             print(f"  gripper closed to {closed:.1f}: {'HOLDING something' if held else 'empty'}")
-            if held and self.piece is not None:
-                self._log_grasp()
+            self.last_grasp = (
+                None if self.piece is None else (self.piece, self.target.copy(), self.q.copy())
+            )
+            if held and self.last_grasp:
+                self._log_grasp(*self.last_grasp)
+                self.last_grasp = None
+            elif self.last_grasp:
+                print("  (looks empty: after `box` the camera checks whether the piece is gone)")
             self.q = self.drv.move_line(self.drv.q(), up, self.yaw, steps=4)
         except RuntimeError as e:
             print(f"  {e}")
@@ -624,11 +772,32 @@ class Jog:
             print("  can't reach over the box")
             return
         self.drv.move_q(sol.q)
-        self.q = sol.q
         self.drv.gripper(self.mc.get("gripper_open", 60.0))
-        self.target = self.arm.placement.to_table(fk(sol.q)[:3, 3])
+        tip = self.arm.placement.to_table(fk(sol.q)[:3, 3])
+        print(f"  dropped from {(tip[2] - bc['height']) * 100:.0f} cm over the rim")
+        self.drv.lift()  # a little straight up, clear of the box, before going on
+        self.q = self.drv.q()
+        self.target = None
         self.piece = None
-        print("  dropped; `scan` to look again")
+        self._check_last_grasp()
+        print("  arm lifted; `scan` to look again, or a piece number")
+
+    def _check_last_grasp(self) -> None:
+        """With the arm lifted, the camera looks where the last grasped piece was: gone
+        means it was taken (logged if the gripper reading said empty)."""
+        if self.last_grasp is None or getattr(self.eye, "cam", None) is None:
+            return  # no live camera (a saved image, or tests)
+        piece, target, q = self.last_grasp
+        p = self.scene.pieces[piece]
+        chain = np.array([self.arm.placement.to_table(c) for c in chain_points(self.q)])
+        with self.lock:
+            _, _, now = self.eye.look([chain])
+        if piece_still_there(now, p.x, p.y):
+            print(f"  camera: piece {piece + 1} is still on the table (missed)")
+        else:
+            print(f"  camera: piece {piece + 1} is gone: it was taken")
+            self._log_grasp(piece, target, q)
+        self.last_grasp = None
 
     def set_height(self, real: float) -> None:
         """The operator measured the tip at `real` m above the table: shift the arm's z."""
@@ -642,23 +811,25 @@ class Jog:
         self.z_changed = True
         print(f"  z_offset now {pl.z * 100:+.1f} cm (saved with q); aim height {real * 100:.1f} cm")
 
-    def _log_grasp(self) -> None:
+    def _log_grasp(self, piece: int, target, q) -> None:
         """Save where the tool really had to be for this piece (data for fit-grasps)."""
         import time as _time
 
         from hfteama.arms.so101_ik import jaw_yaw
         from hfteama.sorter.geometry import log_grasp
 
-        p, pl = self.scene.pieces[self.piece], self.arm.placement
-        heading = jaw_yaw(fk(self.q)) + pl.yaw
+        p, pl = self.scene.pieces[piece], self.arm.placement
+        heading = jaw_yaw(fk(q)) + pl.yaw
         n = log_grasp(
             self.side,
             {
                 "time": _time.strftime("%Y-%m-%d %H:%M:%S"),
                 "camera": [round(p.x, 4), round(p.y, 4)],
                 "piece_yaw_deg": round(float(np.degrees(p.yaw)), 1),
-                "aim": [round(float(self.target[0]), 4), round(float(self.target[1]), 4)],
+                "aim": [round(float(target[0]), 4), round(float(target[1]), 4)],
                 "heading_deg": round(float(np.degrees(heading)), 1),
+                # the width the aim was computed for (jaw_width_gain): removed before fitting
+                "width": round(float(self.arm.object_width or p.width), 4),
                 "placement": [pl.x, pl.y, round(float(np.degrees(pl.yaw)), 2), pl.z],
             },
         )
@@ -668,10 +839,9 @@ class Jog:
         if self.piece is None:
             print("  go over a piece first")
             return
-        p = self.scene.pieces[self.piece]
-        # where the tip should have been: the camera's point plus the arm's aim offset (so
-        # the fit corrects the placement only, not the aim offset a second time)
-        want = np.array(self.arm.aim(p.x, p.y))
+        # where the tip should have been: the camera's point plus the arm's aim offsets, as
+        # planned (so the fit corrects the placement only, not the offsets a second time)
+        want = self.planned
         tip = self.drv.tcp()
         off = (self.arm.placement.to_table(tip)[:2] - want) * 100
         self.pairs_arm.append(tip[:2])
@@ -692,6 +862,12 @@ class Jog:
             self.record()
         elif cmd == "box":
             self.drop()
+        elif cmd == "log":
+            if self.last_grasp is None:
+                print("  nothing to log: `g` over a piece first")
+            else:
+                self._log_grasp(*self.last_grasp)
+                self.last_grasp = None
         elif cmd == "scan":
             self.scan()
         elif key == "q":
@@ -703,8 +879,12 @@ class Jog:
                 self.target, self.yaw + np.radians(float(arg))
             ):
                 self._where()
-        elif cmd == "o":
-            self.drv.gripper(self.mc.get("gripper_open", 60.0))
+        elif key == "o" and (not arg or _is_number(arg)):
+            want = float(arg) if arg else self.mc.get("gripper_open", 60.0)
+            got = self.drv.gripper(want)
+            print(
+                f"  gripper asked {want:.0f}, reached {got:.1f} (0 closed .. 100 = calibrated max)"
+            )
         elif cmd == "c":
             print(f"  gripper at {self.drv.gripper(self.mc.get('gripper_closed', 2.0)):.1f}")
         elif cmd == "g":
@@ -743,7 +923,8 @@ def cmd_jog(args) -> int:
     stop = threading.Event()
     with Eye(cfg) as eye:
         drv = ArmDriver(side, cfg["arms"][side], cfg["motion"], args.config).connect()
-        jog = Jog(cfg, side, arm, drv, eye, args.z, args.step / 1000)
+        hover = args.z if args.z is not None else cfg["pieces"].get("approach_z", 0.05)
+        jog = Jog(cfg, side, arm, drv, eye, hover, args.step / 1000)
         jog.lock = threading.Lock()
         viewer = None
         try:
@@ -791,11 +972,39 @@ def cmd_fit_grasps(args) -> int:
     cfg = load_config(args.sorter_config)
     side = args.arm
     entries = json.loads(GRASPS_FILE.read_text()).get(side, []) if GRASPS_FILE.exists() else []
+    skipped = [e for e in entries if e.get("excluded")]
+    entries = [e for e in entries if not e.get("excluded")]
+    if args.since:
+        entries = [e for e in entries if e.get("time", "") >= args.since]
+        print(f"{len(entries)} grasps since {args.since}")
+    if skipped:
+        print(f"({len(skipped)} grasps marked excluded in {GRASPS_FILE.name})")
     if not entries:
         print(f"No grasps logged for {side}: grasp pieces with `hfteama sort jog {side}` (g).")
         return 1
     pl = Placement.from_config(cfg["arms"][side])
-    aim, jaw, rms = fit_aim(entries, pl.yaw)
+    # a grasp's aim is a table point under the placement in use then: re-express it with
+    # today's placement (same arm-frame point), so a corrected base doesn't skew the fit
+    for e in entries:
+        if "placement" in e:
+            x, y, yaw, z = e["placement"]
+            then = Placement(x, y, np.radians(yaw), z)
+            e["aim"] = list(pl.to_table(then.to_arm(e["aim"]))[:2])
+    # take out the width part of the jaw offset (ArmModel.aim), so pieces of every width
+    # fit the same jaw_offset; grasps logged before widths were stored count as jaw_ref_width
+    a = cfg["arms"][side]
+    ref, k = a.get("jaw_ref_width", 0.025), a.get("jaw_width_gain", 0.0)
+    for e in entries:
+        along = k * (e.get("width", ref) - ref)
+        h = np.radians(e["heading_deg"])
+        e["aim"] = [e["aim"][0] - along * np.cos(h), e["aim"][1] - along * np.sin(h)]
+    gain = None
+    if len(entries) >= 8:
+        from hfteama.sorter.geometry import fit_aim_affine
+
+        aim, jaw, gain, rms = fit_aim_affine(entries, pl)
+    else:
+        aim, jaw, rms = fit_aim(entries, pl.yaw)
     print(
         f"{len(entries)} grasps, jaw headings: "
         + ", ".join(f"{e['heading_deg']:.0f}" for e in entries)
@@ -805,15 +1014,155 @@ def cmd_fit_grasps(args) -> int:
         f" jaw_offset (along, across the jaws) = ({jaw[0] * 100:+.1f}, {jaw[1] * 100:+.1f}) cm;"
         f" rms {rms * 100:.1f} cm"
     )
-    if not jaw.any():
+    if gain is not None:
+        print(f"aim_gain (proportional to the piece's position) = {np.round(gain, 3).tolist()}")
+    elif not jaw.any():
         print("(jaw headings too similar to separate the turning part: grasp rotated pieces)")
     if args.save or input("Save? [y/N] ").strip().lower() == "y":
         data = json.loads(PLACEMENTS_FILE.read_text()) if PLACEMENTS_FILE.exists() else {}
         d = data.setdefault(side, {})
         d["aim_offset"] = [round(float(aim[0]), 4), round(float(aim[1]), 4)]
         d["jaw_offset"] = [round(float(jaw[0]), 4), round(float(jaw[1]), 4)]
+        if gain is not None:
+            d["aim_gain"] = np.round(gain, 4).tolist()
         PLACEMENTS_FILE.write_text(json.dumps(data, indent=2) + "\n")
         print("saved", PLACEMENTS_FILE)
+    return 0
+
+
+FAR_HALF_FACTOR = 1.5  # planned duration of a box on the other arm's half of the table
+
+
+def carry_point(arm: ArmModel, cfg: dict):
+    """Sorter-frame point where the arm waits holding a piece or after placing: config
+    `carry` ([x, y, z], table frame) or in front of its base, clear of the bowl; None if the
+    arm can't reach it."""
+    a = cfg["arms"][arm.side]
+    for c in (
+        [a["carry"]]
+        if "carry" in a
+        else ([arm.placement.x, arm.placement.y + 0.15, z] for z in (0.15, 0.12))
+    ):
+        for down in (True, False):
+            sol = solve_ik(arm.placement.to_arm(c), down=down, limits=arm.limits)
+            if sol.ok:
+                return np.asarray(c, float)
+    return None
+
+
+def cmd_export(args) -> int:
+    """Camera -> the boxes and the bowl as main's poses file and a pick_place task graph, in
+    main's table frame, for `python -m hfteama.runner --backend sorter`."""
+    import json
+
+    from hfteama.hardware.pairs import read_config
+    from hfteama.sorter.bridge import MainFrame
+
+    cfg = load_config(args.sorter_config)
+    sides = _sides(args, cfg)
+    arms = arm_models(cfg, sides)
+    pairs = read_config(args.config)["pairs"]
+    catalog = {s: pairs[cfg["arms"][s]["pair"]]["follower"]["id"] for s in sides}
+    pc, bc = cfg["pieces"], cfg["box"]
+    mf = MainFrame.from_config(cfg)
+    with Eye(cfg, args.image) as eye:
+        _, _, scene = eye.look()
+    plan = make_plan(scene, arms, cfg)
+    if scene.box is None:
+        raise SystemExit("Box (bowl) not found by the camera.")
+    b = scene.box
+    place_z = bc["height"] + args.place_above
+    poses = {
+        "note": "Written by `hfteama sort export` from the overhead camera. Table frame = main's "
+        "(configs/hacklab_table.json): origin marker 0, x towards marker 3, y towards marker 2.",
+        "table_z": 0.0,
+        "locations": {"bowl": [round(float(v), 4) for v in mf.to_main([b.x, b.y, place_z])]},
+        "objects": {},
+        "per_arm": {},
+        "radii": {"bowl": b.radius},
+    }
+    # per arm, where its held box goes: as the sorter's drop, moved from the bowl centre
+    # towards the arm until it reaches with the gripper (nearly) down
+    from hfteama.sorter.plan import drop_target
+
+    drop_tilt = np.radians(cfg["motion"].get("drop_max_tilt_deg", 60.0))
+    for s in sides:
+        found = drop_target(arms[s], b, bc["height"], args.place_above, drop_tilt)
+        if found is not None:
+            pt = mf.to_main(found[:3])
+            poses["per_arm"][catalog[s]] = {"bowl": [round(float(v), 4) for v in pt]}
+    # each arm's carry pose: where pick leaves it and place returns it, over its own half and
+    # clear of the bowl, so the executor can free the half / bowl lock when the step returns
+    for s in sides:
+        c = carry_point(arms[s], cfg)
+        if c is not None:
+            poses["per_arm"].setdefault(catalog[s], {})["carry"] = [
+                round(float(v), 4) for v in mf.to_main(c)
+            ]
+    tasks = []
+    usable = [s for s in sides if "carry" in poses["per_arm"].get(catalog[s], {})]
+    for p in [pk.piece for pk in plan.picks] + plan.unreachable:
+        # every arm that reaches the box (its half of the table is a preference of the sorter's
+        # own planner, not a limit here: main's planner re-splits when an arm comes or goes)
+        able = [
+            s
+            for s in usable
+            if plan_pick(replace(arms[s], x_range=(-np.inf, np.inf)), p, cfg["motion"], pc)
+        ]
+        if not able:
+            continue
+        half = next((s for s in arms if arms[s].x_range[0] <= p.x <= arms[s].x_range[1]), None)
+        name = f"box_tag{p.tag_id}" if p.tag_id is not None else f"box_{len(tasks) // 2 + 1:02d}"
+        poses["objects"][name] = [
+            round(float(v), 4) for v in mf.to_main([p.x, p.y, pc.get("grasp_z", 0.015)])
+        ]
+        allowed = [catalog[s] for s in able]
+        # the arm of the other half is farther (and its aim is only fitted on its own half):
+        # slower in the plan, so the planner gives it the box only when that pays off
+        far = {catalog[s]: args.duration / 2 * FAR_HALF_FACTOR for s in able if s != half}
+        tasks.append(
+            {
+                "id": f"pick_{name}",
+                "skill": "pick",
+                "args": {"object": name},
+                "deps": [],
+                "allowed_arms": allowed,
+                "duration": args.duration / 2,
+                "durations": far,
+                # one arm at a time in each half of the table
+                "resources": [f"half_{half or able[0]}"],
+            }
+        )
+        tasks.append(
+            {
+                "id": f"place_{name}",
+                "skill": "place",
+                "args": {"to": "bowl"},
+                "deps": [f"pick_{name}"],
+                "same_arm_as": f"pick_{name}",
+                "allowed_arms": allowed,
+                "duration": args.duration / 2,
+                "durations": far,
+                "resources": ["bowl"],
+            }
+        )
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "poses_real.json").write_text(json.dumps(poses, indent=2) + "\n")
+    graph = {
+        "name": out.name,
+        "note": "Per box seen: pick (lock: its half of the table) then place in the bowl "
+        "(lock: bowl) on the same arm; any arm that reaches it (hfteama sort export).",
+        "tasks": tasks,
+    }
+    (out / "boxes.json").write_text(json.dumps(graph, indent=2) + "\n")
+    report(scene, plan, arms)
+    print(f"\nwrote {out / 'poses_real.json'} and {out / 'boxes.json'} ({len(tasks)} steps)")
+    print(
+        "run:  env -u PYTHONPATH .venv/bin/python -m hfteama.runner --backend sorter "
+        f"--arms {','.join(catalog[s] for s in sides)} --task {out / 'boxes.json'}"
+        f" --poses {out / 'poses_real.json'}"
+    )
     return 0
 
 
@@ -836,12 +1185,24 @@ def cmd_run(args) -> int:
                 for s in sides:
                     drivers[s] = ArmDriver(s, cfg["arms"][s], mc, args.config).connect()
             turn = 0
-            while args.max_picks is None or picked < args.max_picks:
+            attempt = None  # (x, y) of the piece the last pick went for
+            while True:
                 chains = [
                     np.array([arms[s].placement.to_table(p) for p in chain_points(d.q())])
                     for s, d in drivers.items()
                 ]
                 frame, pose, scene = eye.look(chains)
+                if attempt is not None:  # did the last pick take its piece? ask the camera
+                    if piece_still_there(scene, *attempt):
+                        x, y = attempt
+                        print(f"  camera: the piece at ({x:.3f}, {y:.3f}) is still there")
+                        failed.append(attempt)
+                    else:
+                        picked += 1
+                        print(f"  camera: piece taken ({picked} so far)")
+                    attempt = None
+                    if args.max_picks is not None and picked >= args.max_picks:
+                        break
                 plan = make_plan(scene, arms, cfg)
                 save_image(draw(frame, pose, eye.intr, scene, plan, cfg, arms), "plan")
                 todo = {
@@ -865,9 +1226,8 @@ def cmd_run(args) -> int:
                 if args.dry_run:
                     report(scene, plan, arms)
                     return 0
-                ok = pick_and_drop(drivers[side], pick, plan.drops[side], mc, pc)
-                if ok:
-                    picked += 1
+                if pick_and_drop(drivers[side], pick, plan.drops[side], mc, pc):
+                    attempt = (p.x, p.y)  # judged on the next look
                 else:
                     failed.append((p.x, p.y))
     except KeyboardInterrupt:
@@ -879,29 +1239,33 @@ def cmd_run(args) -> int:
     return 0
 
 
+def piece_still_there(scene, x: float, y: float, radius: float = 0.025) -> bool:
+    """Whether the camera still sees a piece within `radius` of where one was picked."""
+    return any(np.hypot(p.x - x, p.y - y) < radius for p in scene.pieces)
+
+
 def _misses(failed, piece, radius=0.02) -> int:
     return sum(np.hypot(x - piece.x, y - piece.y) < radius for x, y in failed)
 
 
 def pick_and_drop(drv, pick, drop, mc: dict, pc: dict) -> bool:
-    """One pick: open, above, down, close, up, over the box, open, home. True if something
-    was in the gripper when it closed."""
+    """One pick: open, above, down, close, up, over the box, open, lift a little, home.
+
+    Always goes to the box: the gripper's closing position can't tell a thin piece from an
+    empty grasp. Whether the piece was taken is judged by the camera on the next look (the
+    caller). Returns False only if the motion itself failed."""
     yaw = float(np.arctan2(fk(pick.grasp.q)[1, 0], fk(pick.grasp.q)[0, 0]))
     try:
-        drv.gripper(mc.get("gripper_open", 60.0), wait=0.0)
+        drv.gripper(mc.get("gripper_open", 60.0))  # fully open before going down
         drv.move_q(pick.above.q)
         drv.move_line(pick.above.q, pick.target_arm, yaw)
         closed = drv.gripper(mc.get("gripper_closed", 2.0))
-        holding = closed > mc.get("gripper_closed", 2.0) + mc.get("grasp_min_open", 4.0)
+        print(f"[{drv.side}] gripper closed to {closed:.1f}")
         up = fk(pick.above.q)[:3, 3]
         drv.move_line(drv.q(), up, yaw, steps=4)
-        if not holding:
-            print(f"[{drv.side}] missed (gripper closed to {closed:.1f})")
-            drv.gripper(mc.get("gripper_open", 60.0), wait=0.0)
-            drv.go_home()
-            return False
         drv.move_q(drop.q)
         drv.gripper(mc.get("gripper_open", 60.0))
+        drv.lift()  # a little straight up, clear of the box, then home
         drv.go_home()
         return True
     except (RuntimeError, ValueError) as e:
@@ -937,13 +1301,23 @@ def add_parser(sub) -> None:
 
     j = ss.add_parser("jog", help="Hover over a piece, correct by hand, fit the arm's placement")
     j.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
-    j.add_argument("--z", type=float, default=0.05, help="Hover height above the table (m)")
+    j.add_argument(
+        "--z", type=float, help="Hover height above the table (m); default pieces.approach_z"
+    )
     j.add_argument("--step", type=float, default=5.0, help="Jog step (mm)")
     j.add_argument("--no-viewer", action="store_true", help="Don't open the Rerun viewer")
 
     fg = ss.add_parser("fit-grasps", help="Fit grasp aim offsets from the grasps jog logged")
     fg.add_argument("arm", help="Arm name from the config: rakesh or hacklab")
     fg.add_argument("--save", action="store_true", help="Save without asking")
+    fg.add_argument("--since", help='Only grasps logged from this time, e.g. "2026-11-21 22:00"')
+
+    e = ss.add_parser("export", help="Camera -> poses + task graph for main's runner")
+    e.add_argument("--arms", help="Arms to plan for (default: all)")
+    e.add_argument("--image", help="Use a saved frame instead of the camera")
+    e.add_argument("--out", default=str(PROJECT_ROOT / "tasks" / "sorter_boxes"))
+    e.add_argument("--place-above", type=float, default=0.03, help="Place height over the rim (m)")
+    e.add_argument("--duration", type=float, default=30.0, help="Expected s per box (pick + place)")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")
@@ -958,5 +1332,6 @@ def dispatch(args) -> int:
         "goto": cmd_goto,
         "jog": cmd_jog,
         "fit-grasps": cmd_fit_grasps,
+        "export": cmd_export,
         "run": cmd_run,
     }[args.sort_command](args)

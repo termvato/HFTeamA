@@ -66,7 +66,8 @@ def users_of(dev: str) -> list[str]:
     for proc in Path("/proc").glob("[0-9]*"):
         try:
             if any(os.path.realpath(fd) == real for fd in (proc / "fd").iterdir()):
-                found.append(f"{proc.name} {(proc / 'cmdline').read_bytes().replace(b'\0', b' ').decode()[:60]}")
+                cmdline = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode()
+                found.append(f"{proc.name} {cmdline[:60]}")
         except OSError:
             continue
     return found
