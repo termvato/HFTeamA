@@ -147,8 +147,10 @@ def collect(remote: str) -> dict:
     main = f"{remote}/main"
     ops = show(main, "OPERATIONS_STATUS.md")
     action = show(f"{remote}/action-arm-skills", "ACTION_STATUS.md")
-    vla = show(f"{remote}/action", "vla/README.md")
+    vla = show(main, "vla/README.md") or show(f"{remote}/action", "vla/README.md")
     pairs = show(main, "configs/teleop_pairs.json")
+    model = next(iter(md_table(vla, "### Model trained")), {})
+    model_eps = search(r"\d+", model.get("Data", ""))
 
     sim = search(r"(\d+/\d+) steps ok on (\d+) arms", action)
     dry = search(r"1 arm (\d+) s, 2 arms (\d+) s", ops)
@@ -183,6 +185,11 @@ def collect(remote: str) -> dict:
             "dry_2": f"{dry.group(2)} s" if dry else None,
             "vlm_found": vlm.group(1) if vlm else None,
             "vlm_error": f"{vlm.group(2)} cm" if vlm else None,
+            "policy_episodes": model_eps.group(0) if model_eps else None,
+            "policy_time": model.get("Time", "").split(" (")[0] or None,
+            "policy_error": f"{model['Open-loop error']}\u00b0"
+            if model.get("Open-loop error")
+            else None,
         },
         "scaling": scaling(),
     }
