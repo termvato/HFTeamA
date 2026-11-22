@@ -411,7 +411,13 @@ def pieces_from_tags(dets, pose: CameraPose, intr: Intrinsics, pc: dict, extent)
 
 
 def detect_scene(
-    image, pose: CameraPose, intr: Intrinsics, cfg: dict, arm_chains=(), piece_tags=None
+    image,
+    pose: CameraPose,
+    intr: Intrinsics,
+    cfg: dict,
+    arm_chains=(),
+    piece_tags=None,
+    keep_in_box: bool = False,
 ) -> Scene:
     """Box and pieces, with the masks from the sorter config (configs/sorter.json).
 
@@ -456,6 +462,6 @@ def detect_scene(
     )
     if pc.get("tags", {}).get("enabled") and piece_tags is not None:
         pieces = pieces_from_tags(piece_tags, pose, intr, pc, extent)
-    if box is not None:  # pieces already dropped in the box are done
+    if box is not None and not keep_in_box:  # pieces already dropped in the box are done
         pieces = [p for p in pieces if np.hypot(p.x - box.x, p.y - box.y) > box.radius]
     return Scene(box=box, pieces=pieces, mask=mask, top_down=top, extent=extent)

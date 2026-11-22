@@ -155,3 +155,25 @@ Two arms at once:
 Heartbeat: the executor drops an arm whose heartbeat is 1.5 s old. The bridge's heartbeat is the
 last bus read/write that worked (every control tick during a move), and the IK of a straight line
 (~1 s) is solved before taking the bus.
+
+### Operations' live demo (`demo --planner hfteama.perception.live:plan_from_camera`)
+
+Run it with `--backend sorter` (command in `hfteama/perception/live.py`); that sets
+`HFTEAMA_DETECTOR=sorter` unless it is set. Then:
+
+- Box positions and yaw come from this camera calibration (`hfteama.sorter.perception
+  .SorterTagDetector`): the C922 intrinsics with its lens distortion, the camera pose from the 4
+  reference tags, each box centre cast at its tag height. The pipeline's own marker calibration
+  (pinhole, no distortion, focal fitted per frame) is only used for a round trip that returns
+  these positions unchanged. Without it (`auto`), a table file with no `tags` section takes the
+  positions from Qwen pointing at the boxes: a few cm off, the grasps miss.
+- Every box's place point is the bowl centre from `configs/hacklab_table.json`; carrying a box
+  there, the bridge moves the drop up to `motion.drop_shift_max_m` (5 cm) towards the arm, so the
+  gripper stays down (rakesh 14 deg, hacklab 3 deg) as with `sort export`'s per-arm points.
+- `configs/hacklab_table.json` holds the arm bases and bowl from this calibration (the reach
+  model and the place check use them). The bowl moves: re-measure it with `sort export`.
+- The camera there is the C922 (`"C922 Pro Stream Webcam"`, Windows' DirectShow name): the
+  intrinsics are for that camera at 1920x1080. On Linux set `HFTEAMA_CAMERA=/dev/videoN`.
+- That frame grab (ffmpeg) does not pin focus and exposure as `hfteama.vision.camera` does on
+  Linux; autofocus changes the focal length a little (mm at the table's edges).
+

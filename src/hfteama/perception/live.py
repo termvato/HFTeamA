@@ -5,6 +5,13 @@
         --verifier hfteama.perception.live:verifier \\
         --rescan hfteama.perception.live:rescan_hook [--rescan-every 20]
 
+On the real arms (Hardware's calibrated IK and camera, what grasps the boxes; `--backend
+sorter` sets HFTEAMA_DETECTOR=sorter unless it is set):
+
+    python -m hfteama.demo --backend sorter \\
+        --table configs/hacklab_table.json --planner hfteama.perception.live:plan_from_camera \\
+        --verifier hfteama.perception.live:verifier --rescan hfteama.perception.live:rescan_hook
+
 - planner: camera -> marker calibration -> objects (tags or Qwen pointing) -> categories
   (Decomposer, or the tag config) -> `registry.resolve` on the table's arms. Returns the resolved
   graph; pick steps carry `object`, `label`, `pick_xyz` and, when measured, `pick_yaw_deg`.
@@ -20,7 +27,9 @@ The hooks take no arguments, so they are configured by environment variables:
     HFTEAMA_TABLE      table layout (default configs/hacklab_table.json)
     HFTEAMA_CAMERA     camera device name (default: "camera.name" in the table file)
     HFTEAMA_IMAGE      a frame file or stream URL instead of the camera (dry runs)
-    HFTEAMA_DETECTOR   auto | tags | vlm (auto = tags if the table file has a "tags" section)
+    HFTEAMA_DETECTOR   auto | tags | vlm | sorter (auto = tags if the table file has a "tags"
+                       section; sorter = the box tags located by Hardware's calibrated camera
+                       (C922 intrinsics + 4 reference tags), what the real arms grasp with)
     HFTEAMA_TRAVEL     seconds per metre from an arm to its step (default 4.0)
     HFTEAMA_CLEARANCE  metres two arms keep apart where both reach (default 0.15, 0 = off)
 
@@ -46,7 +55,7 @@ from hfteama.perception.scene import Scene, build_scene
 from hfteama.registry import load_catalog, resolve
 from hfteama.taskgraph import Task, TaskGraph
 
-DETECTORS = ("auto", "tags", "vlm")
+DETECTORS = ("auto", "tags", "vlm", "sorter")
 
 
 class LivePipeline:
@@ -76,7 +85,8 @@ class LivePipeline:
         self.grab = grab
         self.arms = list(load_catalog(table).values())
         self.bins = load_bins(table)
-        use_tags = detector == "tags" or (detector == "auto" and "tags" in self.cfg)
+        self.detector = detector
+        use_tags = detector == "tags" or (detector in ("auto", "sorter") and "tags" in self.cfg)
         self.tags = TagConfig.from_dict(self.cfg["tags"]) if use_tags else None
         # every box listed with a bin, and only listed boxes counted: no VLM needed at all
         self.no_vlm = (
@@ -127,6 +137,12 @@ class LivePipeline:
         return m
 
     def _detector(self) -> Any:
+        if self.detector == "sorter":  # positions and yaw from the sorter's calibrated camera
+            from hfteama.sorter.perception import SorterTagDetector
+
+            if not hasattr(self, "_sorter_detector"):
+                self._sorter_detector = SorterTagDetector(self.calib)
+            return self._sorter_detector
         if self.tags is not None:
             from hfteama.perception.tags import TagDetector
 

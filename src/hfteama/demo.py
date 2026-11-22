@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import sys
 import threading
 import time
@@ -305,6 +306,8 @@ def main(argv: list[str] | None = None) -> None:
 
     clock = Clock(args.scale if args.backend == "fake" else 1.0)
     known = followers_from_pairs(args.pairs)
+    if args.backend == "sorter":  # the camera hooks then see the boxes as the sorter grasps them
+        os.environ.setdefault("HFTEAMA_DETECTOR", "sorter")
     graph = hook(args.planner)() if args.planner else load(args.task)
     verifier = hook(args.verifier)() if args.verifier else None
     scene = None

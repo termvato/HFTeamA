@@ -61,6 +61,15 @@ class Eye:
         arm_chains: the arms' polylines in the table frame, masked out of the pieces."""
         import cv2
 
+        frame = cv2.imread(self.image) if self.image else self.cam.frame()
+        if frame is None:
+            raise SystemExit(f"Cannot read {self.image}")
+        return self.look_frame(frame, arm_chains)
+
+    def look_frame(self, frame, arm_chains=(), keep_in_box: bool = False):
+        """As look, on a BGR frame from anywhere (another camera reader, a file): the camera
+        pose from the 4 reference tags with the calibrated intrinsics, then the pieces
+        (keep_in_box: also those already in the box)."""
         from hfteama.vision.detect import detect_scene
         from hfteama.vision.table import (
             centre_pixel,
@@ -69,9 +78,9 @@ class Eye:
             split_reference,
         )
 
-        frame = cv2.imread(self.image) if self.image else self.cam.frame()
-        if frame is None:
-            raise SystemExit(f"Cannot read {self.image}")
+        h, w = frame.shape[:2]
+        if self.intr.size is not None and (w, h) != tuple(self.intr.size):
+            raise SystemExit(f"Frame is {w}x{h}, the intrinsics are for {self.intr.size}.")
         all_tags = detect_all_tags(frame, self.cfg["table"].get("dictionary", "DICT_4X4_50"))
         found, small = split_reference(all_tags, set(self.tags))
         seen = sorted(i for i in found if i in self.tags)
@@ -95,7 +104,9 @@ class Eye:
             raise SystemExit(f"Need 3+ reference tags (seen {seen}) to place the camera.")
         # small tags: on box tops; also kept for `touch` (a tag laid on the table)
         self.found = {**{i: c for i, c in small}, **found}
-        scene = detect_scene(frame, self.pose, self.intr, self.cfg, arm_chains, small)
+        scene = detect_scene(
+            frame, self.pose, self.intr, self.cfg, arm_chains, small, keep_in_box=keep_in_box
+        )
         return frame, self.pose, scene
 
 
