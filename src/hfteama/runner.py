@@ -9,7 +9,8 @@ The flow, and where a human stands between the code and the arms:
 2. REAL only: print what is about to happen and wait for the typed word `yes`. Connecting an arm
    enables its torque, so it holds whatever pose it is in: support it first.
 3. Connect each arm (`--arms`), print the estimate (predicted finish, what limits it).
-4. REAL only: wait for the typed word `go` (or the Go button with `--view`).
+4. REAL only: wait for the typed word `go` (or the Go button with `--view` / `--orchestra`).
+   Real arms: Qwen checks each place from the overhead camera (`--no-vlm` to skip it).
 5. Run. Ctrl-C does NOT kill anything: it asks every arm for a slow stop (finish the step, lower,
    torque off). A second Ctrl-C is ignored with a reminder. When the batch ends the arms are parked.
 
@@ -33,7 +34,7 @@ from hfteama.arms.worker import SkillWorker
 from hfteama.clock import Clock
 from hfteama.discovery import ArmWatcher, followers_from_pairs
 from hfteama.events import EventLog
-from hfteama.executor import Executor
+from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import load
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,10 +47,23 @@ This will CONNECT the arms and then MOVE THEM.
 
 
 class _RealRig:
-    """Controls for the live screen: its Go button starts the executor."""
+    """Controls for the live screens (Dash `--view`, Orchestra `--orchestra`): Go starts the
+    executor; Remove / Stop all is a slow stop per arm, and when no arm is left in the run the
+    runner parks everything and exits, exactly as one Ctrl-C does."""
 
-    def __init__(self, executor: Executor) -> None:
+    def __init__(
+        self,
+        executor: Executor,
+        watcher: ArmWatcher | None = None,
+        workers: dict | None = None,
+        known: list[str] | None = None,
+        on_stop: Callable[[], None] | None = None,
+    ) -> None:
         self.ex = executor
+        self.watcher = watcher
+        self.workers = workers if workers is not None else {}
+        self.known = list(known or [])
+        self.on_stop = on_stop
         self._started = False
 
     def go(self) -> None:
@@ -59,6 +73,58 @@ class _RealRig:
 
     def started(self) -> bool:
         return self._started
+
+    def plug(self, arm_id: str) -> bool:
+        return self.watcher.plug(arm_id) if self.watcher is not None else False
+
+    def remove(self, arm_id: str, abort: bool = False) -> None:
+        self.ex.remove_arm(arm_id, abort=abort)
+        if self.watcher is not None:
+            self.watcher.forget(arm_id)
+            left = self.watcher.joined()
+        else:
+            left = set(self.ex.snapshot()["arms"]) - {arm_id}
+        if not left and self.on_stop is not None:
+            self.on_stop()
+
+    def down(self, arm_id: str) -> None:  # test-only control: never offered on real arms
+        raise RuntimeError("not offered on real arms")
+
+    def fail(self, arm_id: str) -> None:  # fake arms only
+        raise RuntimeError("only fake arms can be told to fail")
+
+
+def _vlm_place_check(args, ROOT: Path):
+    """Qwen confirms each place from a fresh overhead frame (the architecture's VLM layer).
+    Returns (verifier, close) or (None, no-op) when `--no-vlm` or no GPU stack."""
+    import json
+
+    from hfteama.perception.boxes import place_checker
+    from hfteama.perception.decomposer import Bin
+    from hfteama.perception.vlm import QwenVLM
+    from hfteama.vision.camera import OverheadCamera
+
+    cfg = json.loads((ROOT / "configs" / "sorter.json").read_text())
+    print("VLM: loading Qwen for the place check (first time ~30 s)...")
+    vlm = QwenVLM()
+    t0 = time.monotonic()
+    vlm._load()  # now, not at the first place: that step would time out waiting for it
+    print(f"VLM: Qwen ready ({vlm.loaded_as}, {time.monotonic() - t0:.0f} s)")
+    cam = OverheadCamera(cfg["camera"]).open()
+    lock = threading.Lock()
+
+    def grab():
+        with lock:
+            return cam.frame()
+
+    bowl = Bin("bowl", cfg.get("box", {}).get("label", "the round bowl in the middle"), (0, 0, 0))
+    verify = place_checker(vlm, [bowl], grab)
+
+    def close() -> None:
+        cam.close()
+        vlm.unload()
+
+    return verify, close
 
 
 def default_poses(task_dir: Path, real: bool) -> str:
@@ -97,6 +163,17 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     ap.add_argument("--port", type=int, default=8050)
     ap.add_argument(
+        "--orchestra",
+        action="store_true",
+        help="serve the Orchestra dashboard: its Go starts the run, Stop all is a slow stop",
+    )
+    ap.add_argument("--orchestra-port", type=int, default=8060)
+    ap.add_argument(
+        "--no-vlm",
+        action="store_true",
+        help="real arms: skip Qwen's camera check after each place (on by default)",
+    )
+    ap.add_argument(
         "--timeout-factor",
         type=float,
         default=2.5,
@@ -129,6 +206,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     log_path.unlink(missing_ok=True)  # a log is one run: never mix this run's steps with an old one
     log = EventLog(log_path)
     clock = Clock()  # real arms always run on the scale-1 clock (heartbeats are wall times)
+    verifier, close_vlm = None, (lambda: None)
+    if real and not args.no_vlm:
+        try:
+            verifier, close_vlm = _vlm_place_check(args, ROOT)
+        except Exception as e:  # noqa: BLE001  (no GPU, no model, no camera: run without it)
+            print(f"VLM: place check off ({e}); the run goes on without it")
     ex = Executor(
         graph,
         log,
@@ -136,6 +219,8 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         method=args.method,
         catalog=arm_ids,
         timeout_measured=args.timeout_factor,
+        verifier=verifier,
+        verify_skills=PLACE_SKILLS if verifier else None,
     )
     stop_requested = threading.Event()
     sigints = 0
@@ -191,15 +276,22 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
 
         plan = ex.estimate()
         print(f"estimate: finish in {plan.makespan:.0f} s; limit: {plan.binding or 'n/a'}")
-        rig = _RealRig(ex)
+        rig = _RealRig(ex, watcher, made, arm_ids or list(known.values()), stop_requested.set)
         if args.view:
             _serve(log, rig, clock, args.port)
             print(f"live screen: http://127.0.0.1:{args.port}  (press Go there to start)")
-        elif real and ask("Type 'go' to start the batch: ").strip() != "go":
+        if args.orchestra:
+            _serve_orchestra(log, ex, watcher, rig, clock, args)
+            print(
+                f"Orchestra: http://127.0.0.1:{args.orchestra_port}  (Go there starts the run; "
+                "Stop all = slow stop, then park)"
+            )
+        screen = args.view or args.orchestra  # a screen's Go button starts the run
+        if not screen and real and ask("Type 'go' to start the batch: ").strip() != "go":
             print("not started: parking the arms.")
             _park_all(ex, watcher, made)
             return 2
-        else:
+        if not screen:
             rig.go()
 
         while not ex.wait(timeout=0.5):
@@ -217,6 +309,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             table.__exit__(None, None, None)
         if previous is not None:
             signal.signal(signal.SIGINT, previous)
+        close_vlm()
 
     n_ok, bad = _summary(log, len(graph.tasks))
     print(f"{n_ok}/{len(graph.tasks)} steps ok. events: {log_path}")
@@ -245,6 +338,24 @@ def _park_all(
         "warning: some arms did not finish parking:",
         [a for a, w in made.items() if w.state() != ArmState.DOWN],
     )
+
+
+def _serve_orchestra(log, ex, watcher, rig, clock, args) -> None:
+    from hfteama.orchestra import StateHub
+    from hfteama.orchestra.server import start
+
+    hub = StateHub(
+        log,
+        ex,
+        watcher,
+        rig,
+        clock,
+        args.backend,
+        args.pairs,
+        watching=args.watch,
+        task_name=Path(args.task).stem,
+    )
+    start(hub, rig, "127.0.0.1", args.orchestra_port)
 
 
 def _serve(log: EventLog, rig: _RealRig, clock: Clock, port: int) -> None:

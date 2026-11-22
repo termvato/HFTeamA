@@ -1066,10 +1066,12 @@ def cmd_export(args) -> int:
     pc, bc = cfg["pieces"], cfg["box"]
     mf = MainFrame.from_config(cfg)
     with Eye(cfg, args.image) as eye:
-        _, _, scene = eye.look()
+        frame, cam_pose, scene = eye.look()
+        intr = getattr(eye, "intr", None)
     plan = make_plan(scene, arms, cfg)
     if scene.box is None:
         raise SystemExit("Box (bowl) not found by the camera.")
+    seen: dict[str, object] = {}  # task-graph object id -> piece, for the VLM below
     b = scene.box
     place_z = bc["height"] + args.place_above
     poses = {
@@ -1113,6 +1115,7 @@ def cmd_export(args) -> int:
             continue
         half = next((s for s in arms if arms[s].x_range[0] <= p.x <= arms[s].x_range[1]), None)
         name = f"box_tag{p.tag_id}" if p.tag_id is not None else f"box_{len(tasks) // 2 + 1:02d}"
+        seen[name] = p
         poses["objects"][name] = [
             round(float(v), 4) for v in mf.to_main([p.x, p.y, pc.get("grasp_z", 0.015)])
         ]
@@ -1137,7 +1140,7 @@ def cmd_export(args) -> int:
             {
                 "id": f"place_{name}",
                 "skill": "place",
-                "args": {"to": "bowl"},
+                "args": {"to": "bowl", "object": name, "target": "bowl"},
                 "deps": [f"pick_{name}"],
                 "same_arm_as": f"pick_{name}",
                 "allowed_arms": allowed,
@@ -1146,6 +1149,8 @@ def cmd_export(args) -> int:
                 "resources": ["bowl"],
             }
         )
+    if not getattr(args, "no_vlm", False):
+        _vlm_categories(cfg, frame, cam_pose, intr, seen, tasks)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "poses_real.json").write_text(json.dumps(poses, indent=2) + "\n")
@@ -1164,6 +1169,43 @@ def cmd_export(args) -> int:
         f" --poses {out / 'poses_real.json'}"
     )
     return 0
+
+
+def _vlm_categories(cfg, frame, cam_pose, intr, seen, tasks) -> None:
+    """Operations' VLM layer (#21): Qwen looks at this frame with each box's id drawn on it and
+    decides the categories and bins; they go into the steps' args (`category`, `bin`). Positions
+    stay the tags'. Any failure (no GPU, no answer) leaves the plan as it is, and says so."""
+    if frame is None or cam_pose is None or intr is None or not seen:
+        return
+    from hfteama.perception.boxes import SeenBox, sort_boxes
+    from hfteama.perception.decomposer import Bin
+    from hfteama.perception.vlm import QwenVLM
+    from hfteama.vision.table import project
+
+    h = cfg["pieces"].get("object_height", 0.04)
+    boxes = []
+    for name, p in seen.items():
+        u, v = project([[p.x, p.y, h]], cam_pose, intr)[0]
+        tag = f"box with tag {p.tag_id}" if p.tag_id is not None else "box"
+        boxes.append(SeenBox(name, (float(u), float(v)), tag))
+    bowl = Bin("bowl", cfg.get("box", {}).get("label", "the round bowl in the middle"), (0, 0, 0))
+    print()
+    print(f"VLM: Qwen sorts {len(boxes)} boxes (first time loads the model, ~30 s)...")
+    vlm = QwenVLM()
+    try:
+        cats, secs = sort_boxes(vlm, frame, boxes, [bowl])
+    except Exception as e:  # noqa: BLE001
+        print(f"VLM: no sorting from Qwen ({e}); every box goes to the bowl as before")
+        return
+    finally:
+        vlm.unload()
+    for t in tasks:
+        c = cats.get(t["args"].get("object", ""))
+        if c:
+            t["args"].update(category=c["category"], bin=c["bin"])
+    print(f"VLM: Qwen sorted in {secs:.1f} s:")
+    for name, c in cats.items():
+        print(f"  {name:10} -> {c['category']!r} ({c['rule']}) -> {c['bin']}")
 
 
 def cmd_run(args) -> int:
@@ -1318,6 +1360,7 @@ def add_parser(sub) -> None:
     e.add_argument("--out", default=str(PROJECT_ROOT / "tasks" / "sorter_boxes"))
     e.add_argument("--place-above", type=float, default=0.03, help="Place height over the rim (m)")
     e.add_argument("--duration", type=float, default=30.0, help="Expected s per box (pick + place)")
+    e.add_argument("--no-vlm", action="store_true", help="Skip Qwen's sorting (positions only)")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")
