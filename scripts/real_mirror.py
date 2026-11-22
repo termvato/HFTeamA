@@ -1,7 +1,7 @@
 """Mirror a real SO-101 in the MuJoCo model: move the arm by hand, watch the model follow.
 
 Checks the sign and zero of every joint at once: if a joint of the model turns the other way
-than the real one, its sign is flipped; if it follows but sits a few degrees off, it needs an offset.
+than the real one, its sign is flipped; if it follows but sits off, it needs an offset.
 
     cd /data/diego/Projects/HFTeam-action
     source ../HFTeam/.venv/bin/activate
@@ -72,7 +72,9 @@ def fmt(q: np.ndarray) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--arm", default="rakesh_follower", help="rakesh_follower or vato_follower")
     ap.add_argument("--demo", action="store_true", help="no arm: sweep the model's joints")
     a = ap.parse_args()

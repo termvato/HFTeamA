@@ -35,7 +35,9 @@ ROOT = Path(__file__).resolve().parents[1]
 REAL = ROOT / "configs" / "real_arms.json"
 EXAMPLE = ROOT / "configs" / "real_arms.example.json"
 PAIRS = ROOT / "configs" / "teleop_pairs.json"
-SHORT = dict(zip(JOINTS, ("pan", "lift", "elbow", "w_flex", "w_roll", "grip")))
+SHORT = dict(
+    zip(JOINTS, ("pan", "lift", "elbow", "w_flex", "w_roll", "grip"), strict=True)
+)
 
 
 def ask(msg: str) -> bool:
@@ -88,7 +90,9 @@ class Session:
 
     def show(self) -> None:
         q, raw = self.obs()
-        model = "  ".join(f"{SHORT[j]} {np.degrees(v):7.1f}" for j, v in zip(JOINTS, q))
+        model = "  ".join(
+            f"{SHORT[j]} {np.degrees(v):7.1f}" for j, v in zip(JOINTS, q, strict=True)
+        )
         lerobot = "  ".join(f"{raw[f'{j}.pos']:6.1f}" for j in JOINTS)
         print(f"model deg: {model}   | lerobot: {lerobot}")
 
@@ -113,7 +117,11 @@ class Session:
 
     def park(self) -> None:
         q = self.obs()[0][:5]
-        bad = [j for j, v in zip(BODY, q) if not LIMITS_RAD[j][0] <= v <= LIMITS_RAD[j][1]]
+        bad = [
+            j
+            for j, v in zip(BODY, q, strict=True)
+            if not LIMITS_RAD[j][0] <= v <= LIMITS_RAD[j][1]
+        ]
         if bad:
             print(f"outside the joint limits: {bad}; move it and try again")
             return
@@ -228,7 +236,9 @@ def start_log(arm: str) -> Path:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--arm", default="rakesh_follower", help="rakesh_follower or vato_follower")
     arm = ap.parse_args().arm
     log = start_log(arm)
@@ -241,7 +251,10 @@ def main() -> None:
     actions = {"r": s.show, "t": s.live, "p": s.park, "o": s.offset, "g": s.gripper, "w": s.write}
     try:
         while True:
-            c = input("\n[r]ead [t]orque-off live [p]ark_q [o]ffset [g]ripper re[c]onnect [w]rite [q]uit > ").strip()
+            c = input(
+                "\n[r]ead [t]orque-off live [p]ark_q [o]ffset [g]ripper "
+                "re[c]onnect [w]rite [q]uit > "
+            ).strip()
             if c == "q":
                 break
             if c == "c":

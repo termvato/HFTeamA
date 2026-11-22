@@ -35,7 +35,9 @@ def fmt(q: np.ndarray) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--arm", default="rakesh_follower")
     arm = ap.parse_args().arm
     log = start_log(arm)
@@ -49,7 +51,10 @@ def main() -> None:
         q0 = d.read_joints()
         print(f"start: {fmt(q0)}")
         for i, name in enumerate(BODY):
-            ans = input(f"\n{name}: +{np.degrees(STEP_RAD):.1f} deg and back. Enter=go  s=skip  q=stop > ")
+            ans = input(
+                f"\n{name}: +{np.degrees(STEP_RAD):.1f} deg and back. "
+                "Enter=go  s=skip  q=stop > "
+            )
             if ans.strip() == "q":
                 break
             if ans.strip() == "s":
@@ -63,17 +68,20 @@ def main() -> None:
                     t = time.time()
                     d.move_joints(target, speed=SPEED)
                     reached = d.read_joints()
-                    print(f"  moved {sign * np.degrees(STEP_RAD):+.1f} deg in {time.time() - t:.1f}s: {fmt(reached)}")
+                    dt = time.time() - t
+                    step_deg = sign * np.degrees(STEP_RAD)
+                    print(f"  moved {step_deg:+.1f} deg in {dt:.1f}s: {fmt(reached)}")
                     err = np.degrees(reached[i] - target[i])
                     print(f"  {name} error vs command: {err:+.1f} deg")
-                    # back to the start, but not past the arm's limits (the rest pose sits beyond them)
+                    # back to start, clipped inside limits (rest pose sits beyond them)
                     lo = np.array([d._limits[j][0] for j in BODY])
                     hi = np.array([d._limits[j][1] for j in BODY])
                     d.move_joints(np.clip(q, lo, hi), speed=SPEED)
                     print(f"  back: {fmt(d.read_joints())}")
                     break
                 except MotionError as exc:
-                    print(f"  refused/failed ({exc})" + ("; trying the other way" if sign > 0 else ""))
+                    hint = "; trying the other way" if sign > 0 else ""
+                    print(f"  refused/failed ({exc}){hint}")
         if input("\ngripper: open and close once. Enter=go  s=skip > ").strip() != "s":
             d.open_gripper()
             print(f"  open: gripper.pos {d._gripper_pct():.1f}")
