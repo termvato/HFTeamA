@@ -8,6 +8,7 @@ list once. Exit code 0 only if every step ends `ok`.
     python scripts/sim_demo.py                          # tasks/sort/sort12.json on 3 arms
     python scripts/sim_demo.py --viewer --speed 1       # watch it
     python scripts/sim_demo.py --fail arm_b:grasp       # arm_b misses its first grasp
+    python scripts/sim_demo.py --isaac 9871             # also in Isaac Sim: scripts/isaac/mirror.py
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 import argparse
 import threading
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 from hfteama.arms import generic_skills  # noqa: F401  (registers the skills)
@@ -66,6 +68,14 @@ class Board:
                 self.pending.insert(0, tid)
 
 
+def _mirror(table: SimTable, port: int):
+    if not port:
+        return nullcontext()
+    from hfteama.view.isaac_mirror import IsaacMirror
+
+    return IsaacMirror(table, port=port)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("--task", default=str(ROOT / "tasks" / "sort" / "sort12.json"))
@@ -74,6 +84,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--viewer", action="store_true")
     ap.add_argument(
         "--fail", action="append", default=[], metavar="ARM:KIND", help="grasp|down|slow"
+    )
+    ap.add_argument(
+        "--isaac",
+        type=int,
+        default=0,
+        metavar="PORT",
+        help="stream the scene to Isaac Sim (scripts/isaac/mirror.py) on this UDP port",
     )
     ap.add_argument("--events", default=str(ROOT / "runs" / "sim_demo" / "events.jsonl"))
     args = ap.parse_args(argv)
@@ -90,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     errors: list[str] = []
     per_arm: dict[str, list[float]] = {}
 
-    with SimTable(poses, speed=args.speed, viewer=args.viewer) as table:
+    with SimTable(poses, speed=args.speed, viewer=args.viewer) as table, _mirror(table, args.isaac):
         workers = {
             a: SkillWorker(a, table.driver(a), poses, backend="sim", clock=table.sim_time)
             for a in table.arm_ids
