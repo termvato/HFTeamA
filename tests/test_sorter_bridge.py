@@ -59,7 +59,7 @@ class FakeLowLevel:
 
     def gripper(self, value, wait=None):
         self.calls.append(("gripper", value))
-        self.gripper_pos = max(value, 30.0) if value < 10 else value  # a box in the jaws
+        self.gripper_pos = max(value, 34.0)  # a 5.8 cm box stops the jaws at ~44 deg
         return self.gripper_pos
 
     def go_home(self):

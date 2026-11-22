@@ -220,6 +220,84 @@ time if each needs its own control.
 Tested on 21 Nov: `hfteama bimanual record` gave 1 episode, 240 frames at 29.9 Hz,
 12 joints (`left_*`, `right_*`) and both wrist videos.
 
+#### Step 6. VLA datasets per task (record, discard, save)
+
+One fixed dataset per task in `configs/vla_tasks.json` (`box_right`, `box_left`,
+`box_middle`): both pairs as one robot, cameras `left_wrist`, `right_wrist` and `front`
+(the overhead C922, found by name, 640x480, auto exposure for day and night). The first
+session creates the dataset, every later one appends to it (night, then day).
+
+```bash
+hfteama vla list                          # the tasks and their episode counts
+hfteama vla box_middle record             # a session (default 25 / 40 episodes); --episodes N
+hfteama vla box_middle studio             # the same from a web page: http://localhost:8765
+hfteama vla box_middle status             # episodes, lengths, cameras + data check
+hfteama vla box_middle discard            # delete the last episode (asks first)
+hfteama vla box_middle discard --episodes 3,7   # or given ones; --all moves the dataset aside
+hfteama vla box_middle save               # check, then push to the Hub (private; --public)
+```
+
+- `studio`: the three cameras live, both arms' joints as charts, buttons for connect, start,
+  save, discard, delete the last saved episode, check and upload (only if the check passes). The
+  engine is `vla/studio.py` (Action team), used unchanged.
+- While recording: `→` ends the episode, `←` discards it and records it again, `Esc` stops.
+- `discard` keeps the version before as `<name>_old` (one undo). `save` refuses to push if the
+  check fails: wrong task text or cameras, an episode under 1 s, a frame that doesn't decode.
+- Close the sorter first (one program per camera). The task text, cameras and their size must
+  stay the same for the whole dataset.
+- Tested (`tests/test_vla_recording.py`) with LeRobot's own recorder and a fake two-arm robot:
+  two sessions into one dataset, `←` mid-episode, discard, record again on top, save.
+
+#### Step 7. Train a policy on Modal
+
+`scripts/train_modal.py` trains on a Modal GPU (the first free one of L4, A10G, L40S,
+A100-40GB) with LeRobot 0.7.0, and pushes the model to the Hub as `<hub-user>/<policy>_<dataset>`.
+
+```bash
+pip install modal && modal setup                     # once: log in, pick the workspace
+modal secret create hfteam-hf HF_TOKEN=hf_...        # once: YOUR Hugging Face WRITE token
+modal run --detach scripts/train_modal.py                                  # ACT, 40000 steps
+modal run --detach scripts/train_modal.py --policy smolvla --steps 7000 --batch-size 32
+modal app list                                        # then: modal app logs <app id>
+```
+
+- The command returns once the training has started on Modal: closing the terminal or turning
+  the laptop off does not stop it. Stop it with `modal app stop <app id>`.
+- Speed on an L4: ACT about 2.9 steps/s (batch 8), SmolVLA about 1.1 steps/s (batch 32).
+- Checkpoints every `--save-freq` steps in the Modal volume `hfteam-train`.
+
+#### Step 8. Run a trained policy on the arms
+
+The policy drives both followers (no leaders) through `lerobot-rollout`. **It moves the arms:
+the person at the rig runs it.** Set the scene as in the recordings, both arms at rest.
+
+```bash
+# ACT (Qualia): light, runs on the laptop's GTX 1650
+hfteama vla box_middle run --model diegoloayza789/act-hfteam-box-middle-16da4f6a
+
+# SmolVLA (Modal): ~450M parameters, tight on a 4 GB GPU
+hfteama vla box_middle run --model diegoloayza789/smolvla_hfteam_box_middle
+
+# X-VLA (Vivek): 0.9B parameters, 3.5 GB of weights; needs a GPU with 8 GB or more
+hfteama vla box_middle run --model VivekSai07/xvla_hfteam_box_middle
+
+hfteama -n vla box_middle run --model <model>    # print the lerobot-rollout command only
+```
+
+- **Interactive:** the arms stay still until you type `/start`. `/stop` ends a run (`--duration`,
+  default 60 s, bounds each one); type `/start` again for another. At the end the arms return to
+  the pose they started in, then disconnect.
+- **Safety:** each joint moves at most `--max-step-deg` (default 10) per control step on both
+  arms. Keep a hand near the arms on a first run. If `/stop` does not answer: ONE Ctrl-C.
+- **Cameras:** the robot's cameras are `front`, `left_wrist`, `right_wrist` (the dataset's). When
+  a policy was trained with other camera names (SmolVLA `camera1..3`, X-VLA `image..image3`), the
+  renaming is read from the policy's own preprocessor and passed as `--rename_map`.
+- **GPU:** `--device cuda` (default) or `--device cpu`. On CPU, ACT pauses about 0.7 s every
+  100 steps (3.3 s) to compute the next chunk; X-VLA is too slow on CPU.
+- If `torch.cuda.is_available()` is False while `nvidia-smi` works, check
+  `journalctl -k | grep NVRM`: "requiring os reboot to recover" (it happened after a suspend)
+  is fixed only by rebooting.
+
 #### Command reference
 
 | Command | What it does |
@@ -234,6 +312,8 @@ Tested on 21 Nov: `hfteama bimanual record` gave 1 episode, 240 frames at 29.9 H
 | `hfteama --pair P setup-motors follower\|leader` | Set motor IDs on a new arm |
 | `hfteama find-port`, `hfteama find-cameras` | Find a new arm's port, list cameras |
 | `hfteama sort preview\|goto\|touch\|run` | Vision-guided IK sorter: pieces into the box ([docs/hardware/sorter.md](docs/hardware/sorter.md)) |
+| `hfteama vla <task> record\|studio\|status\|discard\|save`, `hfteama vla list` | VLA dataset per task (`configs/vla_tasks.json`) |
+| `hfteama vla <task> run --model M [--device cpu] [--duration S] [--max-step-deg D]` | Run a trained policy (ACT, SmolVLA, X-VLA) on both followers |
 | `hfteama -n ...` | Print the LeRobot command without running it |
 
 Adding a new arm or pair, cameras and troubleshooting:

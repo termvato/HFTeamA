@@ -370,3 +370,37 @@ def test_move_line_is_one_smooth_motion() -> None:
     moving = steps[: int(len(steps) * 0.9)]
     # after the start the arm keeps moving: no tick without motion before the end
     assert (moving[len(moving) // 10 :] > 1e-6).all()
+
+
+def test_gripper_closes_only_to_its_limit_and_squeezes_a_box_lightly() -> None:
+    """22 Nov: closing to 2 (fully closed) crushed the boxes. With the config's limit (31 = 40 deg)
+    and grasp_squeeze, a 5.8 cm box (jaws stop at ~34 = 44 deg) is held 1.9 past contact, and
+    the gripper is never sent past the limit."""
+    import threading
+
+    import hfteama.sorter.robot as robot
+    from hfteama.sorter.geometry import load_config
+
+    mc = load_config()["motion"]
+
+    class FakeRobot:
+        def __init__(self):
+            self.g, self.sent = 100.0, []
+
+        def get_observation(self):
+            return {**{f"{j}.pos": 0.0 for j in robot.BODY}, "gripper.pos": self.g}
+
+        def send_action(self, act):
+            self.sent.append(act["gripper.pos"])
+            self.g = max(34.0, self.g + 0.5 * (act["gripper.pos"] - self.g))  # the box
+
+    drv = robot.ArmDriver.__new__(robot.ArmDriver)
+    drv.stop_event = threading.Event()
+    drv.motion = {**mc, "rate_hz": 1000}
+    drv.robot = FakeRobot()
+    end = drv.gripper(mc["gripper_closed"], wait=3.0)
+    assert mc["gripper_closed"] == pytest.approx(31.0)
+    assert end == pytest.approx(34.0, abs=0.5)
+    assert drv.gripper_target == pytest.approx(34.0 - mc["grasp_squeeze"], abs=0.5)
+    assert min(drv.robot.sent) >= mc["gripper_closed"] - 1e-9
+    assert end > mc["gripper_closed"] + mc["grasp_min_open"]  # counted as holding
