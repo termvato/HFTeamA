@@ -180,6 +180,13 @@ class ArmDriver:
         """Straight TCP line (arm frame) from the pose q_from to target_to, through IK
         waypoints seeded one from the other, driven as ONE smooth motion (no stop at each
         waypoint). Returns the final joint angles."""
+        path = self.line_path(q_from, target_to, yaw, steps)
+        self.move_path(path, speed)
+        return path[-1]
+
+    def line_path(self, q_from, target_to, yaw: float | None, steps: int = 8) -> list:
+        """The joint waypoints of move_line (IK only, no bus: it takes ~1 s, so callers that
+        hold a bus lock can solve it first)."""
         p0 = fk(q_from)[:3, 3]
         q = np.asarray(q_from, float)
         path = []
@@ -191,8 +198,7 @@ class ArmDriver:
                 raise RuntimeError(f"{self.side}: IK failed on the way to {np.round(target_to, 3)}")
             q = sol.q
             path.append(q)
-        self.move_path(path, speed)
-        return q
+        return path
 
     def move_path(self, qs, speed: float | None = None, settle: float = 1.5) -> None:
         """Drive through joint waypoints qs (rad, model) in one motion: the poses are spaced

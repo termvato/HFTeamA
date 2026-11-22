@@ -89,6 +89,7 @@ class SorterArmDriver:
         self._last_down = False  # its pose had the gripper down (within max_tilt)
         self._last_mode = "grasp"  # how its pose was solved: "grasp" or "drop" (see _command)
         self._carrying = False  # the last close_gripper held a piece (until open_gripper)
+        self._aims: dict = {}  # grasp_aim cache (see _grasp_aim)
 
     # ---- helpers
 
@@ -137,8 +138,9 @@ class SorterArmDriver:
             piece_yaw = 0.0
         w = self._pc.get("object_width", 0.03)
         L = self._pc.get("object_length", w)
-        piece = Piece(x=float(p[0]), y=float(p[1]), length=L, width=w, yaw=piece_yaw, area_cm2=0)
-        ax, ay, yaw_arm, _, dz = self._arm.grasp_aim(piece, z)
+        ax, ay, yaw_arm, _, dz = self._grasp_aim(
+            round(float(p[0]), 4), round(float(p[1]), 4), round(z, 4), float(piece_yaw), L, w
+        )
         if same_spot and yaw_main is None and self._last_yaw is not None:
             yaw_arm = self._last_yaw  # same wrist all the way down and up again
         target = self._arm.placement.to_arm([ax, ay, z + dz])
@@ -147,6 +149,15 @@ class SorterArmDriver:
         if not sol.ok and self._high(z):  # above the pieces: any gripper orientation
             sol = solve_ik(target, down=False, limits=self._arm.limits)
         return sol, p[:2], yaw_arm, down
+
+    def _grasp_aim(self, x, y, z, yaw, length, width):
+        """`ArmModel.grasp_aim`, cached: a step checks every point before moving (reachable),
+        then moves through the same points, and each costs ~1 s of IK."""
+        key = (x, y, z, yaw, length, width)
+        if key not in self._aims:
+            piece = Piece(x=x, y=y, length=length, width=width, yaw=yaw, area_cm2=0)
+            self._aims[key] = self._arm.grasp_aim(piece, z)
+        return self._aims[key]
 
     def _high(self, z: float) -> bool:
         """Above the pieces on the table, where the gripper may tilt."""
@@ -183,6 +194,9 @@ class SorterArmDriver:
         self._guard()
         mode = self._mode_for(self._frame.to_sorter(xyz)[:2])
         sol, xy, yaw_arm, down = self._command(xyz, yaw, mode)
+        if not sol.ok and mode == "drop":  # the drop aim only matters over the bowl: anywhere
+            mode = "grasp"  # else (e.g. the carry pose) the grasp aim is as good
+            sol, xy, yaw_arm, down = self._command(xyz, yaw, mode)
         if not sol.ok:
             raise MotionError("unreachable")
         deg_s = self._mc.get("max_joint_speed_deg_s", 45.0) * min(max(speed, 0.05), 1.0)
@@ -191,7 +205,12 @@ class SorterArmDriver:
             # only the height changes, gripper down at both ends: a straight vertical line, one
             # smooth motion (its IK keeps the gripper down, so not from or to a tilted pose)
             line_yaw = yaw_arm if yaw_arm is not None else self._last_yaw
-            self._run(self._drv.move_line, self._drv.q(), fk(sol.q)[:3, 3], line_yaw, 8, deg_s)
+            q0 = self._run(self._drv.q)
+            try:  # the line's IK outside the bus lock: ~1 s with no bus traffic (heartbeat)
+                path = self._drv.line_path(q0, fk(sol.q)[:3, 3], line_yaw, 8)
+            except RuntimeError as exc:
+                raise MotionError(str(exc)) from exc
+            self._run(self._drv.move_path, path, deg_s)
         else:
             self._run(self._drv.move_q, sol.q, deg_s)
         self._last_xy, self._last_down, self._last_mode = xy, down, mode
