@@ -341,9 +341,10 @@ class ArmDriver:
                 best, since = g, time.perf_counter()
             elif time.perf_counter() - since > 0.3:
                 break  # blocked by the piece
-        # hold where it stopped, squeezing a little (within the cap): the arm's next moves
-        # resend this, and a far target would be clipped (and warned) on every step
-        self.gripper_target = float(g + np.clip(value - g, -cap, cap))
+        # hold where it stopped, squeezing a little (grasp_squeeze, at most the cap): the arm's
+        # next moves resend this, and a far target would be clipped (and warned) on every step
+        squeeze = min(float(self.motion.get("grasp_squeeze", cap)), cap)
+        self.gripper_target = float(g + np.clip(value - g, -squeeze, squeeze))
         self._note("gripper", began, asked=float(value), reached=float(g))
         return g
 
