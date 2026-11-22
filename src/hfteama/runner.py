@@ -301,6 +301,38 @@ def _sorter_rescan(cam: _Overhead, args, log_dir: Path | None = None) -> Callabl
     return rescan
 
 
+def _scan_table(cam: _Overhead, args, task_path: Path) -> int:
+    """`--scan`: the table as it is now, written where the run reads it (task_path's folder),
+    before anything connects (22 Nov 12:43: the boxes had been moved since a 12:33 scan; every
+    pick at a moved box closed on air). Camera only. Returns the number of boxes found."""
+    import json
+    import subprocess
+    import sys
+    import tempfile
+
+    import cv2
+
+    for _ in range(5):  # the first frames come before exposure settles (11:50: 0 boxes found)
+        img = cam.grab()
+    frame = Path(tempfile.mkdtemp(prefix="scan_")) / "frame.png"
+    cv2.imwrite(str(frame), img)
+    cmd = [
+        sys.executable, "-c", _EXPORT_CHILD, "--config", str(args.pairs),
+        "sort", "export", "--image", str(frame), "--out", str(task_path.parent), "--no-vlm",
+    ]  # fmt: skip
+    print("scanning the table (overhead camera only)...", flush=True)
+    done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=180)
+    keep = ("Pieces", "   #", "wrote")
+    for line in done.stdout.splitlines():
+        if line.startswith(keep) or line[:6].strip().isdigit():
+            print(line)
+    if done.returncode != 0 or not task_path.exists():
+        print((done.stderr or done.stdout).strip()[-400:])
+        return 0
+    steps = json.loads(task_path.read_text()).get("tasks", [])
+    return sum(1 for t in steps if t.get("skill") == "pick")
+
+
 def _save_rescan_output(log_dir: Path | None, how: str, stdout, stderr) -> str:
     """Keep a re-scan's console output in the run folder (it was lost before). Returns a note
     for the error message; never raises."""
@@ -367,6 +399,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     ap.add_argument("--token", default=None, help="operator token for the dashboard's buttons")
     ap.add_argument(
+        "--scan",
+        action="store_true",
+        help="sorter: scan the table with the overhead camera first and write --task's folder "
+        "(boxes.json, poses_real.json), so the boxes are where they are now",
+    )
+    ap.add_argument(
         "--no-rescan",
         action="store_true",
         help="sorter: retry a missed grasp at the old spot instead of re-scanning first",
@@ -399,6 +437,22 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     if real and args.inject:
         ap.error("--inject is for the simulator only")
     task_dir = Path(args.task).parent
+    cam = _Overhead(ROOT) if args.backend == "sorter" else None
+    if args.scan:
+        if cam is None:
+            ap.error("--scan needs --backend sorter (the overhead camera)")
+        if Path(args.task).name != "boxes.json":
+            ap.error("--scan writes boxes.json: give --task <folder>/boxes.json")
+        try:
+            boxes = _scan_table(cam, args, Path(args.task))
+        except Exception as e:  # noqa: BLE001  (camera missing, export timed out)
+            print(f"scan failed: {e}")
+            boxes = 0
+        if boxes == 0:
+            cam.close()
+            print("no reachable box found: nothing was connected. Check the table and camera.")
+            return 2
+        print(f"scan: {boxes} reachable boxes, written to {task_dir}")
     poses_path = args.poses or default_poses(task_dir, real)
     graph, poses = load(args.task), Poses.load(poses_path)
     arm_ids = [a for a in args.arms.split(",") if a]
@@ -445,7 +499,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             if ask("Type 'yes' to connect the arms: ").strip() != "yes":
                 print("not confirmed: nothing was connected.")
                 return 2
-            cam = _Overhead(ROOT)
+            cam = cam or _Overhead(ROOT)
             close_cam = cam.close
             # the overhead camera belongs to the sorter rig: Qwen and the re-scan need it
             if args.backend == "sorter" and not args.no_vlm:  # once confirmed: Qwen takes ~30 s
