@@ -103,3 +103,36 @@ def test_stable_path_survives_a_replug(tmp_path: Path) -> None:
     (by_id / "usb-046d_C922-video-index1").symlink_to(tmp_path / "video8")
     assert vla_data.stable_path(str(dev), by_id) == str(by_id / "usb-046d_C922-video-index0")
     assert vla_data.stable_path(str(tmp_path / "video9"), by_id) == str(tmp_path / "video9")
+
+
+def test_rollout_command_runs_the_policy_on_both_followers() -> None:
+    t = task()
+    cmd = vla_data.rollout_command(t, "user/act_model", {"front": FRONT}, max_step_deg=10)
+    assert Path(cmd[0]).name == "lerobot-rollout"
+    assert "--policy.path=user/act_model" in cmd and "--interactive=true" in cmd
+    assert not any(a.startswith("--teleop.") for a in cmd)  # the policy drives, not the leaders
+    cams = next(a for a in cmd if a.startswith("--robot.cameras="))
+    assert all(f"{c}: " in cams for c in ("front", "left_wrist", "right_wrist"))
+    assert "--robot.left_arm_config.max_relative_target=10" in cmd
+    assert "--robot.right_arm_config.max_relative_target=10" in cmd
+    assert f"--task={t.task}" in cmd
+    off = vla_data.rollout_command(t, "m", {"front": FRONT}, max_step_deg=0)
+    assert not any("max_relative_target" in a for a in off)
+
+
+def test_policy_rename_map_read_from_the_policy(tmp_path: Path) -> None:
+    pre = {
+        "steps": [
+            {
+                "registry_name": "rename_observations_processor",
+                "config": {"rename_map": {"observation.images.front": "observation.images.image"}},
+            },
+            {"registry_name": "to_batch_processor", "config": {}},
+        ]
+    }
+    (tmp_path / "policy_preprocessor.json").write_text(__import__("json").dumps(pre))
+    m = vla_data.policy_rename_map(str(tmp_path))
+    assert m == {"observation.images.front": "observation.images.image"}
+    cmd = vla_data.rollout_command(task(), str(tmp_path), {"front": FRONT}, rename_map=m)
+    assert any(a.startswith("--rename_map=") and "observation.images.image" in a for a in cmd)
+    assert vla_data.policy_rename_map(str(tmp_path / "missing")) == {}

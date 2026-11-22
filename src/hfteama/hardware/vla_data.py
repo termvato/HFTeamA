@@ -202,6 +202,73 @@ def record_command(
     return cmd
 
 
+def rollout_command(
+    task: VlaTask,
+    model: str,
+    cameras: dict[str, dict[str, Any]] | None = None,
+    pairs_config: Path | str | None = None,
+    duration: float = 60,
+    device: str = "cuda",
+    max_step_deg: float = 10,
+    rename_map: dict[str, str] | None = None,
+) -> list[str]:
+    """lerobot-rollout: a trained policy drives both followers (no leaders), interactive.
+
+    Cameras are top-level `front`, `left_wrist`, `right_wrist`: the dataset keys the policy was
+    trained on. `rename_map` maps them to the policy's own camera names when they differ
+    (SmolVLA camera1..3, X-VLA image..image3; see policy_rename_map). `max_step_deg` caps each
+    joint's move per control step on both arms.
+    """
+    from hfteama.hardware.cli import lerobot_cmd
+
+    robot = [
+        a
+        for a in hardware_args(task, cameras, pairs_config, wrists_top_level=True)
+        if not a.startswith("--teleop.")
+    ]
+    if max_step_deg > 0:
+        robot += [
+            f"--robot.{side}_arm_config.max_relative_target={max_step_deg:g}"
+            for side in ("left", "right")
+        ]
+    return [
+        lerobot_cmd("lerobot-rollout"),
+        "--strategy.type=base",
+        f"--policy.path={model}",
+        f"--device={device}",
+        *robot,
+        f"--task={task.task}",
+        f"--fps={task.fps}",
+        f"--duration={duration:g}",
+        "--interactive=true",
+        "--display_data=true",
+        *([f"--rename_map={json.dumps(rename_map)}"] if rename_map else []),
+    ]
+
+
+def policy_rename_map(model: str) -> dict[str, str]:
+    """The camera renaming a trained policy was trained with, read from the policy itself.
+
+    LeRobot saves it in the preprocessor (`rename_observations_processor`). Empty when the policy
+    uses the dataset's camera names (ACT) or the files can't be read.
+    """
+    path = Path(model)
+    try:
+        if path.is_dir():
+            pre = path / "policy_preprocessor.json"
+        else:
+            from huggingface_hub import hf_hub_download
+
+            pre = Path(hf_hub_download(model, "policy_preprocessor.json"))
+        steps = json.loads(pre.read_text()).get("steps", [])
+    except Exception:  # noqa: BLE001 - no preprocessor: no renaming
+        return {}
+    for step in steps:
+        if step.get("registry_name") == "rename_observations_processor":
+            return dict(step.get("config", {}).get("rename_map", {}))
+    return {}
+
+
 def expected_cameras(task: VlaTask, pairs_config: Path | str | None = None) -> set[str]:
     """Image keys a dataset of this task must have."""
     from hfteama.hardware.bimanual import load_bimanual
@@ -349,7 +416,7 @@ def add_parser(sub) -> None:
         "action",
         nargs="?",
         default="status",
-        choices=["record", "studio", "status", "discard", "save"],
+        choices=["record", "studio", "run", "status", "discard", "save"],
     )
     v.add_argument(
         "--episodes",
@@ -362,6 +429,15 @@ def add_parser(sub) -> None:
     v.add_argument("--force", action="store_true", help="save: push even if the check fails")
     v.add_argument("--tasks-config", help="default: configs/vla_tasks.json")
     v.add_argument("--port", type=int, default=8765, help="studio: web page port")
+    v.add_argument("--model", help="run: trained policy, Hub repo id or local folder")
+    v.add_argument("--duration", type=float, default=60, help="run: seconds per /start")
+    v.add_argument("--device", default="cuda", help="run: cuda or cpu")
+    v.add_argument(
+        "--max-step-deg",
+        type=float,
+        default=10,
+        help="run: largest joint move per control step (safety; 0 = no limit)",
+    )
 
 
 def _confirm(prompt: str, yes: bool) -> bool:
@@ -403,6 +479,59 @@ def dispatch(args) -> int:
         if (dataset_root(task) / "meta" / "info.json").is_file():
             _print_status(task)
         return code
+
+    if args.action == "run":
+        if not args.model:
+            raise SystemExit("run needs --model <hub repo id or folder> (a trained policy)")
+        if args.dry_run:
+            fake = {
+                k: {
+                    **{c: v for c, v in cam.items() if c not in _CAMERA_KEYS},
+                    "index_or_path": cam.get("index_or_path", f"<{cam.get('find')}>"),
+                }
+                for k, cam in task.cameras.items()
+            }
+            cmd = rollout_command(
+                task,
+                args.model,
+                fake,
+                args.config,
+                args.duration,
+                args.device,
+                args.max_step_deg,
+                policy_rename_map(args.model),
+            )
+            return run(cmd, True)
+        cams = resolve_cameras(task.cameras)
+        set_camera_controls(task.cameras, cams)
+        from hfteama.hardware.bimanual import load_bimanual
+        from hfteama.hardware.cli import refuse_if_uncalibrated
+
+        bi = load_bimanual(args.config)
+        refuse_if_uncalibrated(
+            [bi.left.follower, bi.right.follower],
+            f"`hfteama --pair {bi.left.pair} teleop` / `--pair {bi.right.pair}`",
+        )
+        print(
+            "Interactive: the arms stay still until you type /start; /stop ends a run.\n"
+            "Keep a hand near the arms. At the end they return to their starting pose."
+        )
+        rename = policy_rename_map(args.model)
+        if rename:
+            print("Cameras -> policy: " + ", ".join(f"{k} -> {v}" for k, v in rename.items()))
+        return run(
+            rollout_command(
+                task,
+                args.model,
+                cams,
+                args.config,
+                args.duration,
+                args.device,
+                args.max_step_deg,
+                rename,
+            ),
+            False,
+        )
 
     if args.action == "studio":
         from hfteama.hardware.vla_studio import serve
