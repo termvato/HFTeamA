@@ -188,9 +188,11 @@ def add_subcommands(sub: argparse._SubParsersAction) -> None:
     b.add_argument("--cameras", action="store_true", help="teleop: also stream cameras")
     _record_flags(b)
 
+    from hfteama.hardware.vla_data import add_parser as add_vla_parser
     from hfteama.sorter.run import add_parser as add_sort_parser
 
     add_sort_parser(sub)
+    add_vla_parser(sub)
 
 
 def _record_flags(p: argparse.ArgumentParser) -> None:
@@ -209,6 +211,10 @@ def dispatch(args: argparse.Namespace) -> int:
         return sort_dispatch(args)
     if args.command == "bimanual":
         return run_bimanual(args)
+    if args.command == "vla":
+        from hfteama.hardware.vla_data import dispatch as vla_dispatch
+
+        return vla_dispatch(args)
     if len(pair_names(args)) > 1:
         if args.command not in ("teleop", "record"):
             raise SystemExit("Several pairs (--pair a,b) only work with teleop and record.")

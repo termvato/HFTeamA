@@ -1,0 +1,45 @@
+{
+  "note": "VLA datasets recorded with `hfteama vla <task> record|status|discard|save` (both pairs of the 'bimanual' section of teleop_pairs.json as one robot: 12 joints, cameras left_wrist, right_wrist and the top-level ones below). Each task has ONE dataset with a fixed name: the first session creates it, later sessions (night, day) append to it. Datasets live in $HF_LEROBOT_HOME (default ~/.cache/huggingface/lerobot) and reach the Hub only with `save`. Keep the task text, the cameras and their size fixed once a dataset has episodes.",
+  "cameras": {
+    "front": {
+      "find": "C922",
+      "type": "opencv",
+      "width": 640,
+      "height": 480,
+      "fps": 30,
+      "fourcc": "MJPG",
+      "warmup_s": 3,
+      "controls_note": "Set with v4l2-ctl before recording. The sorter leaves the camera in manual exposure and white balance; the VLA records day and night, so give them back to the camera. Focus stays manual (autofocus hunting changes the image).",
+      "controls": {
+        "auto_exposure": 3,
+        "white_balance_automatic": 1,
+        "focus_automatic_continuous": 0
+      }
+    }
+  },
+  "record": {
+    "episodes": 25,
+    "episode_time_s": 60,
+    "reset_time_s": 20,
+    "fps": 30,
+    "private": true
+  },
+  "tasks": {
+    "box_right": {
+      "task": "Move the box to the right",
+      "repo_id": "diegoloayza789/hfteam_box_right",
+      "note": "rakesh arm alone grabs one side of the box, lifts it and moves it to the right; hacklab stays still."
+    },
+    "box_left": {
+      "task": "Move the box to the left",
+      "repo_id": "diegoloayza789/hfteam_box_left",
+      "note": "hacklab arm alone grabs one side of the box, lifts it and moves it to the left; rakesh stays still."
+    },
+    "box_middle": {
+      "task": "Lift the box with both arms and place it in the middle",
+      "repo_id": "diegoloayza789/hfteam_box_middle",
+      "episodes": 40,
+      "note": "both arms grab the two ends of the box, lift it together and put it down between the arms."
+    }
+  }
+}

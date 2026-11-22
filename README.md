@@ -220,6 +220,34 @@ time if each needs its own control.
 Tested on 21 Nov: `hfteama bimanual record` gave 1 episode, 240 frames at 29.9 Hz,
 12 joints (`left_*`, `right_*`) and both wrist videos.
 
+#### Step 6. VLA datasets per task (record, discard, save)
+
+One fixed dataset per task in `configs/vla_tasks.json` (`box_right`, `box_left`,
+`box_middle`): both pairs as one robot, cameras `left_wrist`, `right_wrist` and `front`
+(the overhead C922, found by name, 640x480, auto exposure for day and night). The first
+session creates the dataset, every later one appends to it (night, then day).
+
+```bash
+hfteama vla list                          # the tasks and their episode counts
+hfteama vla box_middle record             # a session (default 25 / 40 episodes); --episodes N
+hfteama vla box_middle studio             # the same from a web page: http://localhost:8765
+hfteama vla box_middle status             # episodes, lengths, cameras + data check
+hfteama vla box_middle discard            # delete the last episode (asks first)
+hfteama vla box_middle discard --episodes 3,7   # or given ones; --all moves the dataset aside
+hfteama vla box_middle save               # check, then push to the Hub (private; --public)
+```
+
+- `studio`: the three cameras live, both arms' joints as charts, buttons for connect, start,
+  save, discard, delete the last saved episode, check and upload (only if the check passes). The
+  engine is `vla/studio.py` (Action team), used unchanged.
+- While recording: `→` ends the episode, `←` discards it and records it again, `Esc` stops.
+- `discard` keeps the version before as `<name>_old` (one undo). `save` refuses to push if the
+  check fails: wrong task text or cameras, an episode under 1 s, a frame that doesn't decode.
+- Close the sorter first (one program per camera). The task text, cameras and their size must
+  stay the same for the whole dataset.
+- Tested (`tests/test_vla_recording.py`) with LeRobot's own recorder and a fake two-arm robot:
+  two sessions into one dataset, `←` mid-episode, discard, record again on top, save.
+
 #### Command reference
 
 | Command | What it does |
@@ -234,6 +262,7 @@ Tested on 21 Nov: `hfteama bimanual record` gave 1 episode, 240 frames at 29.9 H
 | `hfteama --pair P setup-motors follower\|leader` | Set motor IDs on a new arm |
 | `hfteama find-port`, `hfteama find-cameras` | Find a new arm's port, list cameras |
 | `hfteama sort preview\|goto\|touch\|run` | Vision-guided IK sorter: pieces into the box ([docs/hardware/sorter.md](docs/hardware/sorter.md)) |
+| `hfteama vla <task> record\|studio\|status\|discard\|save`, `hfteama vla list` | VLA dataset per task (`configs/vla_tasks.json`) |
 | `hfteama -n ...` | Print the LeRobot command without running it |
 
 Adding a new arm or pair, cameras and troubleshooting:

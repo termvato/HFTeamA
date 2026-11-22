@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VLA Studio</title>
+<style>
+  :root {
+    --bg: #111418; --panel: #1a1f26; --line: #2a313b; --text: #e6e9ee; --muted: #8b95a3;
+    --accent: #4f8cff; --rec: #e5484d; --ok: #30a46c; --warn: #f5a524;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline;
+           padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 18px; }
+  .task { font-size: 16px; color: var(--text); }
+  .meta { color: var(--muted); }
+  .badge { padding: 2px 10px; border-radius: 999px; font-weight: 600; background: var(--line); }
+  .badge.recording { background: var(--rec); animation: pulse 1s infinite; }
+  .badge.idle { background: var(--ok); }
+  .badge.saving, .badge.uploading, .badge.connecting { background: var(--warn); color: #000; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  main { padding: 12px 16px; display: grid; gap: 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+           border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.rec { background: var(--rec); border-color: var(--rec); color: #fff; font-weight: 600; }
+  button.good { background: var(--ok); border-color: var(--ok); color: #fff; }
+  kbd { font-size: 11px; opacity: .75; margin-left: 4px; }
+  .sep { width: 1px; height: 28px; background: var(--line); margin: 0 4px; }
+  .cams { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .cam, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+                 overflow: hidden; }
+  .cam h3, .panel h3 { margin: 0; padding: 6px 10px; font-size: 13px; font-weight: 600;
+                       display: flex; justify-content: space-between; color: var(--muted); }
+  .cam .view { aspect-ratio: 4 / 3; background: #000; display: grid; place-items: center; }
+  .cam img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .cam .why { color: var(--muted); padding: 16px; text-align: center; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; }
+  canvas { width: 100%; height: 190px; display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 10px 10px;
+            font-size: 12px; color: var(--muted); }
+  .legend span b { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+                   margin-right: 4px; vertical-align: -1px; }
+  .legend .v { color: var(--text); font-variant-numeric: tabular-nums; }
+  #msg { padding: 8px 12px; border-radius: 8px; background: var(--panel);
+         border: 1px solid var(--line); }
+  #msg.error { border-color: var(--rec); }
+  #problems { margin: 6px 0 0 18px; color: var(--warn); }
+  .warn { color: var(--warn); }
+  .eps { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 10px 10px; }
+  .ep { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--line);
+        font-variant-numeric: tabular-nums; }
+  .ep.short { background: var(--rec); }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden;
+              min-width: 160px; flex: 1; max-width: 320px; }
+  .progress div { height: 100%; background: var(--rec); width: 0; }
+  label.auto { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>VLA Studio</h1>
+  <span class="task" id="task">…</span>
+  <span class="meta" id="repo"></span>
+  <span class="badge" id="state">…</span>
+  <span class="meta" id="hz"></span>
+</header>
+<main>
+  <div class="bar">
+    <button class="primary" id="connect">Connect arms</button>
+    <button id="disconnect">Disconnect</button>
+    <span class="sep"></span>
+    <button class="rec" id="start">● Start<kbd>Space</kbd></button>
+    <button class="good" id="save">Save episode<kbd>→</kbd></button>
+    <button id="discard">Discard episode<kbd>←</kbd></button>
+    <div class="progress" title="episode time"><div id="prog"></div></div>
+    <span class="meta" id="elapsed"></span>
+    <label class="auto"><input type="checkbox" id="auto"> next episode after reset</label>
+    <span class="sep"></span>
+    <button id="delete_last">Delete last saved</button>
+    <button id="check">Check data</button>
+    <button id="upload">Upload to Hub</button>
+  </div>
+  <div id="msg">…</div>
+
+  <section class="cams" id="cams"></section>
+
+  <section class="charts">
+    <div class="panel"><h3><span>Left arm (rakesh)</span><span id="lhz"></span></h3>
+      <canvas id="chart_left"></canvas><div class="legend" id="legend_left"></div></div>
+    <div class="panel"><h3><span>Right arm (hacklab)</span><span></span></h3>
+      <canvas id="chart_right"></canvas><div class="legend" id="legend_right"></div></div>
+  </section>
+
+  <section class="panel">
+    <h3><span id="eptitle">Episodes</span><span id="eproot"></span></h3>
+    <div class="eps" id="eps"></div>
+  </section>
+  <p class="meta">Before <b>Disconnect</b> or stopping the server, bring both arms to rest with the
+    leaders: disconnecting turns the followers' torque off. Before <b>Connect</b>, put each leader
+    roughly in its follower's pose.</p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"];
+const COLORS = ["#4f8cff", "#30a46c", "#f5a524", "#e5484d", "#a78bfa", "#2dd4bf"];
+const WINDOW_S = 20;
+const history = { left: [], right: [] };   // [t, [6 values]]
+let S = {}, slotsKey = "", busy = false;
+
+async function api(path, body) {
+  const r = await fetch("/api/" + path, body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return r.json();
+}
+
+function say(text, error) {
+  $("msg").className = error ? "error" : "";
+  $("msg").innerHTML = "";
+  $("msg").append(text);
+  if (error) { const e = document.createElement("div"); e.className = "warn"; e.textContent = error; $("msg").append(e); }
+}
+
+function renderCams(slots) {
+  const key = slots.map(s => s.name + (s.live ? "1" : "0") + (s.why || "")).join("|");
+  if (key === slotsKey) return;
+  slotsKey = key;
+  const t = Date.now();
+  $("cams").innerHTML = "";
+  for (const s of slots) {
+    const d = document.createElement("div");
+    d.className = "cam";
+    d.innerHTML = `<h3><span>${s.name}</span><span>${s.size || ""}</span></h3><div class="view"></div>`;
+    const v = d.querySelector(".view");
+    if (s.live) { const img = new Image(); img.src = `/stream/${s.name}?t=${t}`; v.append(img); }
+    else { const w = document.createElement("div"); w.className = "why"; w.textContent = s.why; v.append(w); }
+    $("cams").append(d);
+  }
+}
+
+function pushJoints(joints) {
+  const now = performance.now() / 1000;
+  for (const side of ["left", "right"]) {
+    const vals = JOINTS.map(j => joints[`${side}_${j}.pos`]);
+    if (vals.some(v => v === undefined)) continue;
+    const h = history[side];
+    h.push([now, vals]);
+    while (h.length && now - h[0][0] > WINDOW_S) h.shift();
+  }
+}
+
+function drawChart(side) {
+  const c = $("chart_" + side), h = history[side];
+  const dpr = window.devicePixelRatio || 1, W = c.clientWidth, H = c.clientHeight;
+  if (c.width !== W * dpr) { c.width = W * dpr; c.height = H * dpr; }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  let lo = -100, hi = 100;
+  for (const [, v] of h) for (const x of v) { lo = Math.min(lo, x); hi = Math.max(hi, x); }
+  const pad = 8, y = (x) => pad + (hi - x) / (hi - lo) * (H - 2 * pad);
+  g.strokeStyle = "#2a313b"; g.lineWidth = 1;
+  for (const v of [lo, 0, hi]) { g.beginPath(); g.moveTo(0, y(v)); g.lineTo(W, y(v)); g.stroke(); }
+  g.fillStyle = "#8b95a3"; g.font = "10px system-ui";
+  g.fillText(hi.toFixed(0), 4, y(hi) + 10); g.fillText(lo.toFixed(0), 4, y(lo) - 2);
+  const now = performance.now() / 1000, xOf = (t) => W - (now - t) / WINDOW_S * W;
+  JOINTS.forEach((_, i) => {
+    g.strokeStyle = COLORS[i]; g.lineWidth = 1.6; g.beginPath();
+    h.forEach(([t, v], k) => k ? g.lineTo(xOf(t), y(v[i])) : g.moveTo(xOf(t), y(v[i])));
+    g.stroke();
+  });
+  const last = h.length ? h[h.length - 1][1] : null;
+  $("legend_" + side).innerHTML = JOINTS.map((j, i) =>
+    `<span><b style="background:${COLORS[i]}"></b>${j} <span class="v">${last ? last[i].toFixed(1) : "—"}</span></span>`).join("");
+}
+
+function render() {
+  const st = S.state || "…";
+  $("state").textContent = st;
+  $("state").className = "badge " + st;
+  $("hz").textContent = S.hz ? `${S.hz} Hz` : "";
+  const rec = st === "recording", idle = st === "idle", still = ["idle", "preview", "disconnected"].includes(st);
+  $("connect").disabled = !(st === "disconnected" || st === "preview");
+  $("disconnect").disabled = !(idle || st === "preview" || rec);
+  $("start").disabled = !idle || busy;
+  $("save").disabled = !rec;
+  $("discard").disabled = !rec;
+  for (const id of ["delete_last", "check", "upload"]) $(id).disabled = !still || busy;
+  $("auto").checked = !!S.auto_next;
+  const T = S.episode_time_s || 0;
+  $("prog").style.width = rec && T ? `${Math.min(100, 100 * S.elapsed / T)}%` : "0";
+  $("elapsed").textContent = rec ? `${S.elapsed.toFixed(0)} / ${T.toFixed(0)} s · ${S.frames} frames`
+    : (S.reset_left ? `next in ${S.reset_left.toFixed(0)} s` : "");
+  $("eptitle").textContent = `Episodes: ${S.episodes ?? 0}` + (DS.target ? ` / ${DS.target}` : "")
+    + (S.session_saved ? ` (${S.session_saved} this session)` : "");
+  if (!busy) say(S.message || "", S.error || "");
+  if (S.url) { const a = document.createElement("a"); a.href = S.url; a.textContent = " " + S.url; a.target = "_blank"; $("msg").append(a); }
+}
+
+let DS = {};
+async function refreshDataset() {
+  DS = await api("dataset");
+  $("task").textContent = `“${DS.task}”`;
+  $("repo").textContent = `${DS.name} → ${DS.repo_id}`;
+  $("eproot").textContent = DS.root || "";
+  const eps = $("eps"); eps.innerHTML = "";
+  if (DS.lengths_s) DS.lengths_s.forEach((s, i) => {
+    const e = document.createElement("span");
+    e.className = "ep" + (s < 1 ? " short" : ""); e.textContent = `${i}: ${s}s`; eps.append(e);
+  });
+  else if (DS.lengths_s === null && DS.episodes === undefined) eps.textContent = "";
+}
+
+async function poll() {
+  try {
+    const prev = S.state, prevEps = S.episodes;
+    S = await api("status");
+    renderCams(S.slots || []);
+    pushJoints(S.joints || {});
+    render();
+    if (prev !== S.state || prevEps !== S.episodes) refreshDataset();
+  } catch (e) { say("Server not reachable.", String(e)); }
+}
+
+async function run(id, body) {
+  busy = true; render();
+  try {
+    const r = await api(id, body || {});
+    if (r.message !== undefined && r.state === undefined) {
+      say(r.message, (r.problems || []).length ? "" : (r.ok === false ? " " : ""));
+      if ((r.problems || []).length) {
+        const ul = document.createElement("ul"); ul.id = "problems";
+        r.problems.forEach(p => { const li = document.createElement("li"); li.textContent = p; ul.append(li); });
+        $("msg").append(ul);
+      }
+      busy = false; await refreshDataset(); render();
+      setTimeout(() => {}, 0);
+      return r;
+    }
+  } finally { busy = false; }
+}
+
+$("connect").onclick = () => run("connect", { cameras_only: false });
+$("disconnect").onclick = () => {
+  if (confirm("Are both arms at rest? Disconnecting turns the followers' torque off.")) run("disconnect");
+};
+$("start").onclick = () => run("start");
+$("save").onclick = () => run("save");
+$("discard").onclick = () => run("discard");
+$("auto").onchange = (e) => run("auto", { on: e.target.checked });
+$("delete_last").onclick = () => {
+  const n = S.episodes ?? 0;
+  if (n && confirm(`Delete the last saved episode (${n - 1})? The version before is kept as <name>_old.`))
+    runKeep("delete_last");
+};
+$("check").onclick = () => runKeep("check");
+$("upload").onclick = () => {
+  if (confirm(`Check the data and upload ${DS.repo_id} to the Hugging Face Hub (${S.private ? "private" : "PUBLIC"})?`))
+    runKeep("upload");
+};
+// Actions whose result message should stay on screen until the next action.
+async function runKeep(id) {
+  busy = true; render(); say(id === "check" ? "Checking every episode…" : id === "upload" ? "Checking, then uploading…" : "Deleting…");
+  const r = await api(id, {});
+  await refreshDataset();
+  busy = false;
+  render();
+  say(r.message, "");
+  if ((r.problems || []).length) {
+    const ul = document.createElement("ul"); ul.id = "problems";
+    r.problems.forEach(p => { const li = document.createElement("li"); li.textContent = p; ul.append(li); });
+    $("msg").append(ul);
+  }
+  hold = Date.now() + 8000;
+}
+let hold = 0;
+const _render = render;
+render = function () { const keep = Date.now() < hold; if (keep) { const b = busy; busy = true; _render(); busy = b; $("start").disabled = !(S.state === "idle"); } else _render(); };
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.code === "Space") { e.preventDefault(); if (!$("start").disabled) run("start"); }
+  if (e.code === "ArrowRight" && !$("save").disabled) run("save");
+  if (e.code === "ArrowLeft" && !$("discard").disabled) run("discard");
+});
+
+function frame() { drawChart("left"); drawChart("right"); requestAnimationFrame(frame); }
+refreshDataset();
+setInterval(poll, 100);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
