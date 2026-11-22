@@ -1,14 +1,68 @@
 {
-  "note": "Bench test of ONE arm (vato_follower on COM7). Table frame = the arm's own base frame (arm forward = +x, base on the table at z = 0). park_q is the arm's measured resting pose, with shoulder_lift pulled 0.05 rad inside the model limit. grip_holding_min_pct is a placeholder until measured. speed_scale 0.3 = 30 % speed.",
+  "note": "Combined real arm configs (Stage 1-2 measured on rakesh_follower + bench vato_follower), seeded in the shared hacklab_table.json frame (yaw=-90 deg, facing front C920). Note: hardware-ik sorter_placements.json jogged rakesh base to [0.138, 0.35] with z_offset=-0.015; refine both arms via >=4-point touch-probe before real multi-arm runs.",
   "arms": {
-    "vato_follower": {
-      "pair": "hacklab",
+    "rakesh_follower": {
+      "pair": "rakesh",
       "base": [
+        0.089,
+        0.42,
+        0.0
+      ],
+      "yaw": -1.5707963267948966,
+      "table_z": 0.0,
+      "park_q": [
+        -0.226,
+        -1.658,
+        1.536,
+        0.058,
+        -1.572
+      ],
+      "grip_holding_min_pct": 3.5,
+      "min_hold_load_pct": 0.0,
+      "preload_pct": 0.0,
+      "max_relative_target_deg": 10.0,
+      "speed_scale": 0.3,
+      "settle_tol_deg": 5.7,
+      "sag_coeffs": [
         0.0,
         0.0,
         0.0
       ],
-      "yaw": 0.0,
+      "offsets_deg": {
+        "wrist_roll": 90.0
+      },
+      "limits_deg": {
+        "shoulder_pan": [
+          -123.2,
+          83.0
+        ],
+        "shoulder_lift": [
+          -99.9,
+          99.5
+        ],
+        "elbow_flex": [
+          -100.5,
+          90.1
+        ],
+        "wrist_flex": [
+          -97.5,
+          72.4
+        ],
+        "wrist_roll": [
+          -162.6,
+          3.7
+        ]
+      },
+      "limits_note": "hand-measured range 2026-11-21 (runs/stage1/mirror_rakesh_follower_20261121_183702.log), minus 3 deg; model degrees with offsets_deg applied; the driver also never exceeds the model limits"
+    },
+    "vato_follower": {
+      "pair": "hacklab",
+      "base": [
+        0.488,
+        0.44,
+        0.0
+      ],
+      "yaw": -1.5707963267948966,
       "table_z": 0.0,
       "park_q": [
         -0.11,
@@ -18,9 +72,16 @@
         -1.618
       ],
       "grip_holding_min_pct": 15.0,
+      "min_hold_load_pct": 0.0,
+      "preload_pct": 0.0,
       "max_relative_target_deg": 10.0,
       "speed_scale": 0.3,
       "settle_tol_deg": 5.7,
+      "sag_coeffs": [
+        0.0,
+        0.0,
+        0.0
+      ],
       "offsets_deg": {}
     }
   }

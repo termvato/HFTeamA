@@ -76,6 +76,22 @@ def test_down_pose_reaches_approach_and_lift_heights(kin: Kinematics, z: float) 
     assert z_axis @ np.array([0.0, 0.0, -1.0]) > 0.9
 
 
+def test_elbow_clamped_and_precheck_fast(kin: Kinematics) -> None:
+    from hfteama.arms.ik import ELBOW_MAX_RAD
+
+    r = kin.solve(np.array([0.12, 0.0, 0.02]), down=True)
+    assert r.q[2] <= ELBOW_MAX_RAD + 1e-6
+
+    ok, reason = kin.precheck(np.array([0.20, 0.05, 0.03]), np.array([0.20, -0.05, 0.03]))
+    assert ok and reason == "ok"
+
+    bad_tbl, r_tbl = kin.precheck(np.array([0.20, 0.0, 0.005]), np.array([0.20, 0.0, 0.03]))
+    assert not bad_tbl and r_tbl == "below table"
+
+    bad_reach, _ = kin.precheck(np.array([2.0, 0.0, 0.05]), np.array([0.20, 0.0, 0.03]))
+    assert not bad_reach
+
+
 @pytest.mark.parametrize("yaw", [0.0, 0.5, 1.2, 2.0, -1.0])
 @pytest.mark.parametrize("xy", [(0.2, 0.0), (0.15, 0.08), (0.25, -0.1)])
 def test_solve_aligns_the_jaw_closing_direction_with_the_requested_yaw(

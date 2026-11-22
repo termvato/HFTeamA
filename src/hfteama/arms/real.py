@@ -30,15 +30,13 @@ from typing import Any
 import numpy as np
 
 from hfteama.arms.ik import ArmBase, Kinematics
-from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, LIMITS_RAD, ArmFrame
+from hfteama.arms.kinematics import DEFAULT_OFFSETS_DEG, JOINTS, LIMITS_RAD, ArmFrame
 from hfteama.arms.primitives import (
     ArmDown,
     Grasp,
     MotionError,
-    check_joints,
     check_path,
     check_point,
-    clip_to_limits,
 )
 
 log = logging.getLogger(__name__)
@@ -48,6 +46,10 @@ SETTLE_TOL_RAD = 0.1  # STS3215 under arm load sits a few degrees off its goal
 SETTLE_TIMEOUT_S = 1.5
 PARK_SPEED = 0.3
 YAW_TOL_RAD = 0.1  # a requested grasp heading this far off is refused, not approximated
+GRIP_STEP_PCT = 5.0  # gripper ramp step per tick; below LeRobot's max_relative_target (10)
+GRIP_SETTLE_TIMEOUT_S = 1.5
+GRIP_DONE_PCT = 2.0  # within this of the goal: reached
+GRIP_STILL_PCT = 0.3  # reading changed less than this in one tick: stalled (on an object)
 HEARTBEAT_POLL_S = 0.5  # an idle arm does no bus traffic, so alive() reads the bus after this long
 DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "configs" / "real_arms.json"
 
@@ -68,6 +70,10 @@ class LeRobotDriver:
         speed_scale: float = 1.0,
         settle_tol_rad: float = SETTLE_TOL_RAD,
         settle_timeout_s: float = SETTLE_TIMEOUT_S,
+        sag_coeffs: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        preload_pct: float = 0.0,
+        min_hold_load_pct: float = 0.0,
+        limits_rad: dict | None = None,
     ) -> None:
         self.arm_id = arm_id
         self.table_z = table_z
@@ -81,7 +87,15 @@ class LeRobotDriver:
         self._gripper_wait = gripper_wait_s
         self._speed_scale = speed_scale  # global slow-down for first runs (0.3 = 30 % speed)
         self._settle_tol = settle_tol_rad
+        # per-arm limits (measured on the real arm), never wider than the model's
+        self._limits = dict(LIMITS_RAD)
+        for name, (lo, hi) in (limits_rad or {}).items():
+            mlo, mhi = LIMITS_RAD[name]
+            self._limits[name] = (max(lo, mlo), min(hi, mhi))
         self._settle_timeout = settle_timeout_s
+        self._sag_coeffs = tuple(float(x) for x in sag_coeffs)
+        self._preload_pct = float(preload_pct)
+        self._min_hold_load_pct = float(min_hold_load_pct)
         self._bus_lock = threading.RLock()  # re-entrant: a callback inside a bus call may stop()
         self._torque_off = False
         self._stop = threading.Event()
@@ -100,9 +114,18 @@ class LeRobotDriver:
             self._last_ok = time.time()
         return obs
 
+    def _check(self, q: np.ndarray) -> None:
+        """Raise MotionError("joint limit: <name>") for a body joint outside this arm's limits."""
+        for name, value in zip(JOINTS, np.asarray(q, float), strict=False):
+            if name == "gripper":
+                continue  # the gripper stalls on objects; its command range is fixed (0..100 %)
+            lo, hi = self._limits[name]
+            if not lo <= value <= hi:
+                raise MotionError(f"joint limit: {name}")
+
     def _send(self, q6: np.ndarray) -> None:
         q6 = np.asarray(q6, float)
-        check_joints(q6)
+        self._check(q6)
         with self._bus_lock:
             try:
                 self._robot.send_action(self._frame.to_lerobot(q6, clip=False))
@@ -114,19 +137,17 @@ class LeRobotDriver:
     def _base(self) -> np.ndarray:
         """The pose commands are built on: the last one sent, else the measured one (first move).
 
-        An arm can rest slightly past a model limit (on its physical stop, whose calibrated range
-        is wider than the model's). Commands are never sent past the model's limits, so a measured
-        pose outside them is clipped in: the first command moves that joint inside by the
-        overshoot.
+        An arm can rest slightly past `_limits` (on its physical stop, whose calibrated range is
+        wider than the model's). Commands are never sent past `_limits`, so a measured pose outside
+        them is clipped in: the first command moves that joint inside by the overshoot.
         """
         if self._target is not None:
             return self._target.copy()
         q = self.read_joints()
-        clipped = clip_to_limits(q)
+        clipped = np.array([np.clip(v, *self._limits[j]) for v, j in zip(q, JOINTS, strict=True)])
         if np.abs(clipped - q).max() > 1e-6:
             log.warning(
-                "%s rests outside the model's joint limits by %s rad; its first command will "
-                "move it inside",
+                "%s rests outside joint limits by %s rad; its first command will move it inside",
                 self.arm_id,
                 np.round(q - clipped, 3).tolist(),
             )
@@ -158,17 +179,17 @@ class LeRobotDriver:
         base = self._base()
         goal = base.copy()
         goal[: len(q)] = q
-        check_joints(goal)
+        self._check(goal)
         step = np.clip(goal - base, -self._max_step, self._max_step)
         self._send(base + step)
 
     def move_joints(self, q: np.ndarray, speed: float = 1.0) -> None:
         self._begin()
         q = np.asarray(q, float)
-        check_joints(q)
         start = self._base()
         goal = start.copy()
         goal[: len(q)] = q
+        self._check(goal)
         check_path(self._kin, start[:5], goal[:5], self.table_z)  # before the first command
         step = self._max_step * min(max(speed, 0.05), 1.0) * self._speed_scale
         n = max(1, int(np.ceil(np.abs(goal - start)[: len(q)].max() / step)))
@@ -189,12 +210,32 @@ class LeRobotDriver:
         except MotionError:
             return False
         r = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
-        return r.ok and (yaw is None or abs(r.heading_error_rad or 0.0) <= YAW_TOL_RAD)
+        if not r.ok or (yaw is not None and abs(r.heading_error_rad or 0.0) > YAW_TOL_RAD):
+            return False
+        try:
+            self._check(r.q)
+        except MotionError:
+            return False
+        return True
+
+    def _sag_offset_m(self, xyz: np.ndarray) -> float:
+        a, b, c = self._sag_coeffs
+        if a == 0.0 and b == 0.0 and c == 0.0:
+            return 0.0
+        r = float(np.linalg.norm(np.asarray(xyz, float)[:2] - np.asarray(self._kin.base.xyz[:2])))
+        return a + b * r + c * (r * r)
+
+    def precheck(
+        self, pick_xyz: np.ndarray, place_xyz: np.ndarray, hover_dz: float = 0.07
+    ) -> tuple[bool, str]:
+        """Run fast MuJoCo reach/limit/singularity pre-check before real motion."""
+        return self._kin.precheck(pick_xyz, place_xyz, table_z=self.table_z, hover_dz=hover_dz)
 
     def move_to(self, xyz: np.ndarray, speed: float = 1.0, yaw: float | None = None) -> None:
         self._begin()
-        xyz = np.asarray(xyz, float)
+        xyz = np.asarray(xyz, float).copy()
         check_point(xyz, self.table_z)
+        xyz[2] = max(self.table_z + 0.01, xyz[2] - self._sag_offset_m(xyz))
         result = self._kin.solve(xyz, seed=self.read_joints()[:5], down=True, yaw=yaw)
         if not result.ok:
             raise MotionError("unreachable")
@@ -203,14 +244,52 @@ class LeRobotDriver:
         self.move_joints(result.q, speed)  # re-checks the stop latch: a stop during IK is kept
 
     def _set_gripper(self, pct: float) -> None:
-        q = self._base()
+        """Ramp the gripper to `pct` (LeRobot 0..100), then wait until it stops moving.
+
+        One big jump does not work on the real arm: LeRobot's `max_relative_target` (10) clips every
+        command to 10 units from the present position, so a single "open to 70" opened it by 10.
+        The ramp sends steps of GRIP_STEP_PCT, one per tick, like `move_joints` does for the body.
+        """
         lo, hi = LIMITS_RAD["gripper"]
-        q[5] = lo + (hi - lo) * pct / 100.0
-        self._send(q)
-        time.sleep(self._gripper_wait)
+        q = self._base()
+        start = (q[5] - lo) / (hi - lo) * 100.0
+        n = max(1, int(np.ceil(abs(pct - start) / GRIP_STEP_PCT)))
+        for k in range(1, n + 1):
+            self._tick()
+            q[5] = lo + (hi - lo) * (start + (pct - start) * k / n) / 100.0
+            self._send(q)
+        # settle: done when it reaches the goal, or stalls on an object (reading stops changing).
+        # The goal is re-sent every tick: the ramp is faster than the gripper, so the last ramp
+        # command was clipped to 10 units from where the gripper was then, short of the goal.
+        waited, prev = 0.0, None
+        while waited < GRIP_SETTLE_TIMEOUT_S:
+            self._tick()
+            self._send(q)
+            waited += self._dt
+            cur = self._gripper_pct()
+            if abs(cur - pct) < GRIP_DONE_PCT:
+                break
+            if (
+                prev is not None
+                and waited >= self._gripper_wait
+                and abs(cur - prev) < GRIP_STILL_PCT
+            ):
+                break
+            prev = cur
 
     def _gripper_pct(self) -> float:
         return float(self._observe()["gripper.pos"])
+
+    def _read_gripper_load_pct(self) -> float | None:
+        bus = getattr(self._robot, "bus", None)
+        if bus is None or not hasattr(bus, "read"):
+            return None
+        with self._bus_lock:
+            try:
+                raw = bus.read("Present_Load", "gripper")
+            except Exception:  # noqa: BLE001
+                return None
+        return abs(float(raw)) / 10.0
 
     def open_gripper(self) -> None:
         self._begin()
@@ -222,7 +301,17 @@ class LeRobotDriver:
         self._set_gripper(0.0)
         self._closed = True
         pct = self._gripper_pct()
-        return Grasp(holding=pct >= self._min_pct, position=float(self.read_joints()[5]))
+        load_pct = self._read_gripper_load_pct()
+        is_holding = pct >= self._min_pct
+        if self._min_hold_load_pct > 0.0 and load_pct is not None:
+            is_holding = is_holding and (load_pct >= self._min_hold_load_pct)
+        if is_holding and self._preload_pct > 0.0:
+            self._set_gripper(max(0.0, pct - self._preload_pct))
+        return Grasp(
+            holding=is_holding,
+            position=float(self.read_joints()[5]),
+            effort=load_pct if load_pct is not None else 0.0,
+        )
 
     def gripper_pct(self) -> float:
         """Measured gripper reading, LeRobot 0..100 (for the check tool and the threshold)."""
@@ -318,4 +407,8 @@ def from_config(arm_id: str, path: str | Path = DEFAULT_CONFIG) -> LeRobotDriver
         grip_holding_min_pct=float(cfg["grip_holding_min_pct"]),
         speed_scale=float(cfg.get("speed_scale", 0.3)),
         settle_tol_rad=float(np.radians(cfg.get("settle_tol_deg", 5.7))),
+        sag_coeffs=tuple(float(v) for v in cfg.get("sag_coeffs", (0.0, 0.0, 0.0))),
+        preload_pct=float(cfg.get("preload_pct", 0.0)),
+        min_hold_load_pct=float(cfg.get("min_hold_load_pct", 0.0)),
+        limits_rad={k: tuple(np.radians(v)) for k, v in cfg.get("limits_deg", {}).items()},
     )
