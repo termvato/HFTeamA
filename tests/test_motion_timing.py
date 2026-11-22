@@ -9,6 +9,7 @@ import time
 import pytest
 
 np = pytest.importorskip("numpy")
+pytest.importorskip("mujoco")  # hfteama.runner imports the simulator
 
 from hfteama.arms.kinematics import BODY  # noqa: E402
 from hfteama.runner import _ProcessProbe, _save_rescan_output  # noqa: E402
