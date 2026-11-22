@@ -309,7 +309,7 @@ em { font-style: normal; color: var(--lemon); }
    SLIDE 5: DEMO BEATS
    =========================================== */
 .film { position: relative; padding: 0; overflow: hidden; background: var(--ink); }
-.film video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--ink); }
+.film video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--ink); }
 .film .missing { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 40px; color: var(--paper); font: 500 24px/1.4 var(--font-mono); }
 .film.nofilm video { display: none; }
 .film.nofilm .missing { display: flex; }
@@ -391,7 +391,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="stat-sm" style="font-size:112px;color:var(--lemon)">&darr;&nbsp;Drops</div>
     </div>
     <div class="p ink" style="grid-column:1/span 8;grid-row:7/span 2;justify-content:center">
-      <p class="body-lg">A messy desk, tidied by robot arms. In a hurry? Plug in another one.</p>
+      <p class="body-lg">Build a skill once, for one arm. Plug in more arms, and your desk gets tidied faster.</p>
     </div>
     <div class="p between" style="grid-column:9/span 4;grid-row:7/span 2">
       <div class="lab">SO-101 arms &middot; one camera</div>
@@ -490,7 +490,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     </div>
     <div class="p ink between" style="grid-column:6/span 7;grid-row:1/span 2">
       <div class="lab">The one contract every arm speaks</div>
-      <p class="body-lg"><span class="mono" style="color:var(--lemon);font-size:32px;white-space:nowrap">execute(task) &rarr; ok | failed | timeout | arm_down</span><br>Real, simulated and fake arms all implement it.</p>
+      <p class="body-lg"><span class="mono" style="color:var(--lemon);font-size:32px;white-space:nowrap">execute(task) &rarr; ok | failed | timeout | arm_down</span><br>Every arm runs the same skills. Orchestra manages the rest.</p>
     </div>
 
     <div class="p between" style="grid-column:1/span 3;grid-row:3/span 3">
@@ -510,7 +510,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     </div>
     <div class="p ink between" style="grid-column:10/span 3;grid-row:3/span 3">
       <div class="lab">Action &middot; 04</div>
-      <div><div class="h3" style="margin-bottom:10px">Arm workers</div><p class="bsm">SkillWorker: IK skills on MuJoCo and LeRobot; a trained X-VLA policy fits the same call.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Arm workers</div><p class="bsm">Pick and place by calibrated IK: the same skill on every arm. X-VLA (0.9B), fine-tuned on 41 demos, fits the same call.</p></div>
     </div>
 
     <div class="p lemon between" style="grid-column:1/span 4;grid-row:6/span 3">
@@ -536,8 +536,8 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <section class="slide" aria-label="Live demo">
   <div class="frame">
     <div class="p film" style="grid-column:1/span 8;grid-row:1/span 8">
-      <video src="media/real_run.mp4" controls playsinline preload="metadata" onerror="this.parentNode.classList.add('nofilm')"></video>
-      <div class="missing">Film of the real run goes here:<br>presentation/media/real_run.mp4</div>
+      <video src="media/real_two_arms.mp4" controls muted playsinline preload="metadata" onerror="this.parentNode.classList.add('nofilm')"></video>
+      <div class="missing">Film of the real run:<br>media/real_two_arms.mp4</div>
     </div>
     <div class="p ink pad-lg" style="grid-column:9/span 4;grid-row:1/span 8;justify-content:center">
       <ol class="beats">
@@ -655,8 +655,8 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <p class="body">Sort 12 objects: <span data-fact="show.sim_steps">24/24</span> steps on <span data-fact="show.sim_arms">3</span> MuJoCo arms; a failed grasp recovers.</p>
     </div>
     <div class="p between" style="grid-column:7/span 6;grid-row:7/span 2">
-      <div class="lab">Real arms, Sunday morning</div>
-      <p class="body">Two SO-101s tidy 5 boxes into the bowl: best run 106 s. An arm plugged in mid-run joins in under 1 s.</p>
+      <div class="lab">Real arms, on film</div>
+      <p class="body">Two SO-101s tidy 5 of 5 objects in 2:49, same skill on both. An arm plugged in mid-run joins in under 1 s.</p>
     </div>
   </div>
   <div class="pagenum">08 / 10</div>
@@ -753,11 +753,11 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <!-- FACTS:START -->
 <script type="application/json" id="deck-facts">
 {
- "generated": "Sun 22 Nov 14:37",
- "main_sha": "9b7257e",
+ "generated": "Sun 22 Nov 15:35",
+ "main_sha": "5052ec9",
  "show": {
-  "tests": 384,
-  "commits": 238,
+  "tests": 399,
+  "commits": 242,
   "ops_backlog": "17/22",
   "action_work": "12/13",
   "followers": 2,
