@@ -308,10 +308,15 @@ em { font-style: normal; color: var(--lemon); }
 /* ===========================================
    SLIDE 5: DEMO BEATS
    =========================================== */
+.film { position: relative; padding: 0; overflow: hidden; background: var(--ink); }
+.film video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--ink); }
+.film .missing { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 40px; color: var(--paper); font: 500 24px/1.4 var(--font-mono); }
+.film.nofilm video { display: none; }
+.film.nofilm .missing { display: flex; }
 .beats { list-style: none; display: grid; gap: 30px; }
 .beats li { display: grid; grid-template-columns: 72px 1fr; gap: 20px; align-items: baseline; }
 .beats .n { font: 500 24px var(--font-mono); letter-spacing: 0.06em; color: var(--lemon); }
-.beats .t { font: 400 36px/1.3 var(--font-display); }
+.beats .t { font: 400 30px/1.3 var(--font-display); }
 .beats b { font-weight: 700; text-transform: uppercase; letter-spacing: -0.005em; }
 
 /* ===========================================
@@ -393,7 +398,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="lab">Team of 6 &middot; 48 hours</div>
     </div>
   </div>
-  <div class="pagenum lemon">01 / 09</div>
+  <div class="pagenum lemon">01 / 10</div>
   <aside class="notes">We're Orchestra. Your desk is a mess. Point a camera at it and the arms tidy it. In a hurry? Plug in another arm and watch the finish time drop. (~15 s)</aside>
 </section>
 
@@ -424,7 +429,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div><div class="ch" style="margin-bottom:14px">More arms</div><p class="body">The speed-up flattens, and nothing tells you why.</p></div>
     </div>
   </div>
-  <div class="pagenum">02 / 09</div>
+  <div class="pagenum">02 / 10</div>
   <aside class="notes">Desk robots today are trained for one chore with the objects they saw. Put something new on the desk and they are lost. Want it done faster with a second arm? That means new data or re-programming. And more arms rarely means N times faster, with nothing telling you why. Ours needs no training per object: a camera model names what is on the desk. (~30 s)</aside>
 </section>
 
@@ -470,7 +475,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="lab-sm">Sort 12 objects &middot; planner output on today's code</div>
     </div>
   </div>
-  <div class="pagenum invert">03 / 09</div>
+  <div class="pagenum invert">03 / 10</div>
   <aside class="notes">Three moves. See: a camera model reads the desk and writes the steps. Split: the planner assigns steps and predicts the finish. Re-split: when an arm joins, leaves or fails, we re-plan the rest live. The clock on the right is our planner's real output for the 12-object sort: watch it drop as arms join, then stop when a shared bin binds. (~35 s)</aside>
 </section>
 
@@ -496,12 +501,12 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
     <div class="p lemon between" style="grid-column:4/span 3;grid-row:3/span 3">
       <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
       <div class="lab">Ops &middot; 02</div>
-      <div><div class="h3" style="margin-bottom:10px">Planner</div><p class="bsm">HEFT live, CP-SAT when it fits. Reach-aware: the nearer arm wins.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Planner</div><p class="bsm">Reach: only arms that can get to an object are offered it. Time: every step has an estimate, replaced by each arm's measured times.</p></div>
     </div>
     <div class="p between" style="grid-column:7/span 3;grid-row:3/span 3">
       <svg class="arrow" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 32h44M36 16l16 16-16 16" fill="none" stroke="currentColor" stroke-width="6"/></svg>
       <div class="lab">Ops &middot; 03</div>
-      <div><div class="h3" style="margin-bottom:10px">Executor</div><p class="bsm">Locks, retries, heartbeat, re-plan on every event; camera checks each place.</p></div>
+      <div><div class="h3" style="margin-bottom:10px">Executor</div><p class="bsm">One arm at a time in a shared area. Retries, heartbeat, and a re-plan on every event.</p></div>
     </div>
     <div class="p ink between" style="grid-column:10/span 3;grid-row:3/span 3">
       <div class="lab">Action &middot; 04</div>
@@ -521,8 +526,8 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div><div class="h3" style="margin-bottom:10px">Live screen</div><p class="bsm">Countdown, what-if for 1&ndash;4 arms, the limit in words, plan vs actual.</p></div>
     </div>
   </div>
-  <div class="pagenum invert">04 / 09</div>
-  <aside class="notes">Left to right: VLM writes the steps, the planner schedules them, the executor runs them and re-plans on every event, and each arm is a worker behind one call. Plugging in an arm is just an event. The screen only reads the event log. (~35 s)</aside>
+  <div class="pagenum invert">04 / 10</div>
+  <aside class="notes">Left to right. The camera model names what is on the desk and writes the steps. Reach: we know where each arm stands, so a step is only offered to arms that can get to the object. Time: every step has an estimate, and after the first few the planner uses each arm's own measured times, so the finish time on screen gets more honest as it runs. The executor keeps two arms out of the same spot and re-plans on every event. Plugging in an arm is just one more event. (~40 s)</aside>
 </section>
 
 <!-- =========================================================
@@ -530,28 +535,52 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
      ========================================================= -->
 <section class="slide" aria-label="Live demo">
   <div class="frame">
-    <div class="p lemon between pad-lg" style="grid-column:1/span 6;grid-row:1/span 8">
-      <div class="lab">Filmed on our table</div>
-      <div class="corner"><i></i><i></i><i></i><i></i></div>
-      <div class="secnum">Demo</div>
-      <div class="ch">Plug and<br>watch</div>
+    <div class="p film" style="grid-column:1/span 8;grid-row:1/span 8">
+      <video src="media/real_run.mp4" controls playsinline preload="metadata" onerror="this.parentNode.classList.add('nofilm')"></video>
+      <div class="missing">Film of the real run goes here:<br>presentation/media/real_run.mp4</div>
     </div>
-    <div class="p ink pad-lg" style="grid-column:7/span 6;grid-row:1/span 8;justify-content:center">
+    <div class="p ink pad-lg" style="grid-column:9/span 4;grid-row:1/span 8;justify-content:center">
       <ol class="beats">
-        <li><span class="n">01</span><span class="t"><b>See.</b> The camera model names what is on the desk; the screen shows which arm takes what, and the time.</span></li>
-        <li><span class="n">02</span><span class="t"><b>Go.</b> One real arm tidies; the countdown runs.</span></li>
-        <li><span class="n">03</span><span class="t"><b>Plug in.</b> Someone plugs in the second arm. It is detected by its USB.</span></li>
-        <li><span class="n">04</span><span class="t"><b>Re-plan.</b> The screen compares plans for reach and free arms, and picks the fastest.</span></li>
-        <li><span class="n">05</span><span class="t"><b>Together.</b> The predicted time drops and both arms finish the desk.</span></li>
+        <li><span class="n">01</span><span class="t"><b>See.</b> The camera reads the desk and splits the work.</span></li>
+        <li><span class="n">02</span><span class="t"><b>Go.</b> One arm tidies; the clock runs.</span></li>
+        <li><span class="n">03</span><span class="t"><b>Plug in.</b> A second arm, found by its USB.</span></li>
+        <li><span class="n">04</span><span class="t"><b>Re-plan.</b> The rest is re-split, live.</span></li>
+        <li><span class="n">05</span><span class="t"><b>Together.</b> Both arms finish the desk.</span></li>
       </ol>
     </div>
   </div>
-  <div class="pagenum invert">05 / 09</div>
-  <aside class="notes">Play the film, shot on our own table. Narrate each beat; let the countdown do the talking. At beat 4: once the plan settles, taking reach and free arms into account, the arms begin to move. If the rig is on stage and behaving, offer a judge to put their own object on the desk. (~2 min)</aside>
+  <div class="pagenum invert">05 / 10</div>
+  <aside class="notes">Play the film, shot on our own table (click the video). Narrate each beat over it; keep quiet at the plug-in and let the screen do the talking. Say only what the film shows. If the rig is on stage and behaving, offer a judge to put their own object on the desk. (~90 s)</aside>
 </section>
 
 <!-- =========================================================
-     06 / WHY IT STOPS SPEEDING UP
+     06 / THREE ARMS, SIMULATED
+     ========================================================= -->
+<section class="slide" aria-label="Three arms">
+  <div class="frame">
+    <div class="p film" style="grid-column:1/span 8;grid-row:1/span 8">
+      <video src="../docs/media/pyramid_isaac_sim.mp4" controls muted playsinline preload="metadata" onerror="this.parentNode.classList.add('nofilm')"></video>
+      <div class="missing">Simulation film:<br>docs/media/pyramid_isaac_sim.mp4</div>
+    </div>
+    <div class="p lemon between pad-lg" style="grid-column:9/span 4;grid-row:1/span 4">
+      <div class="lab">Same planner, three arms, another job</div>
+      <div class="ch">Arms join<br>as it runs</div>
+    </div>
+    <div class="p ink between" style="grid-column:9/span 4;grid-row:5/span 2">
+      <div class="lab">Steps done, 14 boxes into a pyramid</div>
+      <div class="stat-sm" style="color:var(--lemon)">28/28</div>
+    </div>
+    <div class="p between" style="grid-column:9/span 4;grid-row:7/span 2">
+      <div class="lab">Simulated (MuJoCo, shown in Isaac Sim)</div>
+      <p class="bsm">Arm 2 joins after 3 boxes, arm 3 after 7. Done in 110.5 s, no contact between arms.</p>
+    </div>
+  </div>
+  <div class="pagenum invert">06 / 10</div>
+  <aside class="notes">Two arms is what fits on our table. In simulation the same planner and executor run three: one arm starts alone, the second joins after three boxes, the third after seven, and nobody re-programs anything. A different job too, stacking a pyramid: the system does not care what the task is. Say clearly this one is simulated. (~25 s)</aside>
+</section>
+
+<!-- =========================================================
+     07 / WHY IT STOPS SPEEDING UP
      ========================================================= -->
 <section class="slide" aria-label="Why it stops speeding up">
   <div class="frame">
@@ -583,12 +612,12 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <p class="body">Not N&times;. The screen names the limit, in words.</p>
     </div>
   </div>
-  <div class="pagenum invert">06 / 09</div>
+  <div class="pagenum invert">07 / 10</div>
   <aside class="notes">Speed-up is never N times. The finish time can't beat the work split across arms, the longest chain of ordered steps, or the busiest shared area. We compute that bound on every re-plan and say which one binds. This chart is planned, not measured on real arms: our planner on today's code for a 12-object sort: the second arm nearly halves it, the third helps less, and the fourth adds nothing because everyone queues at the shared input bin. (~35 s)</aside>
 </section>
 
 <!-- =========================================================
-     07 / BUILT THIS WEEKEND (numbers filled by update_deck.py)
+     08 / BUILT THIS WEEKEND (numbers filled by update_deck.py)
      ========================================================= -->
 <section class="slide" aria-label="Built this weekend">
   <div class="frame">
@@ -626,16 +655,16 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <p class="body">Sort 12 objects: <span data-fact="show.sim_steps">24/24</span> steps on <span data-fact="show.sim_arms">3</span> MuJoCo arms; a failed grasp recovers.</p>
     </div>
     <div class="p between" style="grid-column:7/span 6;grid-row:7/span 2">
-      <div class="lab">Real camera to plan, no motion yet</div>
-      <p class="body">1 arm <span data-fact="show.dry_1">53 s</span>, 2 arms <span data-fact="show.dry_2">37 s</span>. Qwen finds <span data-fact="show.vlm_found">6/6</span> objects, <span data-fact="show.vlm_error">0.6 cm</span> error.</p>
+      <div class="lab">Real arms, Sunday morning</div>
+      <p class="body">Two SO-101s tidy 5 boxes into the bowl: best run 106 s. An arm plugged in mid-run joins in under 1 s.</p>
     </div>
   </div>
-  <div class="pagenum">07 / 09</div>
-  <aside class="notes">Where we are, straight from the repo: the core loop, the camera and the planner work end to end; the simulated arms run the whole sort; the real arms teleoperate and the real-arm driver is ready for its first run. (~20 s)</aside>
+  <div class="pagenum">08 / 10</div>
+  <aside class="notes">Where we are, straight from the repo: the camera, the planner and the live re-split work end to end; simulated arms run the whole sort; and since Sunday morning two real arms tidy the table together, with an arm joining mid-run in under a second. (~20 s)</aside>
 </section>
 
 <!-- =========================================================
-     08 / UNDER THE HOOD + TEAM
+     09 / UNDER THE HOOD + TEAM
      ========================================================= -->
 <section class="slide" aria-label="Under the hood">
   <div class="frame">
@@ -660,7 +689,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <div class="lab">Hardware</div>
       <div>
         <div class="sub" style="margin-bottom:16px">Diego &amp; Om</div>
-        <p class="bsm">Rig, calibration, safe motion. Two leader&ndash;follower pairs teleoperating, three cameras.</p>
+        <p class="bsm">Rig, calibration, safe motion. Two real arms picking by camera, aim fitted on logged grasps.</p>
       </div>
     </div>
     <div class="p between" style="grid-column:5/span 4;grid-row:4/span 5">
@@ -678,12 +707,12 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       </div>
     </div>
   </div>
-  <div class="pagenum lemon">08 / 09</div>
+  <div class="pagenum lemon">09 / 10</div>
   <aside class="notes">Under the hood: CP-SAT proves optimal plans in under 2 s at 4 to 8 arms, with HEFT as the live default. We never move a running step, we only switch plans when it's clearly better, and the camera checks every place. Three teams, one contract between them. (~25 s)</aside>
 </section>
 
 <!-- =========================================================
-     09 / CLOSE
+     10 / CLOSE
      ========================================================= -->
 <section class="slide" aria-label="Thank you">
   <div class="frame">
@@ -707,7 +736,7 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
       <p class="body">Diego &middot; Om &middot; Vivek &middot; Sahil &middot; Vato &middot; Aravind</p>
     </div>
   </div>
-  <div class="pagenum invert">09 / 09</div>
+  <div class="pagenum invert">10 / 10</div>
   <aside class="notes">Today it tidies a desk. The same system runs a packing bench in industry: add an arm, and it tells you when the batch is done. Plug in an arm, watch the clock drop. Thanks. (~15 s)</aside>
 </section>
 
@@ -724,12 +753,12 @@ body.editing .deck-stage [contenteditable="true"]:focus { outline: 3px dashed va
 <!-- FACTS:START -->
 <script type="application/json" id="deck-facts">
 {
- "generated": "Sat 21 Nov 21:30",
- "main_sha": "2828b1a",
+ "generated": "Sun 22 Nov 12:53",
+ "main_sha": "598053e",
  "show": {
-  "tests": 260,
-  "commits": 116,
-  "ops_backlog": "16/22",
+  "tests": 384,
+  "commits": 229,
+  "ops_backlog": "17/22",
   "action_work": "12/13",
   "followers": 2,
   "pairs": 2,
