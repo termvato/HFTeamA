@@ -332,3 +332,26 @@ def test_sorter_workers_get_a_step_cap_longer_than_a_real_pick(monkeypatch) -> N
     monkeypatch.setattr(bridge, "from_sorter", lambda arm_id, *a: d)
     w = bridge.sorter_worker_factory(None)("rakesh_follower")
     assert w._deadline_s == bridge.STEP_CAP_S >= 90.0
+
+
+def test_bridge_writes_one_line_per_move_with_the_ik_time(tmp_path, capsys) -> None:
+    import json
+
+    d0, low, cfg = make()
+    path = tmp_path / "run" / "motion.jsonl"
+    d = SorterArmDriver(
+        "rakesh_follower", "rakesh", low, d0._arm, MainFrame.from_config(cfg), cfg, path
+    )
+    assert low.on_move == d._moved
+    d._ik_s = 0.4
+    low.on_move({
+        "kind": "move_deg", "total_s": 1.2, "ticks": 50, "planned_s": 1.0, "ramp_s": 1.1,
+        "settle_s": 0.1, "late_ticks": 3, "late_max_ms": 8.0, "err_deg": 1.5,
+        "send_ms": 6.0, "read_ms": 4.0, "sends": 50, "reads": 2,
+    })  # fmt: skip
+    low.on_move({"kind": "gripper", "total_s": 0.5, "asked": 100.0, "reached": 98.0,
+                 "send_ms": 6.0, "read_ms": 4.0, "sends": 9, "reads": 10})  # fmt: skip
+    first, second = (json.loads(line) for line in path.read_text().splitlines())
+    assert first["arm"] == "rakesh_follower" and first["ik_s"] == 0.4 and first["late_ticks"] == 3
+    assert second["ik_s"] == 0.0  # counted once, with the move that followed it
+    assert "motion rakesh_follower move_deg" in capsys.readouterr().out
