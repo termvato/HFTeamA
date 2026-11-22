@@ -32,7 +32,7 @@ def create_app(hub: StateHub, rig: Any, token: str | None = None) -> FastAPI:
     app = FastAPI(title="Orchestra", docs_url="/api/docs", openapi_url="/api/openapi.json")
     audit = hub.log.path.parent / "commands.jsonl"
     ids = itertools.count(1)
-    real = hub.backend == "real"
+    real = hub.backend in ("real", "sorter")  # sorter = the real arms through Hardware's IK
     commands = {
         "go": True,
         "pause": True,
