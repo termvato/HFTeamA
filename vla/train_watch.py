@@ -46,9 +46,15 @@ def alive(pid: int) -> bool:
 def find_trainer(run: Path, pid: int) -> int:
     """The training process: `pid` if it is the one writing to `run`, else the process whose
     command line names `run` (a launcher such as setsid can fork, so $! is not always it)."""
+
     def cmdline(p: str) -> str:
         try:
-            return Path(f"/proc/{p}/cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+            return (
+                Path(f"/proc/{p}/cmdline")
+                .read_bytes()
+                .replace(b"\0", b" ")
+                .decode(errors="replace")
+            )
         except OSError:
             return ""
 
@@ -94,18 +100,36 @@ def stop(pid: int) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--log", type=Path, required=True, help="lerobot-train's log file")
     p.add_argument("--run", type=Path, required=True, help="lerobot-train's --output_dir")
     p.add_argument("--pid", type=int, required=True, help="lerobot-train's process id")
-    p.add_argument("--patience", type=int, default=3, help="validations without improvement before stopping")
-    p.add_argument("--min-delta", type=float, default=0.02, help="relative improvement that counts (0.02 = 2%%)")
+    p.add_argument(
+        "--patience", type=int, default=3, help="validations without improvement before stopping"
+    )
+    p.add_argument(
+        "--min-delta",
+        type=float,
+        default=0.02,
+        help="relative improvement that counts (0.02 = 2%%)",
+    )
     p.add_argument("--min-steps", type=int, default=3000, help="never stop before this step")
-    p.add_argument("--push-repo", default="", help="upload the best checkpoint here when done (private)")
+    p.add_argument(
+        "--push-repo", default="", help="upload the best checkpoint here when done (private)"
+    )
     a = p.parse_args()
 
-    state = {"evals": [], "train_loss": [], "best_step": None, "best_loss": None, "bad": 0,
-             "status": "training", "stop_reason": ""}
+    state = {
+        "evals": [],
+        "train_loss": [],
+        "best_step": None,
+        "best_loss": None,
+        "bad": 0,
+        "status": "training",
+        "stop_reason": "",
+    }
     status_file = a.run / "watch.json"
 
     def save_state() -> None:
@@ -137,12 +161,16 @@ def main() -> None:
                     state["bad"] += 1
                     verdict = f"no improvement ({state['bad']}/{a.patience})"
                 train = state["train_loss"][-1][1] if state["train_loss"] else float("nan")
-                log(f"step {step}: eval_loss {loss:.4f} (train {train:.4f}) {verdict}; "
-                    f"best {state['best_loss']:.4f} at step {state['best_step']}")
+                log(
+                    f"step {step}: eval_loss {loss:.4f} (train {train:.4f}) {verdict}; "
+                    f"best {state['best_loss']:.4f} at step {state['best_step']}"
+                )
                 if state["bad"] >= a.patience and step >= a.min_steps and stop_at is None:
                     stop_at = step
-                    state["stop_reason"] = (f"eval_loss did not improve by {a.min_delta:.0%} for "
-                                            f"{a.patience} validations; best at step {state['best_step']}")
+                    state["stop_reason"] = (
+                        f"eval_loss did not improve by {a.min_delta:.0%} for "
+                        f"{a.patience} validations; best at step {state['best_step']}"
+                    )
                 save_state()
 
         keep = {state["best_step"], max(checkpoints(a.run), default=None)} - {None}
@@ -156,22 +184,33 @@ def main() -> None:
             state["status"], finished = "stopped early", True
         if finished:
             if state["status"] == "training":
-                state["status"] = "finished (all steps)" if "Training: 100%" in text or "End of training" in text \
+                state["status"] = (
+                    "finished (all steps)"
+                    if "Training: 100%" in text or "End of training" in text
                     else "ended (check the log)"
+                )
             prune(a.run, {state["best_step"]} - {None}, keep_last=False)
-            best_dir = (a.run / "checkpoints" / f"{state['best_step']:06d}" / "pretrained_model"
-                        if state["best_step"] is not None else None)
+            best_dir = (
+                a.run / "checkpoints" / f"{state['best_step']:06d}" / "pretrained_model"
+                if state["best_step"] is not None
+                else None
+            )
             state["best_checkpoint"] = str(best_dir) if best_dir and best_dir.exists() else ""
-            log(f"{state['status']}; best eval_loss {state['best_loss']} at step {state['best_step']}: "
-                f"{state['best_checkpoint'] or 'no checkpoint'}")
+            log(
+                f"{state['status']}; best eval_loss {state['best_loss']} at step {state['best_step']}: "
+                f"{state['best_checkpoint'] or 'no checkpoint'}"
+            )
             if a.push_repo and state["best_checkpoint"]:
                 from huggingface_hub import HfApi
 
                 api = HfApi()
                 api.create_repo(a.push_repo, private=True, exist_ok=True)
-                api.upload_folder(folder_path=state["best_checkpoint"], repo_id=a.push_repo,
-                                  commit_message=f"best checkpoint: step {state['best_step']}, "
-                                                 f"eval_loss {state['best_loss']:.4f}")
+                api.upload_folder(
+                    folder_path=state["best_checkpoint"],
+                    repo_id=a.push_repo,
+                    commit_message=f"best checkpoint: step {state['best_step']}, "
+                    f"eval_loss {state['best_loss']:.4f}",
+                )
                 state["pushed_to"] = f"https://huggingface.co/{a.push_repo}"
                 log(f"uploaded to {state['pushed_to']} (private)")
             save_state()
