@@ -27,13 +27,19 @@ Plan and product: [`docs/plan.md`](docs/plan.md). Umbrella issue: #1.
   please give Vivek the park and home pose per follower, the table height and grasp thresholds
   (#19, #20). LeRobot safety notes for the driver are on #20.
 
-## Next checkpoint: Saturday evening
+## Next checkpoint: Sunday midday
 
 | Target | Team | State |
 |---|---|---|
-| Live screen running on fake arms | Operations | done (on `orchestrator`) |
-| One real arm does a step (pick and place) | Action + Hardware | not reported yet |
-| All 3 arms calibrated | Hardware | in progress: 1 leader-follower pair working; Vato's arm being set up (reported in person, ~14:35) |
+| Adding an arm (fake or real) re-splits the work on screen | all | in progress: plug-in detection on `main`; real-arm path running (`demo --backend sorter`, Diego and Aravind overnight); a real arm joining mid-run not reported yet |
+
+Saturday evening checkpoint (read from the overnight commits, Vato, Sun 10:00):
+
+| Target | Team | State |
+|---|---|---|
+| Live screen running on fake arms | Operations | done |
+| One real arm does a step (pick and place) | Action + Hardware | done per commits: real picks and places take 15-25 s (Diego, `a5e141f`, 08:24); two-arm picks hit the old 30 s cap, now 120 s |
+| Arms calibrated | Hardware | 2 arms (rakesh, hacklab): bases calibrated on the hacklab table, C922 overhead camera (Diego, `d8e4908`, 03:15); third arm not reported |
 
 States: `not started`, `in progress`, `done`, `blocked: <on what>`.
 
@@ -53,12 +59,13 @@ Architecture is locked (21 Nov): see [`docs/plan.md`](docs/plan.md#architecture-
 Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/orchestrator/OPERATIONS_STATUS.md) on `orchestrator`.
 
 ### Vato
-- Updated: Sat 21 Nov 19:10
+- Updated: Sun 22 Nov 10:00
 - Done: planner, executor with live re-split, live screen (countdown, re-planning moment, top-view
-  map), plug-in detection, demo runner, scaling benchmark (#15), chain validated in MuJoCo.
-- Doing: getting the screen ready for filming on the real setup.
-- Next: first run with a real arm once Hardware has run Action's checklist.
-- Blocked on: a real arm doing a step through the worker.
+  map), plug-in detection, demo runner, scaling benchmark (#15), chain validated in MuJoCo; Desk
+  Hero pitch framing and deck; 15 cm clearance between arms (`--clearance`).
+- Doing: the demo film and the pitch for Sunday evening.
+- Next: rehearsal on the real setup with the overnight sorter path.
+- Blocked on: nothing.
 
 ### Aravind
 - Updated: Sat 21 Nov 16:15 (from the repo)
