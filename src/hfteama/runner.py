@@ -32,7 +32,7 @@ from hfteama.arms.poses import Poses
 from hfteama.arms.sim import SimTable
 from hfteama.arms.worker import SkillWorker
 from hfteama.clock import Clock
-from hfteama.discovery import ArmWatcher, followers_from_pairs
+from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs
 from hfteama.events import EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import load
@@ -120,6 +120,66 @@ class _Overhead:
                 self._cam = None
 
 
+class _ProcessProbe:
+    """Is this Python process keeping up? (measurement only, phase improvement plan E)
+
+    A thread asks to sleep 20 ms, like an arm's 50 Hz motion loop, and records how late it
+    wakes: lateness here with no bus involved means Python itself was busy (another thread held
+    the interpreter). Every `period_s` it appends one JSON line to `path`: process CPU (1.0 =
+    one core), thread count, mean and worst lateness, and the slowest USB scan of the plug-in
+    watcher. Read next to `motion.jsonl` (each move's bus times) to tell the two causes apart.
+    """
+
+    def __init__(self, path: Path, period_s: float = 5.0, tick_s: float = 0.02) -> None:
+        self.path, self.period_s, self.tick_s = path, period_s, tick_s
+        self._scan_max = 0.0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def timed_scan(self) -> set[str]:
+        t = time.perf_counter()
+        try:
+            return connected_serials()
+        finally:
+            self._scan_max = max(self._scan_max, time.perf_counter() - t)
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, name="process-probe", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        import json
+
+        wall0, cpu0 = time.perf_counter(), time.process_time()
+        late_sum, late_max, n = 0.0, 0.0, 0
+        while not self._stop.is_set():
+            t = time.perf_counter()
+            time.sleep(self.tick_s)
+            late = time.perf_counter() - t - self.tick_s
+            late_sum, late_max, n = late_sum + late, max(late_max, late), n + 1
+            wall = time.perf_counter() - wall0
+            if wall < self.period_s:
+                continue
+            rec = {
+                "t": round(time.time(), 3),
+                "cpu": round((time.process_time() - cpu0) / wall, 2),
+                "threads": threading.active_count(),
+                "late_mean_ms": round(1000 * late_sum / n, 2),
+                "late_max_ms": round(1000 * late_max, 1),
+                "scan_max_ms": round(1000 * self._scan_max, 1),
+            }
+            try:
+                with self.path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(rec) + "\n")
+            except OSError:
+                pass
+            wall0, cpu0 = time.perf_counter(), time.process_time()
+            late_sum, late_max, n, self._scan_max = 0.0, 0.0, 0, 0.0
+
+
 def _vlm_place_check(cam: _Overhead):
     """Qwen confirms each place from a fresh overhead frame (the architecture's VLM layer).
     Returns (verifier, unload)."""
@@ -136,7 +196,15 @@ def _vlm_place_check(cam: _Overhead):
     return place_checker(vlm, [Bin("bowl", label, (0, 0, 0))], cam.grab), vlm.unload
 
 
-def _sorter_rescan(cam: _Overhead, args) -> Callable[[], object]:
+# The export through the normal CLI, with every thread's stack written to stderr if it is still
+# running after 100 s (the runner gives it 120 s): a stuck re-scan then says where it is stuck.
+_EXPORT_CHILD = (
+    "import faulthandler, sys; faulthandler.dump_traceback_later(100); "
+    "from hfteama.__main__ import main; sys.exit(main(sys.argv[1:]))"
+)
+
+
+def _sorter_rescan(cam: _Overhead, args, log_dir: Path | None = None) -> Callable[[], object]:
     """After a missed grasp: a fresh frame through Hardware's own export (tags, IK reach,
     angles), positions only (no Qwen), as the task graph the executor merges in."""
     import subprocess
@@ -156,19 +224,45 @@ def _sorter_rescan(cam: _Overhead, args) -> Callable[[], object]:
             frame = out / "frame.png"
             cv2.imwrite(str(frame), cam.grab())
             cmd = [
-                sys.executable, "-m", "hfteama", "--config", str(args.pairs),
+                sys.executable, "-c", _EXPORT_CHILD, "--config", str(args.pairs),
                 "sort", "export", "--image", str(frame), "--out", str(out),
                 "--place-above", "0.03", "--duration", "30", "--no-vlm",
             ]  # fmt: skip
             print()
             print("re-scan after a missed grasp (child process):")
-            done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=120)
+            t0 = time.monotonic()
+            try:
+                done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=120)
+            except subprocess.TimeoutExpired as e:
+                saved = _save_rescan_output(log_dir, "timed out after 120 s", e.stdout, e.stderr)
+                raise RuntimeError(f"re-scan export timed out (120 s){saved}") from None
+            took = f"exit {done.returncode} after {time.monotonic() - t0:.1f} s"
+            _save_rescan_output(log_dir, took, done.stdout, done.stderr)
             if done.returncode != 0 or not (out / "boxes.json").exists():
                 tail = (done.stderr or done.stdout).strip().splitlines()[-1:] or ["no output"]
                 raise RuntimeError(f"re-scan export failed: {tail[0]}")
             return load(str(out / "boxes.json"))
 
     return rescan
+
+
+def _save_rescan_output(log_dir: Path | None, how: str, stdout, stderr) -> str:
+    """Keep a re-scan's console output in the run folder (it was lost before). Returns a note
+    for the error message; never raises."""
+    if log_dir is None:
+        return ""
+
+    def text(x) -> str:
+        return x.decode(errors="replace") if isinstance(x, bytes) else (x or "")
+
+    path = log_dir / f"rescan-{time.strftime('%H%M%S')}.log"
+    try:
+        path.write_text(
+            f"{how}\n--- stdout\n{text(stdout)}\n--- stderr\n{text(stderr)}\n", encoding="utf-8"
+        )
+    except OSError:
+        return ""
+    return f"; output in {path}"
 
 
 def default_poses(task_dir: Path, real: bool) -> str:
@@ -288,6 +382,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
 
     table: SimTable | None = None
     watcher: ArmWatcher | None = None
+    probe = _ProcessProbe(log_path.parent / "process.jsonl")
     made: dict[str, SkillWorker] = {}  # every worker we built, to wait for its park
     try:
         if real:
@@ -305,12 +400,14 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
                 except (Exception, SystemExit) as e:  # noqa: BLE001  (no GPU / model / camera)
                     print(f"VLM: place check off ({e}); the run goes on without it")
             if args.backend == "sorter" and not args.no_rescan:
-                ex.rescan = _sorter_rescan(cam, args)
+                ex.rescan = _sorter_rescan(cam, args, log_path.parent)
                 print("re-scan: a missed grasp is retried where the camera sees the box now")
             if args.backend == "sorter":
                 from hfteama.sorter.bridge import sorter_worker_factory
 
-                factory = sorter_worker_factory(poses, pairs_config=args.pairs)
+                factory = sorter_worker_factory(
+                    poses, pairs_config=args.pairs, motion_log=log_path.parent / "motion.jsonl"
+                )
             else:
                 factory = real_worker_factory(args.config, poses)
         else:
@@ -322,7 +419,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             made[arm_id] = factory(arm_id)
             return made[arm_id]
 
-        watcher = ArmWatcher(ex, known=known, factory=tracked)
+        watcher = ArmWatcher(ex, known=known, factory=tracked, scan=probe.timed_scan)
         for arm_id in arm_ids:
             if not watcher.plug(arm_id):
                 print(f"could not start {arm_id}: aborting (nothing has moved).")
@@ -333,6 +430,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             table.inject(arm_id, kind)  # type: ignore[arg-type,union-attr]
         if args.watch:
             watcher.start()
+        probe.start()
 
         plan = ex.estimate()
         print(f"estimate: finish in {plan.makespan:.0f} s; limit: {plan.binding or 'n/a'}")
@@ -364,6 +462,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             return 130
         _park_all(ex, watcher, made)
     finally:
+        probe.stop()
         if watcher is not None:
             watcher.stop()
         ex.stop()

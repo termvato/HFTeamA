@@ -17,6 +17,7 @@ point): the arm's aim correction turns it into the tool command, as in `hfteama 
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from pathlib import Path
@@ -34,6 +35,7 @@ MAIN_TABLE = PROJECT_ROOT / "configs" / "hacklab_table.json"
 HEARTBEAT_POLL_S = 0.5
 LINE_STEPS = 4  # IK waypoints of a vertical line (as `sort run`'s lift); 2 cm apart on 8 cm
 STEP_CAP_S = 120.0  # SkillWorker's hard cap on one step (its default, 30 s, cut real picks)
+_MOTION_LOG_LOCK = threading.Lock()  # both arms append to one file
 
 
 class MainFrame:
@@ -73,7 +75,14 @@ class SorterArmDriver:
     """`ArmDriver` (hfteama.arms.primitives) over a sorter arm. Positions in main's frame."""
 
     def __init__(
-        self, arm_id: str, side: str, driver, model: ArmModel, frame: MainFrame, cfg: dict
+        self,
+        arm_id: str,
+        side: str,
+        driver,
+        model: ArmModel,
+        frame: MainFrame,
+        cfg: dict,
+        motion_log: str | Path | None = None,
     ):
         self.arm_id = arm_id
         self.side = side
@@ -92,8 +101,44 @@ class SorterArmDriver:
         self._last_mode = "grasp"  # how its pose was solved: "grasp" or "drop" (see _command)
         self._carrying = False  # the last close_gripper held a piece (until open_gripper)
         self._aims: dict = {}  # IK cache (see _ik, _drop, _grasp_aim): a few entries a step
+        # Where each move's time went (measurement only): one JSON line per move in
+        # `motion_log` and one console line, with the IK time spent since the previous move.
+        self._motion_log = Path(motion_log) if motion_log else None
+        self._ik_s = 0.0
+        if self._motion_log is not None:
+            driver.on_move = self._moved
 
     # ---- helpers
+
+    def _moved(self, rec: dict) -> None:
+        """A low-level move ended (`sorter.robot.ArmDriver._note`): log where its time went."""
+        ik_s, self._ik_s = self._ik_s, 0.0
+        rec = {"t": round(time.time(), 3), "arm": self.arm_id, **rec, "ik_s": round(ik_s, 3)}
+        if rec["kind"] == "gripper":
+            detail = f"asked {rec['asked']:.0f} reached {rec['reached']:.0f}"
+        else:
+            err = rec.get("err_deg")
+            detail = (
+                f"ramp {rec['ramp_s']:.2f} (planned {rec['planned_s']:.2f}) "
+                f"settle {rec['settle_s']:.2f} late {rec['late_ticks']}/{rec['ticks']} "
+                f"max {rec['late_max_ms']:.0f} ms err {'-' if err is None else f'{err:.1f}'} deg"
+            )
+        print(
+            f"motion {self.arm_id} {rec['kind']} {rec['total_s']:.2f} s: {detail}; "
+            f"send {rec['send_ms']} ms read {rec['read_ms']} ms; ik {ik_s:.2f} s"
+        )
+        with _MOTION_LOG_LOCK:
+            self._motion_log.parent.mkdir(parents=True, exist_ok=True)
+            with self._motion_log.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(rec) + "\n")
+
+    def _timed_ik(self, fn, *a, **k):
+        """An IK solve, its time added to the next move's `ik_s`."""
+        t = time.perf_counter()
+        try:
+            return fn(*a, **k)
+        finally:
+            self._ik_s += time.perf_counter() - t
 
     def _guard(self):
         if self._parked:
@@ -180,9 +225,11 @@ class SorterArmDriver:
         key = ("ik", *t, None if yaw is None else round(float(yaw), 6), down, round(max_tilt, 6))
         if key not in self._aims:
             if down:
-                self._aims[key] = solve_ik(t, yaw=yaw, limits=self._arm.limits, max_tilt=max_tilt)
+                self._aims[key] = self._timed_ik(
+                    solve_ik, t, yaw=yaw, limits=self._arm.limits, max_tilt=max_tilt
+                )
             else:
-                self._aims[key] = solve_ik(t, down=False, limits=self._arm.limits)
+                self._aims[key] = self._timed_ik(solve_ik, t, down=False, limits=self._arm.limits)
         return self._aims[key]
 
     def _drop(self, x: float, y: float, z: float, down: bool, tilt: float):
@@ -190,7 +237,7 @@ class SorterArmDriver:
         self._stop_check()
         key = ("drop", round(x, 5), round(y, 5), round(z, 5), down, round(tilt, 6))
         if key not in self._aims:
-            self._aims[key] = drop_solve(self._arm, x, y, z, down, tilt)
+            self._aims[key] = self._timed_ik(drop_solve, self._arm, x, y, z, down, tilt)
         return self._aims[key]
 
     def _grasp_aim(self, x, y, z, yaw, length, width):
@@ -200,7 +247,7 @@ class SorterArmDriver:
         key = (x, y, z, yaw, length, width)
         if key not in self._aims:
             piece = Piece(x=x, y=y, length=length, width=width, yaw=yaw, area_cm2=0)
-            self._aims[key] = self._arm.grasp_aim(piece, z)
+            self._aims[key] = self._timed_ik(self._arm.grasp_aim, piece, z)
         return self._aims[key]
 
     def _high(self, z: float) -> bool:
@@ -251,7 +298,9 @@ class SorterArmDriver:
             line_yaw = yaw_arm if yaw_arm is not None else self._last_yaw
             q0 = self._run(self._drv.q)
             try:  # the line's IK outside the bus lock: ~1 s with no bus traffic (heartbeat)
-                path = self._drv.line_path(q0, fk(sol.q)[:3, 3], line_yaw, LINE_STEPS)
+                path = self._timed_ik(
+                    self._drv.line_path, q0, fk(sol.q)[:3, 3], line_yaw, LINE_STEPS
+                )
             except RuntimeError as exc:
                 raise MotionError(str(exc)) from exc
             self._run(self._drv.move_path, path, deg_s)
@@ -329,7 +378,9 @@ def side_of(arm_id: str, cfg: dict, pairs_config=None) -> str:
     raise KeyError(f"no sorter arm for {arm_id!r} (configs/sorter.json arms)")
 
 
-def from_sorter(arm_id: str, sorter_config: str | Path | None = None, pairs_config=None):
+def from_sorter(
+    arm_id: str, sorter_config: str | Path | None = None, pairs_config=None, motion_log=None
+):
     """Connect the sorter arm behind catalog id `arm_id` and wrap it as an `ArmDriver`."""
     from hfteama.sorter.robot import ArmDriver
     from hfteama.sorter.run import arm_models
@@ -338,11 +389,12 @@ def from_sorter(arm_id: str, sorter_config: str | Path | None = None, pairs_conf
     side = side_of(arm_id, cfg, pairs_config)
     model = arm_models(cfg, [side])[side]
     drv = ArmDriver(side, cfg["arms"][side], cfg["motion"], pairs_config).connect()
-    return SorterArmDriver(arm_id, side, drv, model, MainFrame.from_config(cfg), cfg)
+    return SorterArmDriver(arm_id, side, drv, model, MainFrame.from_config(cfg), cfg, motion_log)
 
 
-def sorter_worker_factory(poses, sorter_config=None, pairs_config=None):
-    """Workers for the executor (runner `--backend sorter`): each arm through the sorter."""
+def sorter_worker_factory(poses, sorter_config=None, pairs_config=None, motion_log=None):
+    """Workers for the executor (runner `--backend sorter`): each arm through the sorter.
+    `motion_log`: a file for one timing line per move (see `SorterArmDriver._moved`)."""
     from hfteama.arms.worker import SkillWorker
 
     def make(arm_id: str) -> SkillWorker:
@@ -350,7 +402,7 @@ def sorter_worker_factory(poses, sorter_config=None, pairs_config=None):
         # shares one CPU core); the executor's own timeout (x the estimate) comes first
         return SkillWorker(
             arm_id,
-            from_sorter(arm_id, sorter_config, pairs_config),
+            from_sorter(arm_id, sorter_config, pairs_config, motion_log),
             poses,
             "real",
             deadline_s=STEP_CAP_S,
