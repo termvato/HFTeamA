@@ -1,4 +1,4 @@
-# HFTeamA: plug and produce
+# Orchestra: plug and produce
 
 Finish a batch of work faster by plugging in more SO-101 arms. When an arm is added, removed or
 fails, the orchestrator re-splits the remaining work live and shows the new predicted finish time
