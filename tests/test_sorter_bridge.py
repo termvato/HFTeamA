@@ -50,10 +50,12 @@ class FakeLowLevel:
         self.calls.append(("move_q", np.asarray(q)))
         self._q = np.asarray(q, float)
 
-    def move_line(self, q_from, target_to, yaw, steps=8, speed=None):
-        self.calls.append(("move_line", np.asarray(target_to)))
-        self._q = solve_ik(target_to, yaw=yaw).q
-        return self._q
+    def line_path(self, q_from, target_to, yaw, steps=8):
+        return [solve_ik(target_to, yaw=yaw).q]
+
+    def move_path(self, qs, speed=None):
+        self.calls.append(("move_line", np.asarray(qs[-1])))
+        self._q = np.asarray(qs[-1], float)
 
     def gripper(self, value, wait=None):
         self.calls.append(("gripper", value))
@@ -175,6 +177,7 @@ def test_export_writes_main_poses_and_a_task_graph(monkeypatch, tmp_path) -> Non
             pieces = [
                 Piece(0.66, 0.18, 0.058, 0.058, 0.0, 33.6, tag_id=3),  # rakesh's half
                 Piece(0.12, 0.18, 0.058, 0.058, 0.0, 33.6, tag_id=5),  # hacklab's half
+                Piece(0.33, 0.06, 0.058, 0.058, 0.0, 33.6, tag_id=7),  # both reach it
             ]
             return None, None, Scene(box=Box(0.37, 0.22, 0.09), pieces=pieces)
 
@@ -189,9 +192,21 @@ def test_export_writes_main_poses_and_a_task_graph(monkeypatch, tmp_path) -> Non
         at = mf.to_sorter(poses.point("bowl", arm))
         assert 0.0 < np.hypot(at[0] - 0.37, at[1] - 0.22) <= 0.06 + 1e-9
         assert at[2] == pytest.approx(load_config()["box"]["height"] + 0.03)
-    arms = {t.args["object"]: t.allowed_arms for t in graph.tasks.values()}
-    assert arms == {"box_tag3": ("rakesh_follower",), "box_tag5": ("vato_follower",)}
-    assert all(t.skill == "pick_place" and t.resources == ("bowl",) for t in graph.tasks.values())
+    t = graph.tasks
+    # every arm that reaches a box may take it (main's planner re-splits); its half is locked
+    assert t["pick_box_tag3"].allowed_arms == ("rakesh_follower",)
+    assert t["pick_box_tag5"].allowed_arms == ("vato_follower",)
+    assert set(t["pick_box_tag7"].allowed_arms) == {"rakesh_follower", "vato_follower"}
+    assert t["pick_box_tag7"].resources == ("half_hacklab",)  # x 0.33: hacklab's half
+    assert t["pick_box_tag7"].durations["rakesh_follower"] > t["pick_box_tag7"].duration
+    for name in ("box_tag3", "box_tag5", "box_tag7"):  # pick, then place on the same arm
+        pick, place = t[f"pick_{name}"], t[f"place_{name}"]
+        assert (pick.skill, place.skill) == ("pick", "place")
+        assert place.deps == (pick.id,) and place.same_arm_as == pick.id
+        assert place.resources == ("bowl",)
+    for arm in ("rakesh_follower", "vato_follower"):  # where each arm waits, clear of the bowl
+        c = mf.to_sorter(poses.point("carry", arm))
+        assert np.hypot(c[0] - 0.37, c[1] - 0.22) > 0.09 + 0.05
     json.loads((tmp_path / "boxes.json").read_text())
 
 

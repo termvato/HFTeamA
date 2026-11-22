@@ -114,7 +114,7 @@ The sorter can drive the arms for Operations' executor and Action's skills (`pic
 |---|---|
 | `hfteama.sorter.bridge.SorterArmDriver` | Action's `ArmDriver` primitives (`move_to`, `open_gripper`, `close_gripper`, `reachable`, `stop`/`resume`, `park`, `alive`, ...) over a sorter arm: calibrated numpy IK and joint limits, the per-arm aim corrections from `configs/sorter_placements.json`, closed-loop gripper, one smooth vertical line when only the height changes, stop latched every control tick, home pose before torque off |
 | `MainFrame` | main's table frame (`configs/hacklab_table.json`: origin marker 0, x towards 3, y towards 2) <-> the sorter's; the same four tags, so the conversion is exact |
-| `hfteama sort export` | camera -> `poses_real.json` (boxes by tag, the bowl) in main's frame + `boxes.json`, one `pick_place` per box on the arm of its half of the table, all sharing the `bowl` resource |
+| `hfteama sort export` | camera -> `poses_real.json` (boxes by tag, the bowl, each arm's drop point and `carry` pose) in main's frame + `boxes.json`: per box a `pick` (lock: `half_<arm>` of the table it is in) then a `place` in the bowl (lock: `bowl`, same arm). `allowed_arms` = every arm that reaches the box, so main's planner re-splits when an arm comes or goes; the other half's arm is planned 1.5x slower, so each arm keeps its own half while both are up |
 | `python -m hfteama.runner --backend sorter` | main's runner with these drivers (same `yes` / `go` confirmations as `--backend real`) |
 
 ```
@@ -139,3 +139,19 @@ back up. From the arms' bases the bowl centre is too far for the gripper to poin
   any orientation. The approach 8 cm higher tilts 50-60 deg (in the air, above the rim).
 - A straight vertical line is used only between two gripper-down poses; to or from a tilted pose
   the move is a joint move (the line's IK keeps the gripper down and would fail on the way).
+
+Two arms at once:
+
+- Picks run in parallel (one arm per half of the table: the `half_*` locks); places take turns
+  at the bowl. The arm leaves the half / the bowl for its `carry` pose (15 cm in front of its
+  base, 15 cm up) before the step returns and the executor frees the lock.
+- The lock keeps two arms out of the same half, not one arm out of the space over the other's
+  `carry` pose: watch the first runs where an arm takes a box on the other half.
+- The aim corrections were fitted from grasps on each arm's own half; on the other half they are
+  extrapolated.
+- A box only one arm reaches stays undone if that arm leaves: the batch then waits (Ctrl-C once
+  for the slow stop).
+
+Heartbeat: the executor drops an arm whose heartbeat is 1.5 s old. The bridge's heartbeat is the
+last bus read/write that worked (every control tick during a move), and the IK of a straight line
+(~1 s) is solved before taking the bus.

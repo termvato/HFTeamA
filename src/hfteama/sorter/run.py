@@ -7,6 +7,7 @@ arm is back at home (its starting, folded pose) and the camera looks again.
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -20,7 +21,7 @@ from hfteama.sorter.geometry import (
     resolve,
     save_placement,
 )
-from hfteama.sorter.plan import ArmModel, Plan, make_plan
+from hfteama.sorter.plan import ArmModel, Plan, make_plan, plan_pick
 
 OUT_DIR = PROJECT_ROOT / "outputs" / "sorter"
 # overlay colour per arm, from the arm's "colour" in the config (BGR)
@@ -1029,6 +1030,26 @@ def cmd_fit_grasps(args) -> int:
     return 0
 
 
+FAR_HALF_FACTOR = 1.5  # planned duration of a box on the other arm's half of the table
+
+
+def carry_point(arm: ArmModel, cfg: dict):
+    """Sorter-frame point where the arm waits holding a piece or after placing: config
+    `carry` ([x, y, z], table frame) or in front of its base, clear of the bowl; None if the
+    arm can't reach it."""
+    a = cfg["arms"][arm.side]
+    for c in (
+        [a["carry"]]
+        if "carry" in a
+        else ([arm.placement.x, arm.placement.y + 0.15, z] for z in (0.15, 0.12))
+    ):
+        for down in (True, False):
+            sol = solve_ik(arm.placement.to_arm(c), down=down, limits=arm.limits)
+            if sol.ok:
+                return np.asarray(c, float)
+    return None
+
+
 def cmd_export(args) -> int:
     """Camera -> the boxes and the bowl as main's poses file and a pick_place task graph, in
     main's table frame, for `python -m hfteama.runner --backend sorter`."""
@@ -1070,23 +1091,58 @@ def cmd_export(args) -> int:
         if found is not None:
             pt = mf.to_main(found[:3])
             poses["per_arm"][catalog[s]] = {"bowl": [round(float(v), 4) for v in pt]}
+    # each arm's carry pose: where pick leaves it and place returns it, over its own half and
+    # clear of the bowl, so the executor can free the half / bowl lock when the step returns
+    for s in sides:
+        c = carry_point(arms[s], cfg)
+        if c is not None:
+            poses["per_arm"].setdefault(catalog[s], {})["carry"] = [
+                round(float(v), 4) for v in mf.to_main(c)
+            ]
     tasks = []
-    for pick in plan.picks:
-        if pick.side not in plan.drops:
+    usable = [s for s in sides if "carry" in poses["per_arm"].get(catalog[s], {})]
+    for p in [pk.piece for pk in plan.picks] + plan.unreachable:
+        # every arm that reaches the box (its half of the table is a preference of the sorter's
+        # own planner, not a limit here: main's planner re-splits when an arm comes or goes)
+        able = [
+            s
+            for s in usable
+            if plan_pick(replace(arms[s], x_range=(-np.inf, np.inf)), p, cfg["motion"], pc)
+        ]
+        if not able:
             continue
-        p = pick.piece
-        name = f"box_tag{p.tag_id}" if p.tag_id is not None else f"box_{len(tasks) + 1:02d}"
+        half = next((s for s in arms if arms[s].x_range[0] <= p.x <= arms[s].x_range[1]), None)
+        name = f"box_tag{p.tag_id}" if p.tag_id is not None else f"box_{len(tasks) // 2 + 1:02d}"
         poses["objects"][name] = [
             round(float(v), 4) for v in mf.to_main([p.x, p.y, pc.get("grasp_z", 0.015)])
         ]
+        allowed = [catalog[s] for s in able]
+        # the arm of the other half is farther (and its aim is only fitted on its own half):
+        # slower in the plan, so the planner gives it the box only when that pays off
+        far = {catalog[s]: args.duration / 2 * FAR_HALF_FACTOR for s in able if s != half}
         tasks.append(
             {
-                "id": f"sort_{name}",
-                "skill": "pick_place",
-                "args": {"object": name, "to": "bowl"},
+                "id": f"pick_{name}",
+                "skill": "pick",
+                "args": {"object": name},
                 "deps": [],
-                "allowed_arms": [catalog[pick.side]],
-                "duration": args.duration,
+                "allowed_arms": allowed,
+                "duration": args.duration / 2,
+                "durations": far,
+                # one arm at a time in each half of the table
+                "resources": [f"half_{half or able[0]}"],
+            }
+        )
+        tasks.append(
+            {
+                "id": f"place_{name}",
+                "skill": "place",
+                "args": {"to": "bowl"},
+                "deps": [f"pick_{name}"],
+                "same_arm_as": f"pick_{name}",
+                "allowed_arms": allowed,
+                "duration": args.duration / 2,
+                "durations": far,
                 "resources": ["bowl"],
             }
         )
@@ -1095,8 +1151,8 @@ def cmd_export(args) -> int:
     (out / "poses_real.json").write_text(json.dumps(poses, indent=2) + "\n")
     graph = {
         "name": out.name,
-        "note": "One pick_place per box seen, on the arm whose half of "
-        "the table it is in (hfteama sort export).",
+        "note": "Per box seen: pick (lock: its half of the table) then place in the bowl "
+        "(lock: bowl) on the same arm; any arm that reaches it (hfteama sort export).",
         "tasks": tasks,
     }
     (out / "boxes.json").write_text(json.dumps(graph, indent=2) + "\n")
@@ -1261,7 +1317,7 @@ def add_parser(sub) -> None:
     e.add_argument("--image", help="Use a saved frame instead of the camera")
     e.add_argument("--out", default=str(PROJECT_ROOT / "tasks" / "sorter_boxes"))
     e.add_argument("--place-above", type=float, default=0.03, help="Place height over the rim (m)")
-    e.add_argument("--duration", type=float, default=20.0, help="Expected s per pick_place")
+    e.add_argument("--duration", type=float, default=30.0, help="Expected s per box (pick + place)")
 
     r = ss.add_parser("run", help="Sort: pick every piece into the box")
     r.add_argument("--arms", help="Arms to use, e.g. rakesh or rakesh,hacklab (default: all)")
