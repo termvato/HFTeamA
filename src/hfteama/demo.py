@@ -36,7 +36,7 @@ from hfteama.events import Event, EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
 
-BACKENDS = ("fake", "sim", "real")
+BACKENDS = ("fake", "sim", "real", "sorter")
 
 
 def hook(spec: str) -> Callable[..., Any]:
@@ -57,7 +57,9 @@ def fake_factory(clock: Clock, noise: float = 0.1) -> Callable[[str], Any]:
     return make
 
 
-def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[[str], Any]:
+def action_factory(
+    backend: str, poses_path: str, arms_config: str, pairs: str | None = None
+) -> Callable[[str], Any]:
     """Action's worker on its sim or real driver. Imported here, so `fake` needs none of it."""
     try:
         from hfteama.arms import generic_skills  # noqa: F401  (registers the skills)
@@ -69,6 +71,10 @@ def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[
             f"action-arm-skills), which is not in this checkout: {e}"
         ) from e
     poses = Poses.load(poses_path)
+    if backend == "sorter":  # real arms through Hardware's calibrated sorter IK (#19)
+        from hfteama.sorter.bridge import sorter_worker_factory
+
+        return sorter_worker_factory(poses, pairs_config=pairs)
     if backend == "real":
         from hfteama.arms.real import from_config
 
@@ -254,8 +260,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.backend == "fake":
         factory = fake_factory(clock)
     else:
-        factory = action_factory(args.backend, args.poses, args.arms_config)
-    watch = args.watch if args.watch is not None else args.backend == "real"
+        factory = action_factory(args.backend, args.poses, args.arms_config, args.pairs)
+    watch = args.watch if args.watch is not None else args.backend in ("real", "sorter")
     path = Path(args.log or f"runs/{time.strftime('%Y%m%d-%H%M%S')}/events.jsonl")
     log = EventLog(path)
     ex, watcher, rig = build(
