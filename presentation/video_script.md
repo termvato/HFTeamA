@@ -52,29 +52,29 @@ of shot 2 or the last of shot 9.
   Call them "things on the desk" only if they look the part; otherwise say "objects".
 - Shot 1 is a real messy desk and a person in a hurry, not the rig.
 
-## Voice-over, version 5 (the one to record)
+## Voice-over, version 6 (the one to record)
 
-The pitch: **every arm runs the same skills, managed by Orchestra**. Build a skill once, for one
-arm; plug in more arms and Orchestra deploys it across all of them, with no new training and no
-re-programming, and re-plans live when an arm joins, a grasp misses or an arm drops out. The
-impact: robot skills become reusable, and capacity is added in seconds.
+The pitch, sold on the technology: **every arm runs the same skills, managed by Orchestra**. Build
+a skill once, for one arm; plug in more arms and Orchestra deploys it across all of them, with no
+new training and no re-programming, and re-plans live when an arm joins, a grasp misses or an arm
+drops out.
 
-The cut (about 2:40) has no slide cards and no captions: footage throughout, a few small figures in
-the top-left corner, and one tag on every arm shot: "SAME SKILLS · MANAGED BY ORCHESTRA". About
-350 words; this replaces the voice-over column of the table at the top.
+The cut (2:48) in order: the mess; the problem over real footage; the task-split animation; one
+real arm; the USB plug-in; the join; two arms to "DONE 2:49"; the technology stack figure (camera
+and VLM, scheduler, executor, one skill contract with IK and the fine-tuned X-VLA, any arm); the
+three-arm simulation; the result; the close. No slide cards, no captions; every arm shot is tagged
+"SAME SKILLS · MANAGED BY ORCHESTRA". The two-arm bowl shot is out.
 
 | Time | Say |
 |---|---|
 | 0:00 | It's two minutes to your call, and your desk is a mess. You don't need a smarter robot. You need more hands, right now. |
 | 0:12 | A robot arm now costs a hundred dollars. Putting it to work costs far more: every new task, every new arm, every new layout means new data, new training, new code. Add a second arm, and you start over. |
-| 0:27 | Orchestra changes that. You build a skill once, for one arm, and Orchestra turns it into a team. The camera reads the desk. Each object goes to an arm that can reach it. Every step is timed, so you see the finish time before anything moves. Plug in another arm, and the plan rewrites itself. |
-| 0:47 | This is real hardware. One arm starts tidying, running one skill: pick and place. It knows what it can reach and what it can't, and it tells you exactly how long it needs. |
+| 0:27 | Orchestra changes that. Build a skill once, for one arm, and Orchestra turns it into a team. A camera locates every object. A reach model decides which arm can take what. A scheduler assigns every step and predicts the finish before anything moves. Plug in an arm, and the plan rewrites itself. |
+| 0:47 | This is real hardware. One arm starts tidying, running one skill: pick and place, by calibrated inverse kinematics. It knows what it can reach, and it tells you exactly how long it needs. |
 | 1:05 | In a hurry? Plug in another arm. |
-| 1:12 | No setup. No retraining. In under a second the new arm is detected, given its share of the work, and moving, running the very same skill. The plan adapts in real time: to a new arm, a missed grasp, an arm that drops out. |
-| 1:27 | Two arms, the same skill, managed by Orchestra. Zero coordination code. They pick in parallel and take turns at the tray, so they never collide. When a grasp fails, Orchestra notices, re-plans and tries again. Nobody touches a keyboard. The whole desk, tidied. |
-| 1:57 | And when a job needs two arms as one, a learned two-arm policy plugs in as a single worker. |
-| 2:05 | It doesn't stop at two. The same skills, three arms, a different job, still managed by Orchestra. Arms join mid-task and the work re-splits around them. The task changes. The system doesn't. |
-| 2:23 | Every arm you saw ran the same skills. Orchestra managed the rest. That is the impact: robot skills become reusable. Build once, scale by plugging in. A messy desk today, a packing bench tomorrow. Capacity you add in seconds, not weeks. |
-| 2:35 | Built in 48 hours. Orchestra: plug in an arm, watch the clock drop. |
-
-The line at 1:57 goes with the shot of the learned two-arm policy moving the bowl.
+| 1:12 | No setup. No retraining. In under a second the new arm is detected by its USB, given its share of the work, and moving, running the very same skill. The plan adapts in real time. |
+| 1:27 | Two arms, the same skill, managed by Orchestra. Zero coordination code. They pick in parallel. Locks on shared space mean they never collide at the tray. A heartbeat watches every arm. When a grasp fails, Orchestra re-scans the desk, re-plans and tries again. Nobody touches a keyboard. The whole desk, tidied. |
+| 1:57 | Under the hood: vision finds the objects. A scheduler plans in milliseconds. An executor re-plans on every event. And skills are a slot: inverse kinematics today, and we fine-tuned X-VLA, a 0.9-billion-parameter vision-language-action model, for what comes next. |
+| 2:13 | It doesn't stop at two. The same skills, three arms, a different job, still managed by Orchestra. Arms join mid-task and the work re-splits around them. The task changes. The system doesn't. |
+| 2:31 | Every arm you saw ran the same skills. Orchestra managed the rest. That is the impact: robot skills become reusable. Capacity you add in seconds, not weeks. |
+| 2:43 | Built in 48 hours. Orchestra: plug in an arm, watch the clock drop. |
