@@ -16,7 +16,7 @@ time, then cut between them. Shots 1, 2, 9 and 10 need no robots.
 | 6 | 1:12-1:27 | Screen: "arm joined", old plan against new plan | "The second arm is found by its USB and joins in under a second. The rest of the work is re-split, live. Nothing is re-programmed." | `joined in under 1 s` |
 | 7 | 1:27-1:55 | Both arms working, taking turns at the bowl, last box in | "Two arms never go into the same spot at once. Both finish the desk." | the run's real time, e.g. `5 boxes, 106 s` |
 | 8 | 1:55-2:13 | Three-arm simulation, sped up | "Same code, three arms, another job. Arms join as it runs: 28 of 28 steps. This one is simulated." | `SIMULATED` and `28/28 steps, 14 boxes` |
-| 9 | 2:13-2:25 | Result card | "Your desk, tidied by two real arms in under two minutes. No training for a new object. In a hurry, a second arm joins in under a second. Built in 48 hours by six people." | `106 s`, `0 training runs`, `< 1 s`, `$100 per arm`; one line: beyond the desk, a packing bench |
+| 9 | 2:13-2:25 | Result card | "Your desk, tidied by two real arms in under two minutes. No training for a new object. In a hurry, a second arm joins in under a second. Built in 34 hours by six people." | `106 s`, `0 training runs`, `< 1 s`, `$100 per arm`; one line: beyond the desk, a packing bench |
 | 10 | 2:25-2:30 | End card | "Plug in an arm. Watch the clock drop." | Orchestra, the tagline |
 
 About 190 words of voice-over: a steady pace for 2:30. If it runs long, cut the second sentence
@@ -77,4 +77,4 @@ three-arm simulation; the result; the close. No slide cards, no captions; every 
 | 1:57 | Under the hood: vision finds the objects. A scheduler plans in milliseconds. An executor re-plans on every event. And skills are a slot: inverse kinematics today, and we fine-tuned X-VLA, a 0.9-billion-parameter vision-language-action model, for what comes next. |
 | 2:13 | It doesn't stop at two. The same skills, three arms, a different job, still managed by Orchestra. Arms join mid-task and the work re-splits around them. The task changes. The system doesn't. |
 | 2:31 | Every arm you saw ran the same skills. Orchestra managed the rest. That is the impact: robot skills become reusable. Capacity you add in seconds, not weeks. |
-| 2:43 | Built in 48 hours. Orchestra: plug in an arm, watch the clock drop. |
+| 2:43 | Built in 34 hours. Orchestra: plug in an arm, watch the clock drop. |
