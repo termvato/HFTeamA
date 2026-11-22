@@ -22,6 +22,8 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const deg = (r) => (r * 180) / Math.PI;
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const nm = (id) => O.armName(id); // display name: Arm Node A / B (ids stay as configured)
+  const rn = (s) => O.rename(s);
 
   function store(key, value) {
     try {
@@ -91,14 +93,18 @@
     lastJoined = m.counts.joined;
     setText(joined, String(m.counts.joined));
     setText($('c-known'), String(m.counts.known));
-    setText($('c-label'), m.counts.known === 1 ? 'robot joined' : 'robots joined');
+    setText($('c-label'), m.counts.known === 1 ? 'arm node joined' : 'arm nodes joined');
+    setHTML($('fleet-bar'), m.nodes.map((n) => `<i data-tone="${stateOf(n)[1]}" title="${esc(nm(n.arm_id))}: ${esc(stateOf(n)[0])}"></i>`).join(''));
 
     const list = $('robot-list');
     m.nodes.forEach((n) => {
       let li = rows.get(n.arm_id);
       if (!li) {
         li = document.createElement('li');
-        li.innerHTML = '<button class="robot" type="button"><span class="sw" aria-hidden="true"></span><span class="r-id"></span><span class="st"></span><span class="r-line"></span></button>';
+        li.innerHTML = '<button class="robot" type="button"><span class="r-glyph" aria-hidden="true"></span><span class="r-id"></span><span class="st"></span><span class="r-line"></span></button>';
+        const view = O.ArmView({ mini: true });
+        li.querySelector('.r-glyph').appendChild(view.el);
+        li._arm = view;
         li.firstElementChild.addEventListener('click', () => select(n.arm_id));
         rows.set(n.arm_id, li);
         list.appendChild(li);
@@ -107,13 +113,15 @@
       const [word, tone] = stateOf(n);
       b.dataset.tone = tone;
       b.classList.toggle('sel', selected === n.arm_id);
-      b.querySelector('.sw').style.background = n.color;
-      setText(b.querySelector('.r-id'), n.arm_id);
+      b.querySelector('.r-glyph').style.setProperty('--sw', n.color);
+      li._arm.paint(n.arm_id, n.color);
+      li._arm.update(n.joints && n.joints.q);
+      setHTML(b.querySelector('.r-id'), nm(n.arm_id) === n.arm_id ? esc(n.arm_id) : `${esc(nm(n.arm_id))}<small>${esc(n.arm_id)}</small>`);
       const st = b.querySelector('.st');
       st.dataset.tone = tone;
       setText(st, word);
       setText(b.querySelector('.r-line'), rowLine(n));
-      b.title = n.label;
+      b.title = `${O.armFinish(n.arm_id)}${n.label ? ` · ${n.label}` : ''}`;
     });
   }
 
@@ -181,12 +189,53 @@
     const rp = $('replan');
     rp.hidden = !m.replanning;
     if (m.replanning) {
-      setText($('replan-head'), m.replanning.head);
-      setText($('replan-detail'), m.replanning.detail || '');
+      setText($('replan-head'), rn(m.replanning.head));
+      setText($('replan-detail'), rn(m.replanning.detail || ''));
     }
     const limit = [r.limit, r.unblocked_note].filter(Boolean).join(' ');
-    setText($('limit'), r.phase === 'finished' ? '' : limit);
+    setText($('limit'), r.phase === 'finished' ? '' : rn(limit));
     $('real-banner').hidden = m.backend !== 'real';
+  }
+
+  // ------------------------------------------------------------------ figures strip
+
+  function renderKpis(m) {
+    const t = m.task;
+    const pct = t.total ? Math.round((100 * t.done) / t.total) : 0;
+    setHTML($('k-steps'), `${t.done}<small>/${t.total}</small>`);
+    setText($('k-steps-sub'), `${pct}% of the batch`);
+    $('k-steps-bar').style.width = `${pct}%`;
+
+    const objs = t.objects || [];
+    if (objs.length) {
+      const done = objs.filter((o) => o.state === 'done').length;
+      const out = objs.filter((o) => o.state === 'out_of_reach').length;
+      const moving = objs.filter((o) => o.state === 'picking' || o.state === 'placing' || o.state === 'held').length;
+      setText($('k-obj-h'), 'Objects sorted');
+      setHTML($('k-obj'), `${done}<small>/${objs.length}</small>`);
+      setText($('k-obj-sub'), out ? `${out} out of reach` : moving ? `${moving} in hand` : 'all within reach');
+      $('k-obj').parentElement.dataset.tone = out ? 'warn' : done === objs.length ? 'ok' : '';
+    } else {
+      setText($('k-obj-h'), 'Steps left');
+      setText($('k-obj'), String(Math.max(0, t.total - t.done)));
+      setText($('k-obj-sub'), t.blocked ? `${t.blocked} out of reach` : '');
+      $('k-obj').parentElement.dataset.tone = t.blocked ? 'warn' : '';
+    }
+
+    const failed = m.nodes.reduce((s, n) => s + (n.steps_failed || 0), 0);
+    setText($('k-fail'), String(failed));
+    const worst = m.nodes.filter((n) => n.steps_failed).sort((a, b) => b.steps_failed - a.steps_failed)[0];
+    setText($('k-fail-sub'), failed ? `most on ${nm(worst.arm_id)} · retried` : 'none so far');
+    $('k-fail-box').dataset.tone = failed ? 'bad' : '';
+
+    const live = m.nodes.filter((n) => n.joined && n.heartbeat_age_s != null);
+    const slow = live.sort((a, b) => b.heartbeat_age_s - a.heartbeat_age_s)[0];
+    setHTML($('k-hb'), slow ? `${Math.round(slow.heartbeat_age_s * 1000)}<small>ms</small>` : '—');
+    setText($('k-hb-sub'), slow ? `${nm(slow.arm_id)} · dropped after 1.5 s` : 'no arm node answering');
+    $('k-hb-box').dataset.tone = slow && slow.heartbeat_age_s > 0.75 ? 'bad' : '';
+
+    const on = m.nodes.filter((n) => n.joined).length;
+    setText($('nodes-sub'), `${on} on this task · ${m.nodes.length} known`);
   }
 
   // ------------------------------------------------------------------ robot cards
@@ -196,6 +245,13 @@
     el.className = 'card enter';
     el.innerHTML = `
       <header class="c-head"><span class="sw" aria-hidden="true"></span><h3></h3><span class="st"></span><div class="c-conn"></div></header>
+      <div class="c-stage">
+        <div class="stage-tl"><span class="pan-slot"></span><span><small>Pan</small><b class="pan-v">—</b></span></div>
+        <div class="stage-tr"><span class="tag"></span></div>
+        <div class="stage-bl"><span><small>Gripper</small><b class="grip-v">—</b></span></div>
+        <div class="stage-br"></div>
+        <div class="stage-note" hidden></div>
+      </div>
       <div class="c-now"></div>
       <div class="c-ik live-only"></div>
       <div class="c-joints live-only">
@@ -203,8 +259,39 @@
         <div class="no-joints" hidden></div>
       </div>
       <footer class="c-foot"><span class="stats"></span><span class="actions"></span></footer>`;
+    const stage = el.querySelector('.c-stage');
+    el._arm = O.ArmView({ label: 'Live side view of the SO-101' });
+    stage.insertBefore(el._arm.el, stage.firstChild);
+    el._pan = O.panDial();
+    el.querySelector('.pan-slot').appendChild(el._pan.el);
     el.addEventListener('animationend', () => el.classList.remove('enter', 'flash'));
     return el;
+  }
+
+  // The arm drawn from its latest joint angles; parked (rest pose, dimmed) when there are none.
+  function renderStage(c, n, m, gone) {
+    const stage = c.querySelector('.c-stage');
+    const j = n.joints;
+    const q = j && j.q && j.q.length >= 5 ? j.q : null;
+    c._arm.paint(n.arm_id, n.color);
+    c._arm.update(q);
+    c._pan.update(q ? q[0] : 0);
+    stage.classList.toggle('stale', gone || !!(j && j.stale) || n.node_state === 'lost');
+    stage.classList.toggle('nodata', !q);
+    const note = stage.querySelector('.stage-note');
+    note.hidden = !!q;
+    if (!q) setText(note, n.backend === 'fake' ? 'Fake arm: no joints, rest pose shown' : 'No joint data yet: rest pose shown');
+    setText(stage.querySelector('.pan-v'), q ? `${deg(q[0]).toFixed(0)}°` : '—');
+    const [lo, hi] = O.LIMITS[5];
+    setText(stage.querySelector('.grip-v'), q && q.length > 5 ? `${Math.round((100 * (q[5] - lo)) / (hi - lo))}% open` : '—');
+    const tag = stage.querySelector('.tag');
+    const be = m.source === 'demo' ? 'demo' : n.backend || '';
+    setText(tag, be === 'real' || be === 'sorter' ? 'Real SO-101' : be ? `${be} · SO-101` : 'SO-101');
+    tag.classList.toggle('real', be === 'real' || be === 'sorter');
+    const hb = n.heartbeat_age_s != null && !gone
+      ? `<span title="Time since the arm last answered; dropped after 1.5 s">♥ <b class="${n.heartbeat_age_s > 0.75 ? 'bad' : ''}">${Math.round(n.heartbeat_age_s * 1000)} ms</b></span>`
+      : '';
+    setHTML(stage.querySelector('.stage-br'), hb);
   }
 
   // How the arm is attached, in one line (see docs/ORCHESTRA_DASHBOARD.md, "How a robot connects").
@@ -282,20 +369,20 @@
       const [word, tone] = stateOf(n);
       c.dataset.tone = tone;
       c.querySelector('.sw').style.background = n.color;
-      setText(c.querySelector('h3'), n.arm_id);
+      setHTML(c.querySelector('h3'), nm(n.arm_id) === n.arm_id ? esc(n.arm_id) : `${esc(nm(n.arm_id))}<small>${esc(n.arm_id)}</small>`);
       const st = c.querySelector('.st');
       st.dataset.tone = tone;
       setText(st, word);
-      setText(c.querySelector('.c-conn'), connLine(n, m));
+      setText(c.querySelector('.c-conn'), `${O.armFinish(n.arm_id)} · ${connLine(n, m)}`);
       c.querySelector('.c-conn').title = `${n.label} · pair ${n.pair || '—'}`;
+      renderStage(c, n, m, gone);
       setHTML(c.querySelector('.c-now'), nowBlock(n, m));
       const ik = ikLine(n);
       c.querySelector('.c-ik').hidden = !ik;
       setHTML(c.querySelector('.c-ik'), ik);
       recordJoints(n);
       renderJoints(c, n, m);
-      const hb = n.heartbeat_age_s != null && !gone ? ` · <span class="${n.heartbeat_age_s > 0.75 ? 'bad' : ''}" title="Time since the arm last answered; dropped after 1.5 s">♥ ${n.heartbeat_age_s.toFixed(2)} s</span>` : '';
-      setHTML(c.querySelector('.stats'), `${n.steps_ok} done${n.steps_failed ? ` · <span class="bad">${n.steps_failed} failed</span>` : ''}${hb}`);
+      setHTML(c.querySelector('.stats'), `${n.steps_ok} done${n.steps_failed ? ` · <span class="bad">${n.steps_failed} failed</span>` : ''}${n.label ? ` · ${esc(n.label)}` : ''}`);
       renderActions(c, n, m, gone);
     });
 
@@ -316,14 +403,15 @@
       if (!slot) {
         slot = document.createElement('div');
         slot.className = 'slot';
-        slot.innerHTML = '<span></span><button class="btn small" type="button">Plug in next arm</button>';
+        slot.innerHTML = '<span></span><button class="btn small" type="button">Plug in next arm node</button>';
+        slot.insertBefore(O.ArmView({ mini: true }).el, slot.firstChild);
         slot.querySelector('button').addEventListener('click', plugNext);
       }
       setText(
         slot.querySelector('span'),
         m.watching
-          ? `${plural(waiting.length, 'more arm')} can join: plug in ${waiting.length === 1 ? 'its' : 'their'} USB cable (${waiting.map((n) => n.arm_id).join(', ')})`
-          : `${plural(waiting.length, 'more arm')} can join this task`,
+          ? `${plural(waiting.length, 'more arm node')} can join: plug in ${waiting.length === 1 ? 'its' : 'their'} USB cable (${waiting.map((n) => nm(n.arm_id)).join(', ')})`
+          : `${plural(waiting.length, 'more arm node')} can join this task (${waiting.map((n) => nm(n.arm_id)).join(', ')})`,
       );
       slot.querySelector('button').hidden = !!m.watching;
       slot.querySelector('button').disabled = stale(m) || busyCmd || !(m.allowed || {}).plug;
@@ -457,7 +545,7 @@
   // ------------------------------------------------------------------ feed, connection
 
   function renderFeed(m) {
-    setHTML($('feed'), (m.feed || []).slice(0, 5).map((f) => `<li data-level="${esc(f.level)}"><span class="t">${f.t != null && f.running !== false ? clock(f.t) : ''}</span><span class="x">${esc(f.text)}</span></li>`).join(''));
+    setHTML($('feed'), (m.feed || []).slice(0, 8).map((f) => `<li data-level="${esc(f.level)}"><span class="t">${f.t != null && f.running !== false ? clock(f.t) : ''}</span><span class="x">${esc(rn(f.text))}</span></li>`).join(''));
   }
 
   function stale(m) {
@@ -480,9 +568,12 @@
   function render(m) {
     M = m;
     if (!colors) readColors();
+    // the node's own colour (black A, green B), whatever the source sent
+    m.nodes.forEach((n) => { n.color = O.armColor(n.arm_id, n.color); });
     renderConn(m);
     renderLeft(m);
     renderTask(m);
+    renderKpis(m);
     O.renderSchedule(m);
     renderCards(m);
     renderFeed(m);
@@ -502,7 +593,7 @@
       c.classList.add('flash');
       say('');
     } else {
-      say(`${id} is not on this task yet`);
+      say(`${nm(id)} is not on this task yet`);
     }
   }
 
@@ -510,7 +601,7 @@
 
   function say(text, bad) {
     const el = $('cmd-msg');
-    setText(el, text);
+    setText(el, rn(text));
     el.classList.toggle('bad', !!bad);
   }
 
@@ -549,7 +640,7 @@
 
   async function plugNext(armId) {
     const id = typeof armId === 'string' ? armId : (M && (M.nodes.find((n) => !n.connected && !n.joined) || {}).arm_id);
-    if (realArms() && !(await confirmDialog(`Plug in ${id || 'the next arm'}?`, 'The arm may move to its start pose. A person must be at the rig.', false))) return;
+    if (realArms() && !(await confirmDialog(`Plug in ${id ? nm(id) : 'the next arm node'}?`, 'The arm may move to its start pose. A person must be at the rig.', false))) return;
     run('plug', { arm: id });
   }
 
@@ -557,7 +648,7 @@
     if (cmd === 'remove' || cmd === 'remove-abort') {
       const abort = cmd === 'remove-abort';
       const yes = await confirmDialog(
-        `${abort ? 'Remove now' : 'Remove'} ${arm}?`,
+        `${abort ? 'Remove now' : 'Remove'} ${nm(arm)}?`,
         abort
           ? 'Cancels its running step (it goes back to the other arms), then parks slowly and turns torque off.'
           : 'It finishes its step and places a part it holds, then parks slowly and turns torque off. Its remaining work goes to the other arms.',
@@ -594,7 +685,7 @@
     const app = $('app');
     const sp = $('splitter');
     const set = (pct) => {
-      pct = Math.min(45, Math.max(20, pct));
+      pct = Math.min(40, Math.max(18, pct));
       app.style.setProperty('--left', `${pct}%`);
       sp.setAttribute('aria-valuenow', String(Math.round(pct)));
       store('orchestra-left', String(pct));
@@ -614,12 +705,12 @@
       sp.addEventListener('pointermove', move);
       sp.addEventListener('pointerup', up);
     });
-    sp.addEventListener('dblclick', () => set(30));
+    sp.addEventListener('dblclick', () => set(24));
     sp.addEventListener('keydown', (e) => {
       const now = Number(sp.getAttribute('aria-valuenow'));
       if (e.key === 'ArrowLeft') set(now - 2);
       if (e.key === 'ArrowRight') set(now + 2);
-      if (e.key === 'Home') set(30);
+      if (e.key === 'Home') set(24);
     });
   }
 
@@ -632,8 +723,9 @@
       root.dataset.theme = dark ? 'light' : 'dark';
       store('orchestra-theme', root.dataset.theme);
       readColors();
+      if (M) render(M); // swatches and lanes pick the theme's shade of each node colour
     });
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); if (M) render(M); });
   }
 
   // ------------------------------------------------------------------ boot

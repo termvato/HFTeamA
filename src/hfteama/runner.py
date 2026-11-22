@@ -180,6 +180,61 @@ class _ProcessProbe:
             late_sum, late_max, n, self._scan_max = 0.0, 0.0, 0, 0.0
 
 
+WARM_SKILLS = ("pick", "place", "pick_place")
+
+
+def _warm_ik(graph, workers: dict[str, SkillWorker], poses: Poses, stop: threading.Event) -> None:
+    """Before Go: solve each arm's IK for every step it may take, so its first moves after Go
+    start at once (22 Nov 12:17: 20 s and 36 s of IK before the arms' first moves, then 35 s
+    before a later one; the planner itself takes ~1 ms).
+
+    It makes the reach checks a skill makes before it moves (generic_skills: every waypoint
+    through `ArmDriver.reachable`), plus the sorter bridge's drop over the bowl. Those fill the
+    arm driver's IK cache, and the moves reuse the same entries. Nothing moves and the bus is
+    not used. A step whose check fails here fails the same way at run time, so failures are
+    only counted. Not covered: the short vertical lines (seeded from the live pose). An arm that
+    joins later (USB, --watch) is not warmed."""
+    from hfteama.arms import generic_skills as gs
+
+    for arm_id, worker in workers.items():
+        drv = getattr(worker, "_driver", None)
+        if drv is None or not hasattr(drv, "reachable"):
+            continue
+        carry = gs._carry_point(poses, arm_id)
+        steps = [t for t in graph.tasks.values() if t.skill in WARM_SKILLS and t.can_run_on(arm_id)]
+        if not steps:
+            continue
+        print(f"IK for {arm_id}: solving {len(steps)} steps before Go...", flush=True)
+        t0, bad = time.perf_counter(), 0
+        for task in steps:
+            if stop.is_set():
+                print("IK warm-up interrupted.")
+                return
+            try:
+                points, drops = [], []
+                if task.skill in ("pick", "pick_place"):
+                    p = gs.pick_point(task, poses, arm_id)
+                    points += gs._pick_waypoints(p, gs.pick_yaw(task), carry)
+                if task.skill in ("place", "pick_place"):
+                    drops = gs._place_waypoints(gs.place_point(task, poses, arm_id), carry)
+                    points += drops
+                if not all(drv.reachable(w, yaw) for w, yaw in points):
+                    bad += 1
+                # carrying a box, the sorter bridge solves the bowl as a drop, a separate
+                # cache entry the reach check does not fill (offline: the first pick's IK
+                # 2.8 s -> 0 s with it, hacklab's whole batch 7.0 s -> 2.3 s)
+                if hasattr(drv, "_command"):
+                    for w, _ in drops:
+                        drv._command(w, None, "drop")
+            except Exception:  # noqa: BLE001  (the step reports it at run time, as before)
+                bad += 1
+        took = time.perf_counter() - t0
+        if hasattr(drv, "_ik_s"):  # the motion log's per-move IK time: count run time only
+            drv._ik_s = 0.0
+        note = f" ({bad} out of this arm's reach)" if bad else ""
+        print(f"IK for {arm_id}: ready in {took:.0f} s{note}", flush=True)
+
+
 def _vlm_place_check(cam: _Overhead):
     """Qwen confirms each place from a fresh overhead frame (the architecture's VLM layer).
     Returns (verifier, unload)."""
@@ -244,6 +299,38 @@ def _sorter_rescan(cam: _Overhead, args, log_dir: Path | None = None) -> Callabl
             return load(str(out / "boxes.json"))
 
     return rescan
+
+
+def _scan_table(cam: _Overhead, args, task_path: Path) -> int:
+    """`--scan`: the table as it is now, written where the run reads it (task_path's folder),
+    before anything connects (22 Nov 12:43: the boxes had been moved since a 12:33 scan; every
+    pick at a moved box closed on air). Camera only. Returns the number of boxes found."""
+    import json
+    import subprocess
+    import sys
+    import tempfile
+
+    import cv2
+
+    for _ in range(5):  # the first frames come before exposure settles (11:50: 0 boxes found)
+        img = cam.grab()
+    frame = Path(tempfile.mkdtemp(prefix="scan_")) / "frame.png"
+    cv2.imwrite(str(frame), img)
+    cmd = [
+        sys.executable, "-c", _EXPORT_CHILD, "--config", str(args.pairs),
+        "sort", "export", "--image", str(frame), "--out", str(task_path.parent), "--no-vlm",
+    ]  # fmt: skip
+    print("scanning the table (overhead camera only)...", flush=True)
+    done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=180)
+    keep = ("Pieces", "   #", "wrote")
+    for line in done.stdout.splitlines():
+        if line.startswith(keep) or line[:6].strip().isdigit():
+            print(line)
+    if done.returncode != 0 or not task_path.exists():
+        print((done.stderr or done.stdout).strip()[-400:])
+        return 0
+    steps = json.loads(task_path.read_text()).get("tasks", [])
+    return sum(1 for t in steps if t.get("skill") == "pick")
 
 
 def _save_rescan_output(log_dir: Path | None, how: str, stdout, stderr) -> str:
@@ -312,6 +399,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     ap.add_argument("--token", default=None, help="operator token for the dashboard's buttons")
     ap.add_argument(
+        "--scan",
+        action="store_true",
+        help="sorter: scan the table with the overhead camera first and write --task's folder "
+        "(boxes.json, poses_real.json), so the boxes are where they are now",
+    )
+    ap.add_argument(
         "--no-rescan",
         action="store_true",
         help="sorter: retry a missed grasp at the old spot instead of re-scanning first",
@@ -344,6 +437,22 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     if real and args.inject:
         ap.error("--inject is for the simulator only")
     task_dir = Path(args.task).parent
+    cam = _Overhead(ROOT) if args.backend == "sorter" else None
+    if args.scan:
+        if cam is None:
+            ap.error("--scan needs --backend sorter (the overhead camera)")
+        if Path(args.task).name != "boxes.json":
+            ap.error("--scan writes boxes.json: give --task <folder>/boxes.json")
+        try:
+            boxes = _scan_table(cam, args, Path(args.task))
+        except Exception as e:  # noqa: BLE001  (camera missing, export timed out)
+            print(f"scan failed: {e}")
+            boxes = 0
+        if boxes == 0:
+            cam.close()
+            print("no reachable box found: nothing was connected. Check the table and camera.")
+            return 2
+        print(f"scan: {boxes} reachable boxes, written to {task_dir}")
     poses_path = args.poses or default_poses(task_dir, real)
     graph, poses = load(args.task), Poses.load(poses_path)
     arm_ids = [a for a in args.arms.split(",") if a]
@@ -390,7 +499,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             if ask("Type 'yes' to connect the arms: ").strip() != "yes":
                 print("not confirmed: nothing was connected.")
                 return 2
-            cam = _Overhead(ROOT)
+            cam = cam or _Overhead(ROOT)
             close_cam = cam.close
             # the overhead camera belongs to the sorter rig: Qwen and the re-scan need it
             if args.backend == "sorter" and not args.no_vlm:  # once confirmed: Qwen takes ~30 s
@@ -419,7 +528,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             made[arm_id] = factory(arm_id)
             return made[arm_id]
 
-        watcher = ArmWatcher(ex, known=known, factory=tracked, scan=probe.timed_scan)
+        def refused(arm_id: str, e: BaseException) -> None:
+            print(f"{arm_id} could not join: {e or type(e).__name__}", flush=True)
+
+        watcher = ArmWatcher(
+            ex, known=known, factory=tracked, scan=probe.timed_scan, on_error=refused
+        )
         for arm_id in arm_ids:
             if not watcher.plug(arm_id):
                 print(f"could not start {arm_id}: aborting (nothing has moved).")
@@ -428,9 +542,14 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         for spec in args.inject:
             arm_id, kind = spec.split(":")
             table.inject(arm_id, kind)  # type: ignore[arg-type,union-attr]
+        probe.start()
+        # before the dashboard (and its Go) is up, so no arm moves while its IK is solved
+        _warm_ik(graph, dict(made), poses, stop_requested)
+        if stop_requested.is_set():
+            _park_all(ex, watcher, made)
+            return 130
         if args.watch:
             watcher.start()
-        probe.start()
 
         plan = ex.estimate()
         print(f"estimate: finish in {plan.makespan:.0f} s; limit: {plan.binding or 'n/a'}")

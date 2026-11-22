@@ -103,15 +103,18 @@ Team detail: [`OPERATIONS_STATUS.md`](https://github.com/termvato/HFTeamA/blob/o
 - Blocked on:
 
 ### Sahil
-- Updated: Sat 21 Nov 17:44
-- Goal: replace the scripted IK pick-and-place step with a learned policy (ACT / SmolVLA), one
-  copy per arm behind the same step interface; the orchestrator splits the objects.
-- Done: recording studio in `vla/` on `action` (live top + wrist cameras, start/stop/upload),
-  using Hardware's calibrated pairs. First dataset, public:
-  [`so101_stack_single_rakesh`](https://huggingface.co/datasets/sahilrajpurkar03/so101_stack_single_rakesh)
-  (20 episodes, rakesh pair, "Put the objects in the box"). Research note: one policy on any number
-  of arms ([`vla/multi_arm_policy.md`](https://github.com/termvato/HFTeamA/blob/action/vla/multi_arm_policy.md)).
-- Doing: choosing how arms pick objects (by table side or by name), then more episodes.
-- Next: train ACT (~3-4 h on my laptop), test on arm A, then the same model on arm B; dual-arm
-  data. Fix CI lint on `vla/`.
-- Blocked on: nothing.
+- Updated: Sun 22 Nov 13:45
+- Goal: replace the scripted IK pick-and-place step with a learned policy (ACT / SmolVLA / X-VLA),
+  one copy per arm behind the same step interface; the orchestrator splits the objects.
+- Done: recording studio and first dataset
+  ([`so101_stack_single_rakesh`](https://huggingface.co/datasets/sahilrajpurkar03/so101_stack_single_rakesh),
+  20 episodes). Trained SmolVLA with early stopping (best at step 2000) and X-VLA (3000 steps,
+  vision and language frozen to fit 8 GB). Isaac Sim view of the MuJoCo sim: 3 arms build a
+  14-box pyramid, arm 2 joins after 3 boxes, arm 3 after 7, run by the Executor; no contact in 3
+  runs. Video [`docs/media/pyramid_isaac_sim.mp4`](docs/media/pyramid_isaac_sim.mp4), code in
+  PR #49 (`action-sim`).
+- Doing: merging PR #49.
+- Next: evaluate SmolVLA and X-VLA on arm A (attempts so far cut short by USB dropouts: arm and
+  cameras disconnect; needs a powered hub). Fix CI lint on `vla/`.
+- Blocked on: a faulty gripper motor on the new follower board (no answer on the bus), and the
+  USB dropouts above.
