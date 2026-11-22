@@ -12,7 +12,8 @@ frame, and every box gets its identity and its yaw from its tag.
    nothing.
 3. The box pose is its centre at half its height (pointing.py's convention), turned by the yaw.
    The detection carries `key = "tag_<id>"`, so the box keeps that id in the Scene across
-   re-scans, however far it moves.
+   re-scans, however far it moves. The yaw reaches the pick step as `pick_yaw_deg` (the jaws
+   close across it), so stick each tag with its top edge along the box's long side.
 
 Table markers (the calibration ones) are skipped by id. Give the boxes a different tag family,
 or ids outside the table set, and list the table ids in the config ("markers": {"table_ids"}).
@@ -140,6 +141,7 @@ class TagDetector:
                     pixel=(float(u), float(v)),
                     label=box.label or f"box with tag {tid}",
                     key=tag_key(tid),
+                    has_yaw=True,
                 )
             )
         return out
@@ -185,3 +187,37 @@ def tag_sorting(scene: Scene, bins: list[Any], config: TagConfig, name: str = "s
     graph = TaskGraph(name=name, tasks=tasks)
     graph.validate()
     return Decomposition(Sorting(categories, assignment), graph, done, attempts=0)
+
+
+def tag_decomposer(bins: list[Any], config: TagConfig) -> Any:
+    """A perception.decomposer.Decomposer that sorts from the tag config instead of asking a VLM,
+    so `perception.rescan` (new, moved, dropped boxes) works the same way with tags. Only boxes
+    listed with a "bin" are work; every other tag is left alone, as in tag_sorting."""
+    from hfteama.perception.decomposer import Category, Decomposer, Sorting
+
+    by_key = {tag_key(t): b.bin for t, b in config.boxes.items() if b.bin}
+
+    class TagDecomposer(Decomposer):
+        def unsorted(self, scene: Scene) -> tuple[list[str], list[str]]:
+            todo, done = super().unsorted(scene)
+            return [o for o in todo if o in by_key], [o for o in done if o in by_key]
+
+        def categorize(
+            self, image: Any, scene: Scene, object_ids: list[str], fixed: Any = None
+        ) -> tuple[Any, int]:
+            categories = dict(fixed or {})
+            assignment = {}
+            for oid in object_ids:
+                bin_id = by_key[oid]
+                cat = f"to_{bin_id}"
+                categories.setdefault(cat, Category(cat, f"tags listed for {bin_id}", bin_id))
+                assignment[oid] = cat
+            return Sorting(categories, assignment), 0
+
+    dec = TagDecomposer(None, bins)  # type: ignore[arg-type]
+    for bin_id in by_key.values():
+        if bin_id not in dec.bins_by_id:
+            raise ValueError(
+                f"tag config names unknown bin {bin_id!r} (bins: {sorted(dec.bins_by_id)})"
+            )
+    return dec

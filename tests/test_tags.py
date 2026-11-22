@@ -128,6 +128,7 @@ def test_tag_sorting_plans_without_a_vlm() -> None:
     assert dec.already_sorted == ["tag_11"]
     pick = dec.graph.tasks["pick_tag_05"].args
     assert math.dist(pick["pick_xyz"][:2], BOXES[5][:2]) < 0.005
+    assert pick["pick_yaw_deg"] == pytest.approx(BOXES[5][2], abs=2.0)  # the tag's yaw reaches IK
     assert dec.graph.tasks["place_tag_05"].args["target"] == "bowl"
 
 
