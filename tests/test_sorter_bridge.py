@@ -233,3 +233,39 @@ def test_heartbeat_stays_fresh_during_a_long_move() -> None:
         time.sleep(0.1)
     th.join()
     assert len(ages) > 10 and max(ages) < 0.5
+
+
+@pytest.mark.parametrize("yaw_deg", [0.0, 30.0, 58.0, -40.0, 140.0])
+def test_exported_box_angle_reaches_the_grasp_aim(yaw_deg) -> None:
+    """Live run 22 Nov: the export left the box angle out, so every box was aimed as if at
+    0 deg and turned boxes were missed. The angle the camera measured (sorter frame, closing
+    direction) must arrive in the bridge's grasp aim unchanged."""
+    from hfteama.arms import generic_skills  # noqa: F401  (registers the skills)
+    from hfteama.arms.poses import Poses
+    from hfteama.arms.skills import REGISTRY
+    from hfteama.taskgraph import Task
+
+    d, low, cfg = make()
+    frame = MainFrame.from_config(cfg)
+    box_sorter = np.array([0.62, 0.18, 0.015])
+    yaw_s = np.radians(yaw_deg)
+    # exactly what sort export writes
+    pick_yaw_deg = float(np.degrees(yaw_s - frame.yaw_to_sorter(0.0)))
+    pick_yaw_deg = (pick_yaw_deg + 180.0) % 360.0 - 180.0
+    task = Task(
+        "pick_box",
+        "pick",
+        args={"pick_xyz": list(frame.to_main(box_sorter)), "pick_yaw_deg": pick_yaw_deg},
+    )
+    seen = []
+    real = d._grasp_aim
+
+    def spy(x, y, z, yaw, length, width):
+        seen.append(yaw)
+        return real(x, y, z, yaw, length, width)
+
+    d._grasp_aim = spy
+    REGISTRY["pick"](d, task, Poses({}))
+    assert seen, "the bridge never aimed"
+    diff = (seen[0] - yaw_s + np.pi) % (2 * np.pi) - np.pi
+    assert abs(diff) < 1e-6, (np.degrees(seen[0]), yaw_deg)

@@ -94,37 +94,78 @@ class _RealRig:
         raise RuntimeError("only fake arms can be told to fail")
 
 
-def _vlm_place_check(args, ROOT: Path):
-    """Qwen confirms each place from a fresh overhead frame (the architecture's VLM layer).
-    Returns (verifier, close) or (None, no-op) when `--no-vlm` or no GPU stack."""
-    import json
+class _Overhead:
+    """The overhead camera, shared by the Qwen place check and the re-scan: opened on first use
+    (one process may hold it; on Windows a second open fails), one frame at a time."""
 
+    def __init__(self, root: Path) -> None:
+        import json
+
+        self.cfg = json.loads((root / "configs" / "sorter.json").read_text())
+        self._cam = None
+        self._lock = threading.Lock()
+
+    def grab(self):
+        from hfteama.vision.camera import OverheadCamera
+
+        with self._lock:
+            if self._cam is None:
+                self._cam = OverheadCamera(self.cfg["camera"]).open()
+            return self._cam.frame()
+
+    def close(self) -> None:
+        with self._lock:
+            if self._cam is not None:
+                self._cam.close()
+                self._cam = None
+
+
+def _vlm_place_check(cam: _Overhead):
+    """Qwen confirms each place from a fresh overhead frame (the architecture's VLM layer).
+    Returns (verifier, unload)."""
     from hfteama.perception.boxes import place_checker
     from hfteama.perception.decomposer import Bin
     from hfteama.perception.vlm import QwenVLM
-    from hfteama.vision.camera import OverheadCamera
 
-    cfg = json.loads((ROOT / "configs" / "sorter.json").read_text())
     print("VLM: loading Qwen for the place check (first time ~30 s)...")
     vlm = QwenVLM()
     t0 = time.monotonic()
     vlm._load()  # now, not at the first place: that step would time out waiting for it
     print(f"VLM: Qwen ready ({vlm.loaded_as}, {time.monotonic() - t0:.0f} s)")
-    cam = OverheadCamera(cfg["camera"]).open()
-    lock = threading.Lock()
+    label = cam.cfg.get("box", {}).get("label", "the round bowl in the middle")
+    return place_checker(vlm, [Bin("bowl", label, (0, 0, 0))], cam.grab), vlm.unload
 
-    def grab():
-        with lock:
-            return cam.frame()
 
-    bowl = Bin("bowl", cfg.get("box", {}).get("label", "the round bowl in the middle"), (0, 0, 0))
-    verify = place_checker(vlm, [bowl], grab)
+def _sorter_rescan(cam: _Overhead, args) -> Callable[[], object]:
+    """After a missed grasp: a fresh frame through Hardware's own export (tags, IK reach,
+    angles), positions only (no Qwen), as the task graph the executor merges in."""
+    import argparse as _ap
+    import tempfile
 
-    def close() -> None:
-        cam.close()
-        vlm.unload()
+    import cv2
 
-    return verify, close
+    from hfteama.sorter.run import cmd_export
+
+    def rescan():
+        out = Path(tempfile.mkdtemp(prefix="rescan_"))
+        frame = out / "frame.png"
+        cv2.imwrite(str(frame), cam.grab())
+        ns = _ap.Namespace(
+            sorter_config=None,
+            arms=None,
+            config=args.pairs,
+            image=str(frame),
+            out=str(out),
+            place_above=0.03,
+            duration=30.0,
+            no_vlm=True,
+        )
+        print()
+        print("re-scan after a missed grasp:")
+        cmd_export(ns)
+        return load(str(out / "boxes.json"))
+
+    return rescan
 
 
 def default_poses(task_dir: Path, real: bool) -> str:
@@ -169,6 +210,11 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     )
     ap.add_argument("--orchestra-port", type=int, default=8060)
     ap.add_argument(
+        "--no-rescan",
+        action="store_true",
+        help="sorter: retry a missed grasp at the old spot instead of re-scanning first",
+    )
+    ap.add_argument(
         "--no-vlm",
         action="store_true",
         help="real arms: skip Qwen's camera check after each place (on by default)",
@@ -207,6 +253,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     log = EventLog(log_path)
     clock = Clock()  # real arms always run on the scale-1 clock (heartbeats are wall times)
     close_vlm: Callable[[], None] = lambda: None  # noqa: E731
+    close_cam: Callable[[], None] = lambda: None  # noqa: E731
     ex = Executor(
         graph,
         log,
@@ -240,12 +287,18 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             if ask("Type 'yes' to connect the arms: ").strip() != "yes":
                 print("not confirmed: nothing was connected.")
                 return 2
-            if not args.no_vlm:  # only once confirmed: loading Qwen takes ~30 s
+            cam = _Overhead(ROOT)
+            close_cam = cam.close
+            # the overhead camera belongs to the sorter rig: Qwen and the re-scan need it
+            if args.backend == "sorter" and not args.no_vlm:  # once confirmed: Qwen takes ~30 s
                 try:
-                    ex.verifier, close_vlm = _vlm_place_check(args, ROOT)
+                    ex.verifier, close_vlm = _vlm_place_check(cam)
                     ex.verify_skills = PLACE_SKILLS
                 except (Exception, SystemExit) as e:  # noqa: BLE001  (no GPU / model / camera)
                     print(f"VLM: place check off ({e}); the run goes on without it")
+            if args.backend == "sorter" and not args.no_rescan:
+                ex.rescan = _sorter_rescan(cam, args)
+                print("re-scan: a missed grasp is retried where the camera sees the box now")
             if args.backend == "sorter":
                 from hfteama.sorter.bridge import sorter_worker_factory
 
@@ -309,6 +362,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         if previous is not None:
             signal.signal(signal.SIGINT, previous)
         close_vlm()
+        close_cam()
 
     n_ok, bad = _summary(log, len(graph.tasks))
     print(f"{n_ok}/{len(graph.tasks)} steps ok. events: {log_path}")

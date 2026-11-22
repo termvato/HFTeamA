@@ -291,6 +291,10 @@ class Executor:
         tasks = dict(new.tasks)
         for t in started - set(tasks):
             tasks[t] = self.graph.tasks[t]  # never drop work that ran or is running
+        for t in set(self.graph.tasks) - set(tasks):  # a part in a gripper is not on the table:
+            partner = self.graph.tasks[t].same_arm_as  # keep the step that puts it down
+            if partner in started:
+                tasks[t] = self.graph.tasks[t]
         merged = TaskGraph(new.name, tasks)
         merged.validate()
         added = sorted(set(tasks) - set(self.graph.tasks))
@@ -534,6 +538,14 @@ class Executor:
         if self._retries[tid] <= self.max_retries:
             self._redo_partner(tid)
             self._status[tid] = TaskState.PENDING
+            if self.rescan is not None and tid not in self._hold:
+                # A missed grasp usually nudges the part: retry where the camera sees it now,
+                # not where it was (live run 22 Nov: retries at the old spot nearly all missed).
+                self._hold.add(tid)
+                self._emit(Event("replan", data={"reason": "rescan_requested", "tasks": [tid]}))
+                threading.Thread(
+                    target=self._run_rescan, args=({tid},), name="rescan", daemon=True
+                ).start()
         else:
             self._give_up(tid, reason)
         self._replan("task_failed", force=True, extra={"task": tid, "why": reason})
