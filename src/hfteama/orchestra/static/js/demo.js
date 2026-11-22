@@ -31,9 +31,10 @@
   // configs/teleop_pairs.json + configs/hacklab_table.json. The third arm is not set up yet
   // (Blockers #6 in OPERATIONS_STATUS.md): it exists here only so the 3-arm story can be shown.
   const CATALOG = [
-    { arm_id: 'rakesh_follower', pair: 'rakesh', serial: '5B79014975', label: 'Black arm · left', color: '#30343a', base: [0.089, 0.42, 0], yaw: -90 },
-    { arm_id: 'vato_follower', pair: 'hacklab', serial: '5A7A015861', label: 'Green arm · right', color: '#2e8b57', base: [0.488, 0.44, 0], yaw: -90 },
-    { arm_id: 'third_follower', pair: '—', serial: 'to come', label: 'Third arm · front (demo only)', color: '#3b6fb6', base: [0.317, -0.16, 0], yaw: 90 },
+    // Shown as Arm Node A / B / C (js/arm.js); the ids stay the configs' follower ids.
+    { arm_id: 'rakesh_follower', pair: 'rakesh', serial: '5B79014975', label: 'Black SO-101 · left', color: '#23272c', base: [0.089, 0.42, 0], yaw: -90 },
+    { arm_id: 'vato_follower', pair: 'hacklab', serial: '5A7A015861', label: 'Green SO-101 · right', color: '#2e8b57', base: [0.488, 0.44, 0], yaw: -90 },
+    { arm_id: 'third_follower', pair: '—', serial: 'to come', label: 'Third SO-101 · front (demo only)', color: '#3b6fb6', base: [0.317, -0.16, 0], yaw: 90 },
   ];
 
   // tasks/sort/hacklab6.json
@@ -85,7 +86,7 @@
     const lift = Math.atan2(wz, wx) + Math.atan2(L2 * Math.sin(elbow), L1 + L2 * Math.cos(elbow));
     const q1 = Math.PI / 2 - lift - 0.15;
     const q2 = elbow - Math.PI / 2;
-    const q3 = 0.3 - (q1 + q2) * 0.6; // keeps the tool roughly down, well inside the wrist limits
+    const q3 = 0.8 * (Math.PI / 2 - 0.15 - q1 - q2); // tool mostly down, clear of the wrist limit
     const q = [pan, q1, q2, q3, pan * 0.15, grip];
     return q.map((v, i) => clamp(v, LIMITS[i][0] + 0.02, LIMITS[i][1] - 0.02));
   }

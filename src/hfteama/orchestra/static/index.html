@@ -4,67 +4,86 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orchestra</title>
-  <meta name="description" content="Operator dashboard for the Orchestra plug-and-produce orchestrator: robots, status, task, plan against actual, the table, and per-arm detail.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5d73'/%3E%3Cpath d='M8 22c3-8 5-12 8-12s5 4 8 12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <meta name="description" content="Operator dashboard for the Orchestra plug-and-produce orchestrator: arm nodes, live SO-101 pose, task, plan against actual, the table, and activity.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2316202a'/%3E%3Cpath d='M9 24h14M16 24v-6l5-6 4 2' stroke='%234fbf80' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+
   <link rel="stylesheet" href="orchestra.css">
 </head>
 <body>
   <div class="app" id="app">
-    <!-- 30 %: robots and their status, nothing else -->
-    <aside class="left" aria-label="Robots and status">
+    <!-- sidebar: the fleet of arm nodes and their status -->
+    <aside class="left" aria-label="Arm nodes and status">
       <header class="brand">
-        <span class="logo">Orchestra</span>
+        <span class="logo">
+          <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M9 24h14M16 24v-6l5-6 4 2"/></svg>
+          <span class="logo-text"><b>Orchestra</b><small>Plug &amp; produce · SO-101</small></span>
+        </span>
         <span class="brand-tools">
-          <span id="conn" class="conn" role="status"></span>
           <button id="theme" class="icon-btn" type="button" aria-label="Switch light or dark theme" title="Light / dark">◐</button>
         </span>
       </header>
 
       <section class="counter" aria-live="polite">
+        <div class="side-h">Fleet <span id="conn" class="conn" role="status"></span></div>
         <div class="count"><b id="c-joined">0</b><span class="of">/<span id="c-known">0</span></span></div>
-        <div class="count-label" id="c-label">robots joined</div>
+        <div class="count-label" id="c-label">arm nodes joined</div>
+        <div id="fleet-bar" class="fleet-bar" aria-hidden="true"></div>
       </section>
 
+      <div class="side-h">Arm nodes</div>
       <ul id="robot-list" class="robot-list"></ul>
 
       <footer class="left-foot">
         <p id="source-note" class="source-note"></p>
-        <p class="stopnote">On-screen stops are software stops. Emergency: switch off the follower's 12&nbsp;V supply.</p>
+        <p class="stopnote"><b>Software stops only.</b> Emergency: switch off the follower's 12&nbsp;V supply.</p>
       </footer>
     </aside>
 
-    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize panes" aria-valuemin="20" aria-valuemax="45" aria-valuenow="30" tabindex="0"></div>
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical" aria-label="Resize panes" aria-valuemin="18" aria-valuemax="40" aria-valuenow="24" tabindex="0"></div>
 
-    <!-- 70 %: the task on top, one card per robot that joined it -->
-    <main class="right" aria-label="Task and robot details">
+    <main class="right" aria-label="Task and arm node details">
       <div id="real-banner" class="banner bad" hidden>Real arms: a person must be at the rig</div>
       <div id="lost-banner" class="banner bad" hidden></div>
 
-      <section class="taskbar" aria-label="Current operating task">
-        <div class="eyebrow">Current task <span id="phase" class="phase"></span></div>
-        <div class="task-row">
-          <div class="task-name">
-            <h1 id="task-title">Connecting…</h1>
-            <p id="task-sub" class="sub"></p>
+      <section class="taskbar hero" aria-label="Current operating task">
+        <div class="hero-main">
+          <div class="eyebrow">Current task <span id="phase" class="phase"></span></div>
+          <div class="task-row">
+            <div class="task-name">
+              <h1 id="task-title">Connecting…</h1>
+              <p id="task-sub" class="sub"></p>
+            </div>
+            <div class="run-box">
+              <div id="big" class="big">--:--</div>
+              <div id="big-label" class="sub"></div>
+            </div>
           </div>
-          <div class="run-box">
-            <div id="big" class="big">--:--</div>
-            <div id="big-label" class="sub"></div>
+          <div class="progress" aria-hidden="true"><div id="prog-bar" class="bar"></div></div>
+          <div class="task-foot">
+            <span id="prog-text" class="sub"></span>
+            <span class="controls">
+              <span id="cmd-msg" class="cmd-msg" role="status"></span>
+              <button id="btn-go" class="btn primary" type="button">Go</button>
+              <button id="btn-pause" class="btn" type="button">Pause</button>
+              <button id="btn-stop" class="btn stop" type="button">Stop all</button>
+            </span>
           </div>
+          <div id="replan" class="replan" hidden><b id="replan-head"></b> <span id="replan-detail"></span></div>
+          <p id="limit" class="limit"></p>
+          <div id="whatif" class="whatif" hidden></div>
         </div>
-        <div class="progress" aria-hidden="true"><div id="prog-bar" class="bar"></div></div>
-        <div class="task-foot">
-          <span id="prog-text" class="sub"></span>
-          <span class="controls">
-            <span id="cmd-msg" class="cmd-msg" role="status"></span>
-            <button id="btn-go" class="btn primary" type="button">Go</button>
-            <button id="btn-pause" class="btn" type="button">Pause</button>
-            <button id="btn-stop" class="btn" type="button">Stop all</button>
-          </span>
-        </div>
-        <div id="replan" class="replan" hidden><b id="replan-head"></b> <span id="replan-detail"></span></div>
-        <p id="limit" class="limit"></p>
-        <div id="whatif" class="whatif" hidden></div>
+      </section>
+
+      <section class="kpis" aria-label="Run figures">
+        <div class="kpi"><span class="k-h">Steps done</span><b id="k-steps">0</b><span id="k-steps-sub" class="k-sub"></span><span class="k-meter"><i id="k-steps-bar"></i></span></div>
+        <div class="kpi"><span class="k-h" id="k-obj-h">Objects sorted</span><b id="k-obj">0</b><span id="k-obj-sub" class="k-sub"></span></div>
+        <div class="kpi" id="k-fail-box"><span class="k-h">Failed steps</span><b id="k-fail">0</b><span id="k-fail-sub" class="k-sub"></span></div>
+        <div class="kpi" id="k-hb-box"><span class="k-h">Slowest link</span><b id="k-hb">—</b><span id="k-hb-sub" class="k-sub"></span></div>
+      </section>
+
+      <section class="nodes-sec" aria-label="Arm nodes on this task">
+        <div class="sec-head"><h2>Arm nodes</h2><span id="nodes-sub" class="legend"></span></div>
+        <div id="cards" class="cards"></div>
       </section>
 
       <section id="schedule" class="schedule" aria-label="Plan and table" hidden>
@@ -85,10 +104,8 @@
         </div>
       </section>
 
-      <section id="cards" class="cards" aria-label="Robots on this task"></section>
-
-      <section class="activity">
-        <div class="act-head">
+      <section class="activity panel">
+        <div class="p-head act-head">
           <h2>Activity</h2>
           <span id="demo-tools" class="demo-tools" hidden>
             <button id="btn-auto" class="link" type="button">Play demo</button>
@@ -120,6 +137,7 @@
       f.textContent = 'Orchestra error: ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')';
     });
   </script>
+  <script src="js/arm.js"></script>
   <script src="js/demo.js"></script>
   <script src="js/live.js"></script>
   <script src="js/schedule.js"></script>

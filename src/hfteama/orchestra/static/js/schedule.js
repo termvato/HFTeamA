@@ -10,6 +10,7 @@
   const O = (window.Orchestra = window.Orchestra || {});
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const FALLBACK = ['#3b6fb6', '#8a5cb8', '#c77c2e', '#2a8a8a', '#b3403a'];
+  const nm = (id) => (O.armName ? O.armName(id) : id);
 
   function armColours(m) {
     const out = {};
@@ -52,7 +53,7 @@
       if (i % 2) out.push(`<rect x="0" y="${y}" width="${w}" height="${LANE}" class="g-alt"/>`);
       const gone = !joined.includes(arm);
       out.push(`<rect x="8" y="${y + 9}" width="5" height="${LANE - 18}" rx="2" fill="${esc(colour(arm, i))}"${gone ? ' opacity=".35"' : ''}/>`);
-      out.push(`<text x="20" y="${y + LANE / 2 + 4}" class="g-lane${gone ? ' gone' : ''}">${esc(arm)}</text>`);
+      out.push(`<text x="20" y="${y + LANE / 2 + 4}" class="g-lane${gone ? ' gone' : ''}">${esc(nm(arm))}<title>${esc(arm)}</title></text>`);
     });
 
     const step = tickStep(end, w - LABEL);
@@ -77,7 +78,7 @@
       const x0 = X(b.start);
       const x1 = Math.max(x0 + 2, X(b.end));
       const st = b.state || 'ok';
-      out.push(`<rect x="${x0}" y="${y + 10}" width="${x1 - x0}" height="${LANE - 20}" rx="2" class="g-act g-${esc(st)}"><title>${esc(b.task)} ${esc(st)} on ${esc(b.arm)}: ${O.clock(b.start)} to ${O.clock(b.end)}</title></rect>`);
+      out.push(`<rect x="${x0}" y="${y + 10}" width="${x1 - x0}" height="${LANE - 20}" rx="2" class="g-act g-${esc(st)}"><title>${esc(b.task)} ${esc(st)} on ${esc(nm(b.arm))}: ${O.clock(b.start)} to ${O.clock(b.end)}</title></rect>`);
       out.push(label(b, x0, x1, y + LANE / 2 + 4, 'g-act-t'));
     });
 
@@ -143,8 +144,8 @@
       const on = live.has(a.id);
       const x = X(a.xy[0]);
       const y = Y(a.xy[1]);
-      out.push(`<rect x="${x - 8}" y="${y - 8}" width="16" height="16" rx="3" fill="${esc(colour(a.id, i))}"${on ? '' : ' opacity=".35"'}><title>${esc(a.id)}${on ? '' : ' (not in the run)'}</title></rect>`);
-      out.push(`<text x="${x}" y="${y - 13}" class="m-arm${on ? '' : ' gone'}" text-anchor="middle">${esc(a.id)}</text>`);
+      out.push(`<rect x="${x - 8}" y="${y - 8}" width="16" height="16" rx="3" fill="${esc(colour(a.id, i))}"${on ? '' : ' opacity=".35"'} stroke="var(--card)" stroke-width="1.5"><title>${esc(nm(a.id))} (${esc(a.id)})${on ? '' : ' (not in the run)'}</title></rect>`);
+      out.push(`<text x="${x}" y="${y - 13}" class="m-arm${on ? '' : ' gone'}" text-anchor="middle">${esc(nm(a.id))}</text>`);
     });
     objs.forEach((o) => {
       if (!o.xy) return;
@@ -155,7 +156,7 @@
       const x = X(o.xy[0]);
       const y = Y(o.xy[1]);
       const name = o.label || o.id;
-      const who = arm ? `planned for ${arm}` : 'no arm can take it now';
+      const who = arm ? `planned for ${nm(arm)}` : 'no arm can take it now';
       out.push(`<g${finished ? ' opacity=".3"' : ''}><circle cx="${x}" cy="${y}" r="6.5" fill="${fill}" class="m-obj"><title>${esc(name)}: ${finished ? 'sorted' : esc(who)}</title></circle>`);
       out.push(`<text x="${x}" y="${y + 18}" class="m-obj-t" text-anchor="middle">${esc(name)}</text></g>`);
     });
