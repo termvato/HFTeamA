@@ -52,8 +52,10 @@ episode. Episodes have no time limit by default: press **Stop & save** when the 
 | `studio.sh single\|dual` | the same recording from a local web page: live cameras, buttons, upload |
 | `cameras.sh list\|check` | list the cameras; check the configured ones together before recording |
 | `train.sh smolvla\|act` | train with held-out episodes and early stopping (`train_watch.py`) |
-| `train_xvla.sh` | fine-tune X-VLA on the dual-arm dataset, with `gpu_guard.sh` keeping the GPU cool |
+| `train_xvla.sh` | fine-tune X-VLA on the dual-arm dataset in a detached container; `resume <run dir>` continues a run |
+| `docker_train.sh <name> <args>` | run any `lerobot-train` command in a detached container, with the GPU guard and checkpoint pruning (`container_entry.sh`) |
 | `gpu_guard.sh <pid>` | pause a training process when the GPU gets too hot, resume it when it has cooled |
+| `make_bundle.sh <run dir> <hub repo>` | a folder to copy by SFTP and publish to the Hub from another machine |
 | `check_policy.py <checkpoint>` | open-loop check: a checkpoint's predicted actions against the recorded ones |
 | `multi_arm_policy.md` | research: one trained policy on any number of arms, with the orchestrator splitting the work |
 
@@ -279,8 +281,18 @@ uv pip install --python ~/miniforge3/envs/lerobot/bin/python -e "$HOME/lerobot[x
 
 ```bash
 ./vla/train_xvla.sh                  # STEPS=7000 BATCH=16 by default
-tail -f ~/vla_runs/<run>.log         # progress;  <run>.gpu.log: temperature and pauses
+docker logs -f xvla_box              # or: tail -f ~/vla_runs/<run>.log
+tail -f ~/vla_runs/<run>.gpu.log     # temperature and pauses
 ```
+The training runs in a detached Docker container (`docker_train.sh`), so it goes on after you
+disconnect. The container has no software of its own: it mounts the host's `lerobot` conda
+env, `~/lerobot` and the Hugging Face cache at the same paths. A checkpoint therefore resumes
+in a container or on the host alike. `docker stop xvla_box` stops it.
+
+**One training at a time.** X-VLA and ACT side by side each ran at half speed, filled the
+48 GB, and the card reached 89 °C. To queue a second one:
+`docker wait xvla_box; ./vla/docker_train.sh act_box ...` under `setsid nohup`.
+
 What the script sets, and why:
 - **Start:** `lerobot/xvla-base`, everything trainable, as the LeRobot X-VLA guide recommends.
   The language model part learns at 1/10 of the learning rate (LeRobot's default for X-VLA).
@@ -301,7 +313,57 @@ What the script sets, and why:
 - **GPU temperature:** at full load (300 W) the card reaches 86 °C within a minute, with its
   fan at only 60%. `gpu_guard.sh` reads the temperature 4 times a second, pauses the training
   at `MAX_C` and resumes it at `RESUME_C`. This run used 87 °C and 85 °C: the card's own
-  slowdown starts at 88 °C. The pauses took about a quarter of the time.
+  slowdown starts at 88 °C. The pauses took a quarter to a third of the time.
+
+### Checkpoints and disk space
+
+The system disk is nearly full, and a full disk locks everyone out of the machine. One X-VLA
+checkpoint is 9.9 GB: 3.3 GB of weights and 6.6 GB of optimizer state, which only resuming needs.
+- A checkpoint is saved every 2000 steps (`SAVE_FREQ`) and at the end.
+- The container prunes after each save: only the newest checkpoint keeps its optimizer state,
+  the one before it keeps its weights, and older ones are deleted (`KEEP_OLDER=1`). A run
+  never holds more than about 23 GB.
+- `docker system df -v` shows what an image holds on its own ("unique"). Removing an image
+  that shares its layers with another one frees almost nothing.
+
+### Resume
+
+```bash
+./vla/train_xvla.sh resume ~/vla_runs/<run>           # a run that was stopped: on to its planned steps
+./vla/train_xvla.sh resume ~/vla_runs/<run> 10000     # a finished run: train on, to 10000 steps in total
+```
+It continues from `checkpoints/last`: weights, optimizer, learning-rate schedule and data order.
+- This run was moved from the host into a container that way, at step 2000.
+- Training a finished run on stretches the cosine schedule to the new total. The learning rate
+  therefore goes up again: at step 7000 of 10000 to about a fifth of its peak.
+- Resuming needs the newest checkpoint's `training_state` folder. Do not delete it.
+
+### ACT on the same data
+
+A second model for the same step: ACT (52M parameters, no language input). It trains from
+scratch in under an hour, its checkpoint is 200 MB, and it answers in milliseconds.
+
+```bash
+OUT=~/vla_runs/act_<name> ./vla/docker_train.sh act_box --policy.type=act --policy.device=cuda \
+    --policy.push_to_hub=false --dataset.repo_id=diegoloayza789/hfteam_box_middle \
+    --batch_size=32 --num_workers=20 --steps=10000 --save_freq=2500 --log_freq=200 \
+    --output_dir=$HOME/vla_runs/act_<name> --job_name=act_box
+```
+No camera renaming: ACT takes the dataset's own names, at the rig too (no `--rename_map`).
+
+Reinforcement learning was not an option here: it needs a simulation of this two-arm task
+with a reward, or hours of supervised trials on the real arms.
+
+### Publish from another machine
+
+This workstation cannot upload to the Hub. Make a bundle, copy it by SFTP, publish from there:
+
+```bash
+CARD=model_card.md ./vla/make_bundle.sh ~/vla_runs/<run> VivekSai07/xvla_hfteam_box_middle
+```
+The result is `~/vla_bundles/<name>/`: `model/` (what gets published) and `PUBLISH.md` with the
+SFTP and `hf upload` commands to run on the other machine. The weights are hard links to the
+checkpoint, so the bundle takes no extra disk space.
 
 ### Check a checkpoint without the arms
 
