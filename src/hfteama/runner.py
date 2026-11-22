@@ -139,31 +139,34 @@ def _vlm_place_check(cam: _Overhead):
 def _sorter_rescan(cam: _Overhead, args) -> Callable[[], object]:
     """After a missed grasp: a fresh frame through Hardware's own export (tags, IK reach,
     angles), positions only (no Qwen), as the task graph the executor merges in."""
-    import argparse as _ap
+    import subprocess
+    import sys
     import tempfile
 
     import cv2
 
-    from hfteama.sorter.run import cmd_export
+    one_at_a_time = threading.Lock()
 
     def rescan():
-        out = Path(tempfile.mkdtemp(prefix="rescan_"))
-        frame = out / "frame.png"
-        cv2.imwrite(str(frame), cam.grab())
-        ns = _ap.Namespace(
-            sorter_config=None,
-            arms=None,
-            config=args.pairs,
-            image=str(frame),
-            out=str(out),
-            place_above=0.03,
-            duration=30.0,
-            no_vlm=True,
-        )
-        print()
-        print("re-scan after a missed grasp:")
-        cmd_export(ns)
-        return load(str(out / "boxes.json"))
+        # In a child process, one at a time: the export is ~15 s of pure-Python IK, and in this
+        # process it held the GIL the arms' 50 Hz loops need (22 Nov 09:29: a re-scan took 130 s,
+        # steps took 43-66 s instead of 10-20, and re-scans piled up after every miss).
+        with one_at_a_time:
+            out = Path(tempfile.mkdtemp(prefix="rescan_"))
+            frame = out / "frame.png"
+            cv2.imwrite(str(frame), cam.grab())
+            cmd = [
+                sys.executable, "-m", "hfteama", "--config", str(args.pairs),
+                "sort", "export", "--image", str(frame), "--out", str(out),
+                "--place-above", "0.03", "--duration", "30", "--no-vlm",
+            ]  # fmt: skip
+            print()
+            print("re-scan after a missed grasp (child process):")
+            done = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=120)
+            if done.returncode != 0 or not (out / "boxes.json").exists():
+                tail = (done.stderr or done.stdout).strip().splitlines()[-1:] or ["no output"]
+                raise RuntimeError(f"re-scan export failed: {tail[0]}")
+            return load(str(out / "boxes.json"))
 
     return rescan
 
