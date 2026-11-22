@@ -281,6 +281,54 @@ def test_camera_checks_only_place_steps_in_demo_setting(tmp_path: Path) -> None:
     assert checked and set(checked) == {"place"} and len(checked) == 12
 
 
+def test_a_slow_place_check_does_not_rerun_the_place_and_stop_still_parks(tmp_path: Path) -> None:
+    """Live demo 22 Nov: the arm kept "holding" a place while the camera checked it, so the
+    dispatcher re-ran the place every few seconds, the check's answer was thrown away, and a
+    remove never parked the arm. A finished place is not held any more."""
+    import time as _time
+
+    g = TaskGraph(
+        "one",
+        {
+            "pick_a": Task("pick_a", "pick", args={"pick_xyz": [0.1, 0.1, 0.02]}, duration=1.0),
+            "place_a": Task(
+                "place_a", "place", deps=("pick_a",), same_arm_as="pick_a", duration=1.0
+            ),
+        },
+    )
+
+    def slow_check(task, result) -> tuple[bool, str]:
+        _time.sleep(0.5)  # Qwen takes seconds; the fake arm is much faster than that
+        return True, ""
+
+    ex, log, clock = make(
+        tmp_path, graph=g, verifier=slow_check, verify_skills=frozenset({"place"})
+    )
+    ex.add_arm(arm("a", clock))
+    ex.start()
+    assert ex.wait(10)
+    starts = [e.task for e in kinds(log, "task_start")]
+    assert starts == ["pick_a", "place_a"], starts
+    assert set(ex.snapshot()["status"].values()) == {"done"}
+
+    # a stop during the check parks the arm instead of re-running the place
+    ex2, log2, clock2 = make(
+        tmp_path / "b", graph=g, verifier=slow_check, verify_skills=frozenset({"place"})
+    )
+    ex2.add_arm(arm("a", clock2))
+    ex2.start()
+    end = _time.monotonic() + 10
+    while ex2.snapshot()["status"]["place_a"] != "verifying" and _time.monotonic() < end:
+        _time.sleep(0.01)
+    ex2.remove_arm("a")
+    end = _time.monotonic() + 10
+    while not kinds(log2, "arm_removed") and _time.monotonic() < end:
+        _time.sleep(0.01)
+    assert kinds(log2, "arm_removed"), "the arm was never parked"
+    assert [e.task for e in kinds(log2, "task_start")].count("place_a") == 1
+    ex2.stop()
+
+
 def test_lost_part_waits_for_a_rescan_before_the_pick_is_retried(tmp_path: Path) -> None:
     from dataclasses import replace as dc_replace
 

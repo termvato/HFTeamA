@@ -472,6 +472,11 @@ class Executor:
                 self._replan("task_done", force=False)
             else:
                 self._status[tid] = TaskState.VERIFYING
+                # The step ran: the arm no longer holds this one. Left held, the dispatcher would
+                # re-run it while the check is out (live demo 22 Nov: endless re-places, and a
+                # remove never parked the arm). A rejected check re-does the pick via _retry.
+                if self._held.get(arm) == tid:
+                    del self._held[arm]
                 self._verify(tid, arm, token, res)
         elif outcome is Outcome.ARM_DOWN:
             self._status[tid] = TaskState.PENDING
