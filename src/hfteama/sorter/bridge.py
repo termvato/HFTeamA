@@ -133,7 +133,8 @@ class SorterArmDriver:
             return sol, p[:2], None, sol.ok and down and tilt == max_tilt
         same_spot = self._last_xy is not None and np.hypot(*(p[:2] - self._last_xy)) < 0.01
         if yaw_main is not None:
-            piece_yaw = self._frame.yaw_to_sorter(yaw_main) - np.pi / 2  # jaws close along yaw
+            # main's yaw is the jaws' closing heading (generic_skills.pick_yaw), as Piece.yaw
+            piece_yaw = self._frame.yaw_to_sorter(yaw_main)
         else:
             piece_yaw = 0.0
         w = self._pc.get("object_width", 0.03)

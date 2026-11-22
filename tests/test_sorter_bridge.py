@@ -249,9 +249,10 @@ def test_exported_box_angle_reaches_the_grasp_aim(yaw_deg) -> None:
     frame = MainFrame.from_config(cfg)
     box_sorter = np.array([0.62, 0.18, 0.015])
     yaw_s = np.radians(yaw_deg)
-    # exactly what sort export writes
-    pick_yaw_deg = float(np.degrees(yaw_s - frame.yaw_to_sorter(0.0)))
-    pick_yaw_deg = (pick_yaw_deg + 180.0) % 360.0 - 180.0
+    # exactly what sort export writes: the box's long side in main's frame (generic_skills
+    # convention), folded to [0, 180)
+    closing_main = yaw_s - frame.yaw_to_sorter(0.0)
+    pick_yaw_deg = round(float(np.degrees(closing_main - np.pi / 2)) % 180.0, 1)
     task = Task(
         "pick_box",
         "pick",
@@ -267,5 +268,45 @@ def test_exported_box_angle_reaches_the_grasp_aim(yaw_deg) -> None:
     d._grasp_aim = spy
     REGISTRY["pick"](d, task, Poses({}))
     assert seen, "the bridge never aimed"
-    diff = (seen[0] - yaw_s + np.pi) % (2 * np.pi) - np.pi
-    assert abs(diff) < 1e-6, (np.degrees(seen[0]), yaw_deg)
+    diff = (seen[0] - yaw_s + np.pi / 2) % np.pi - np.pi / 2  # a side has no direction
+    assert abs(diff) < np.radians(0.1), (np.degrees(seen[0]), yaw_deg)
+
+
+def test_export_passes_the_box_yaw_and_the_jaws_close_on_its_sides(monkeypatch, tmp_path) -> None:
+    """A box turned 35 deg: the exported pick_yaw_deg brings the jaws across its sides (not its
+    corners), as `hfteama sort run` grasps it."""
+    import hfteama.sorter.run as run
+    from hfteama.__main__ import main
+    from hfteama.arms.generic_skills import pick_yaw
+    from hfteama.arms.so101_ik import jaw_yaw
+    from hfteama.taskgraph import load
+    from hfteama.vision.detect import Box, Piece, Scene
+
+    closing = np.radians(35.0)  # Piece.yaw: the jaws' closing direction, sorter frame
+
+    class FakeEye:
+        def __init__(self, cfg, image=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+        def look(self, arm_chains=()):
+            piece = Piece(0.62, 0.18, 0.058, 0.058, closing, 33.6, tag_id=3)
+            return None, None, Scene(box=Box(0.37, 0.22, 0.09), pieces=[piece])
+
+    monkeypatch.setattr(run, "Eye", FakeEye)
+    assert main(["sort", "export", "--arms", "rakesh", "--out", str(tmp_path)]) == 0
+    task = load(tmp_path / "boxes.json").tasks["pick_box_tag3"]
+    mf = MainFrame.from_config(load_config())
+    got = mf.yaw_to_sorter(pick_yaw(task))  # back in the sorter frame
+    assert np.cos(2 * (got - closing)) == pytest.approx(1.0, abs=1e-6)  # same line (mod 180)
+
+    d, low, cfg = make()
+    d.move_to(mf.to_main([0.62, 0.18, 0.08]), yaw=pick_yaw(task))
+    heading = jaw_yaw(fk(low.q())) + d._arm.placement.yaw  # jaws' closing heading, table
+    off = np.degrees(heading - closing) % 90.0  # square box: any of its four sides
+    assert min(off, 90.0 - off) < 3.0

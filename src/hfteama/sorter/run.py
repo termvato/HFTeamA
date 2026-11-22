@@ -1119,11 +1119,10 @@ def cmd_export(args) -> int:
         poses["objects"][name] = [
             round(float(v), 4) for v in mf.to_main([p.x, p.y, pc.get("grasp_z", 0.015)])
         ]
-        # the box's measured angle, so the jaws close across it as `sort run` does (without
-        # it the bridge aims every box as if at 0 deg: a cube turned 45 deg is 8 cm across the
-        # corners, wider than the open jaws). Main's pick skill passes pick_yaw_deg + 90 deg,
-        # the bridge subtracts 90 deg and turns it into the sorter frame: undo that rotation.
-        pick_yaw_deg = float(np.degrees(p.yaw - mf.yaw_to_sorter(0.0)))
+        # the box's long side in main's frame (generic_skills.pick_yaw closes across it): the
+        # jaws close on its sides, not on its corners
+        closing_main = p.yaw - (mf.yaw_to_sorter(0.0))
+        yaw_deg = round(float(np.degrees(closing_main - np.pi / 2)) % 180.0, 1)
         allowed = [catalog[s] for s in able]
         # the arm of the other half is farther (and its aim is only fitted on its own half):
         # slower in the plan, so the planner gives it the box only when that pays off
@@ -1135,7 +1134,7 @@ def cmd_export(args) -> int:
                 "args": {
                     "object": name,
                     "pick_xyz": poses["objects"][name],
-                    "pick_yaw_deg": round((pick_yaw_deg + 180.0) % 360.0 - 180.0, 1),
+                    "pick_yaw_deg": yaw_deg,
                 },
                 "deps": [],
                 "allowed_arms": allowed,
