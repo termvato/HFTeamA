@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -30,7 +31,7 @@ from typing import Any
 
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
-from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs
+from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs, port_answers
 from hfteama.events import Event, EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
@@ -157,9 +158,13 @@ class Rig:
                 return arm_id if self.watcher.plug(arm_id) else f"{arm_id} (could not start)"
         return "no arm left"
 
-    def remove(self, arm_id: str) -> None:
-        """Slow stop: finish the step, park, then it may be unplugged."""
-        self.ex.remove_arm(arm_id)
+    def plug(self, arm_id: str) -> bool:
+        """Plug in this arm (same as its USB cable going in). False if unknown, in, or it failed."""
+        return arm_id in self.known and self.watcher.plug(arm_id)
+
+    def remove(self, arm_id: str, abort: bool = False) -> None:
+        """Slow stop: finish the step (abort=True: cancel it), park, then it may be unplugged."""
+        self.ex.remove_arm(arm_id, abort=abort)
         self.watcher.forget(arm_id)
 
     def down(self, arm_id: str) -> None:
@@ -187,6 +192,7 @@ def build(
     scan: Callable[[], Any] | None = None,
     verifier: Callable[..., Any] | None = None,
     method: str = "heft",
+    verify: Callable[[str], bool] | None = None,
 ) -> tuple[Executor, ArmWatcher, Rig]:
     """Wire executor, watcher and controls. `scan=None` means manual plug-in only."""
     arm_ids = list(known.values())
@@ -199,7 +205,7 @@ def build(
         verifier=verifier,
         verify_skills=PLACE_SKILLS if verifier else None,
     )
-    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()))
+    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()), verify=verify)
     return ex, watcher, Rig(ex, watcher, arm_ids)
 
 
@@ -228,6 +234,12 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--log", default=None)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8050)
+    ap.add_argument(
+        "--orchestra", action="store_true", help="also serve the Orchestra dashboard (port 8060)"
+    )
+    ap.add_argument("--orchestra-host", default="127.0.0.1")
+    ap.add_argument("--orchestra-port", type=int, default=8060)
+    ap.add_argument("--orchestra-token", default=None, help="needed off 127.0.0.1 for commands")
     args = ap.parse_args(argv)
 
     from hfteama.view.app import create_app
@@ -253,6 +265,8 @@ def main(argv: list[str] | None = None) -> None:
         factory,
         clock=clock,
         scan=connected_serials if watch else None,
+        # Windows can keep listing an unplugged board: open the port before trusting it
+        verify=port_answers if watch and sys.platform == "win32" else None,
         verifier=verifier,
         method=args.method,
     )
@@ -266,6 +280,24 @@ def main(argv: list[str] | None = None) -> None:
         watcher.start()
     print(f"arms: {', '.join(known.values())} | backend: {args.backend} | USB watch: {watch}")
     print(f"event log: {path}")
+    if args.orchestra:
+        from hfteama.orchestra import StateHub
+        from hfteama.orchestra.server import start
+
+        hub = StateHub(
+            log,
+            ex,
+            watcher,
+            rig,
+            clock,
+            args.backend,
+            args.pairs,
+            table_path=args.table,
+            watching=watch,
+            task_name=Path(args.task).stem if not args.planner else "",
+        )
+        start(hub, rig, args.orchestra_host, args.orchestra_port, args.orchestra_token)
+        print(f"Orchestra: http://{args.orchestra_host}:{args.orchestra_port}/")
     create_app(log, controls=rig, clock=clock).run(host=args.host, port=args.port, debug=False)
 
 

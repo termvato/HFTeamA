@@ -131,3 +131,70 @@ def test_catalog_from_actions_real_arms_file(tmp_path: Path) -> None:
     left = cat["rakesh_follower"]
     assert left.base_yaw_deg == pytest.approx(-90.0) and left.base_pose_m[0] == 0.089
     assert left.reaches((0.1, 0.15)) and not left.reaches((0.1, 0.9))  # faces -y, 0.44 m reach
+
+
+# ---- stale entries: the system lists a port, but nothing is behind it (Windows, 21 Nov)
+
+
+class ReasonRecorder(Recorder):
+    def arm_lost(self, arm_id: str, reason: str = "unplugged") -> None:
+        self.calls.append(("lost", f"{arm_id}: {reason}"))
+
+
+def test_a_listed_port_that_does_not_answer_never_joins() -> None:
+    ex = Recorder()
+    w = watcher(ex, {"S1", "S2"}, verify=lambda s: s != "S1")
+    w.poll_once()
+    w.poll_once()
+    assert ex.calls == [("add", "arm_two")]
+    assert w.present() == {"arm_two"} and w.ghosts() == {"arm_one"}
+
+
+def test_a_joined_arm_whose_port_stops_answering_is_dropped() -> None:
+    ex, answering = ReasonRecorder(), {"S1"}
+    w = watcher(ex, {"S1"}, verify=lambda s: s in answering, verify_period_s=0.0)
+    w.poll_once()
+    w.poll_once()
+    assert ex.calls == [("add", "arm_one")]
+    answering.clear()  # unplugged, but the system keeps listing the board
+    w.poll_once()
+    w.poll_once()
+    assert ex.calls[-1][0] == "lost" and "port not answering" in ex.calls[-1][1]
+    assert w.joined() == set()
+
+
+def test_port_checks_are_rate_limited_and_a_broken_check_keeps_the_arm() -> None:
+    calls: list[str] = []
+
+    def check(serial: str) -> bool:
+        calls.append(serial)
+        raise RuntimeError("check crashed")
+
+    ex = Recorder()
+    w = watcher(ex, {"S1"}, verify=check, verify_period_s=60.0)
+    for _ in range(5):
+        w.poll_once()
+    assert calls == ["S1"]  # once per period, not once per scan
+    assert ex.calls == [("add", "arm_one")]  # a crashing check never drops (or hides) an arm
+
+
+@pytest.mark.parametrize(
+    "message, gone",
+    [
+        # seen on the demo laptop: Windows listed COM3, nothing plugged in
+        ("could not open port 'COM3': OSError(22, 'Incorrect function.', None, 1)", True),
+        (
+            "could not open port 'COM4': FileNotFoundError(2, 'The system cannot find the file "
+            "specified.', None, 2)",
+            True,
+        ),
+        # another program (LeRobot, teleop) has the port open: the arm is there
+        ("could not open port 'COM3': PermissionError(13, 'Access is denied.', None, 5)", False),
+        ("[Errno 2] could not open port /dev/ttyACM0: [Errno 2] No such file or directory", True),
+        ("something nobody has seen before", False),
+    ],
+)
+def test_open_errors_are_read_conservatively(message: str, gone: bool) -> None:
+    from hfteama.discovery import open_error_means_gone
+
+    assert open_error_means_gone(message) is gone
