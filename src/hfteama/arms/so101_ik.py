@@ -19,6 +19,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -101,12 +102,24 @@ def _rotz(a: float) -> np.ndarray:
     return T
 
 
+def _joint(M: np.ndarray, a: float) -> np.ndarray:
+    """M @ _rotz(a) without building _rotz: a turn about z only mixes columns 0 and 1."""
+    c, s = math.cos(a), math.sin(a)
+    out = M.copy()
+    out[:, 0] = c * M[:, 0] + s * M[:, 1]
+    out[:, 1] = c * M[:, 1] - s * M[:, 0]
+    return out
+
+
+def _links(q) -> list[np.ndarray]:
+    """origin_k @ rotz(q_k) for the 5 joints."""
+    return [_joint(o, a) for o, a in zip(_JOINT_ORIGINS, np.asarray(q, float)[:5], strict=True)]
+
+
 def fk(q) -> np.ndarray:
     """4x4 pose of the TCP in the arm frame for the 5 body joint angles (rad)."""
-    T = np.eye(4)
-    for origin, a in zip(_JOINT_ORIGINS, np.asarray(q, float)[:5], strict=True):
-        T = T @ origin @ _rotz(a)
-    return T @ _TCP
+    L = _links(q)
+    return L[0] @ L[1] @ L[2] @ L[3] @ L[4] @ _TCP
 
 
 def tcp_position(q) -> np.ndarray:
@@ -216,20 +229,34 @@ def _tilt(q) -> float:
 
 
 def _jacobians(q, eps=1e-6):
-    """Position (3x4) and approach-xy (2x4) Jacobians over the first 4 joints."""
-    T = fk(q)
+    """Position (3x4) and approach-xy (2x4) Jacobians over the first 4 joints.
+
+    Finite differences as before, but nudging joint k only changes the chain from k on: the
+    links before it (prefix) and after it (suffix) are multiplied once and shared, so the 4
+    nudged poses cost 2 products each instead of a whole forward kinematics. (An analytic
+    Jacobian was tried: no faster here, and it moved more solutions away from these.)"""
+    q = np.asarray(q, float)
+    L = _links(q)
+    pre = [np.eye(4)]
+    for k in range(4):
+        pre.append(pre[-1] @ L[k])
+    suf = [None] * 5 + [_TCP]
+    for k in range(4, -1, -1):
+        suf[k] = L[k] @ suf[k + 1]
+    T = pre[4] @ suf[4]
     f0 = np.concatenate([T[:3, 3], T[:2, 2]])
     J = np.empty((5, 4))
     for k in range(4):
-        dq = np.zeros(5)
-        dq[k] = eps
-        T1 = fk(q + dq)
+        T1 = pre[k] @ _joint(_JOINT_ORIGINS[k], q[k] + eps) @ suf[k + 1]
         J[:, k] = (np.concatenate([T1[:3, 3], T1[:2, 2]]) - f0) / eps
     return f0, J[:3], J[3:]
 
 
+_EYE = {n: np.eye(n) for n in (2, 3, 4)}  # allocated once: these run ~10^5 times per solve batch
+
+
 def _dpinv(J, damping=1e-4):
-    return J.T @ np.linalg.inv(J @ J.T + damping * np.eye(J.shape[0]))
+    return J.T @ np.linalg.inv(J @ J.T + damping * _EYE[J.shape[0]])
 
 
 def _task_priority(q, target, down, iters, lo, hi):
@@ -249,9 +276,9 @@ def _task_priority(q, target, down, iters, lo, hi):
             if not blocked.any():
                 break
             free &= ~blocked
-        step = np.clip(step, -0.15, 0.15)
+        step = np.minimum(np.maximum(step, -0.15), 0.15)  # = np.clip, without its overhead
         q = q.copy()
-        q[:4] = np.clip(q[:4] + step, lo[:4], hi[:4])
+        q[:4] = np.minimum(np.maximum(q[:4] + step, lo[:4]), hi[:4])
         if np.abs(step).max() < 1e-6:
             break
     return q
@@ -261,7 +288,7 @@ def _step(Jp, Jo, rp, approach_xy, down):
     Jp_pinv = _dpinv(Jp)
     step = Jp_pinv @ rp
     if down:
-        N = np.eye(4) - Jp_pinv @ Jp
+        N = _EYE[4] - Jp_pinv @ Jp
         ro = -approach_xy - Jo @ step  # approach x, y should be 0
         step = step + N @ _dpinv(Jo @ N, 1e-3) @ ro
     return step
