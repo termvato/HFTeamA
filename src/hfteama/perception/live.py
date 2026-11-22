@@ -27,8 +27,9 @@ The hooks take no arguments, so they are configured by environment variables:
     HFTEAMA_TABLE      table layout (default configs/hacklab_table.json)
     HFTEAMA_CAMERA     camera device name (default: "camera.name" in the table file)
     HFTEAMA_IMAGE      a frame file or stream URL instead of the camera (dry runs)
-    HFTEAMA_FEED       1 (default): keep the camera open, shown live on the dashboard; 0: one
-                       ffmpeg run per frame
+    HFTEAMA_FEED       0 (default): one ffmpeg run per frame; 1: keep the camera open, shown
+                       live on the dashboard (off by default: the constant 1080p stream likely
+                       starved the arms' USB serial in the 22 Nov 08:06 run; arms never moved)
     HFTEAMA_DETECTOR   auto | tags | vlm | sorter (auto = tags if the table file has a "tags"
                        section; sorter = the box tags located by Hardware's calibrated camera
                        (C922 intrinsics + 4 reference tags), what the real arms grasp with)
@@ -318,8 +319,8 @@ def from_env() -> LivePipeline:
         device=os.environ.get("HFTEAMA_CAMERA") or cam.get("name"),
         image=os.environ.get("HFTEAMA_IMAGE"),
         size=tuple(cam.get("size", (1920, 1080))),
-        # kept open, so the dashboard shows the camera live next to the table map
-        feed=os.environ.get("HFTEAMA_FEED", "1") != "0",
+        # HFTEAMA_FEED=1 keeps it open for the dashboard's live view (off: USB load, see above)
+        feed=os.environ.get("HFTEAMA_FEED", "0") == "1",
     )
     return LivePipeline(
         table,
