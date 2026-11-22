@@ -1,0 +1,555 @@
+{
+ "name": "pyramid14",
+ "note": "Placeholder durations (s).",
+ "tasks": [
+  {
+   "id": "pick_01",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_01"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_01",
+   "skill": "place_square",
+   "args": {
+    "object": "box_01",
+    "place_xyz": [
+     0.102,
+     0.2264,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_01"
+   ],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_01",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_02",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_02"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_02",
+   "skill": "place_square",
+   "args": {
+    "object": "box_02",
+    "place_xyz": [
+     0.102,
+     0.2944,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_02"
+   ],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_02",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_03",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_03"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_03",
+   "skill": "place_square",
+   "args": {
+    "object": "box_03",
+    "place_xyz": [
+     0.102,
+     0.3624,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_03"
+   ],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_03",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_04",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_04"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_04",
+   "skill": "place_square",
+   "args": {
+    "object": "box_04",
+    "place_xyz": [
+     0.17,
+     0.2264,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_04"
+   ],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_04",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_05",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_05"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_05",
+   "skill": "place_square",
+   "args": {
+    "object": "box_05",
+    "place_xyz": [
+     0.17,
+     0.2944,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_05"
+   ],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_05",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_06",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_06"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_06",
+   "skill": "place_square",
+   "args": {
+    "object": "box_06",
+    "place_xyz": [
+     0.17,
+     0.3624,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_06"
+   ],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_06",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_07",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_07"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_07",
+   "skill": "place_square",
+   "args": {
+    "object": "box_07",
+    "place_xyz": [
+     0.238,
+     0.2264,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_07"
+   ],
+   "allowed_arms": [
+    "arm_1"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_07",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_08",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_08"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_08",
+   "skill": "place_square",
+   "args": {
+    "object": "box_08",
+    "place_xyz": [
+     0.238,
+     0.2944,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_08"
+   ],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_08",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_09",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_09"
+   },
+   "deps": [],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_09",
+   "skill": "place_square",
+   "args": {
+    "object": "box_09",
+    "place_xyz": [
+     0.238,
+     0.3624,
+     0.021
+    ]
+   },
+   "deps": [
+    "pick_09"
+   ],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_09",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_10",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_10"
+   },
+   "deps": [
+    "place_01",
+    "place_02",
+    "place_04",
+    "place_05"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_10",
+   "skill": "place_square",
+   "args": {
+    "object": "box_10",
+    "place_xyz": [
+     0.136,
+     0.2604,
+     0.061
+    ]
+   },
+   "deps": [
+    "pick_10",
+    "place_01",
+    "place_02",
+    "place_04",
+    "place_05"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_10",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_11",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_11"
+   },
+   "deps": [
+    "place_02",
+    "place_03",
+    "place_05",
+    "place_06"
+   ],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_11",
+   "skill": "place_square",
+   "args": {
+    "object": "box_11",
+    "place_xyz": [
+     0.136,
+     0.3284,
+     0.061
+    ]
+   },
+   "deps": [
+    "pick_11",
+    "place_02",
+    "place_03",
+    "place_05",
+    "place_06"
+   ],
+   "allowed_arms": [
+    "arm_2"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_11",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_12",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_12"
+   },
+   "deps": [
+    "place_04",
+    "place_05",
+    "place_07",
+    "place_08"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_12",
+   "skill": "place_square",
+   "args": {
+    "object": "box_12",
+    "place_xyz": [
+     0.204,
+     0.2604,
+     0.061
+    ]
+   },
+   "deps": [
+    "pick_12",
+    "place_04",
+    "place_05",
+    "place_07",
+    "place_08"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_12",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_13",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_13"
+   },
+   "deps": [
+    "place_05",
+    "place_06",
+    "place_08",
+    "place_09"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_13",
+   "skill": "place_square",
+   "args": {
+    "object": "box_13",
+    "place_xyz": [
+     0.204,
+     0.3284,
+     0.061
+    ]
+   },
+   "deps": [
+    "pick_13",
+    "place_05",
+    "place_06",
+    "place_08",
+    "place_09"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_13",
+   "resources": [
+    "pyramid"
+   ]
+  },
+  {
+   "id": "pick_14",
+   "skill": "pick_square",
+   "args": {
+    "object": "box_14"
+   },
+   "deps": [
+    "place_10",
+    "place_11",
+    "place_12",
+    "place_13"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 10.0,
+   "resources": []
+  },
+  {
+   "id": "place_14",
+   "skill": "place_square",
+   "args": {
+    "object": "box_14",
+    "place_xyz": [
+     0.17,
+     0.2944,
+     0.101
+    ]
+   },
+   "deps": [
+    "pick_14",
+    "place_10",
+    "place_11",
+    "place_12",
+    "place_13"
+   ],
+   "allowed_arms": [
+    "arm_3"
+   ],
+   "duration": 12.0,
+   "same_arm_as": "pick_14",
+   "resources": [
+    "pyramid"
+   ]
+  }
+ ]
+}
