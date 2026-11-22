@@ -206,12 +206,7 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     log_path.unlink(missing_ok=True)  # a log is one run: never mix this run's steps with an old one
     log = EventLog(log_path)
     clock = Clock()  # real arms always run on the scale-1 clock (heartbeats are wall times)
-    verifier, close_vlm = None, (lambda: None)
-    if real and not args.no_vlm:
-        try:
-            verifier, close_vlm = _vlm_place_check(args, ROOT)
-        except Exception as e:  # noqa: BLE001  (no GPU, no model, no camera: run without it)
-            print(f"VLM: place check off ({e}); the run goes on without it")
+    close_vlm: Callable[[], None] = lambda: None  # noqa: E731
     ex = Executor(
         graph,
         log,
@@ -219,8 +214,6 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         method=args.method,
         catalog=arm_ids,
         timeout_measured=args.timeout_factor,
-        verifier=verifier,
-        verify_skills=PLACE_SKILLS if verifier else None,
     )
     stop_requested = threading.Event()
     sigints = 0
@@ -247,6 +240,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             if ask("Type 'yes' to connect the arms: ").strip() != "yes":
                 print("not confirmed: nothing was connected.")
                 return 2
+            if not args.no_vlm:  # only once confirmed: loading Qwen takes ~30 s
+                try:
+                    ex.verifier, close_vlm = _vlm_place_check(args, ROOT)
+                    ex.verify_skills = PLACE_SKILLS
+                except (Exception, SystemExit) as e:  # noqa: BLE001  (no GPU / model / camera)
+                    print(f"VLM: place check off ({e}); the run goes on without it")
             if args.backend == "sorter":
                 from hfteama.sorter.bridge import sorter_worker_factory
 
