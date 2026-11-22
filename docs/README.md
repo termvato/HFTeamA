@@ -34,9 +34,9 @@ builds that task.
 ## When an arm is plugged in
 
 Run it yourself without hardware: `python -m hfteama.demo --backend fake --plugged rakesh_follower`,
-open http://127.0.0.1:8050, press Go, then "Plug in next arm" under "Arm controls".
+open the dashboard at http://127.0.0.1:8050, press Go, then "Plug in next arm".
 
 1. Discovery (`src/hfteama/discovery.py`) sees a known arm's USB serial and starts its worker.
 2. The worker checks the arm's state and limits, moves slowly to home, and reports ready.
 3. The executor keeps running tasks where they are and re-plans the rest.
-4. The screen shows the new finish time and what now limits it (arm count, step order, or a shared resource).
+4. The dashboard shows the new finish time and what now limits it (arm count, step order, or a shared resource).

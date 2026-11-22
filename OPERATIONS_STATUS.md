@@ -12,7 +12,8 @@ Update it when you start, finish or decide something. Notes for each other go un
 
 1. **Architecture locked** (table below), including the step timeout.
 2. **Core loop on fake arms: done.** Planner (greedy, HEFT, CP-SAT), executor with live re-split,
-   live screen. Run: `python -m hfteama.view --fake-arms 1`, open http://127.0.0.1:8050.
+   live screen. Run: `python -m hfteama.demo --backend fake --plugged rakesh_follower`, open
+   http://127.0.0.1:8050 (one dashboard since 22 Nov: Orchestra; the Dash screen is gone).
 3. **VLM on top of the loop: done** (Aravind): object detection by Qwen pointing, decomposer
    (camera + Go -> categories -> steps), step check (`Executor(verifier=...)`, place steps only),
    re-scan (`Executor.update_graph`). Reachability fills `allowed_arms` (SO-101 reach). Real Qwen
@@ -79,7 +80,7 @@ Update it when you start, finish or decide something. Notes for each other go un
 | #14 | Mock worker | done: fake arm with failure injection (`arms/fake.py`) |
 | #15 | Scaling benchmark | done (Vato): `scripts/scaling_benchmark.py`, sort12 and assemble3 on 1-8 arms: planned (HEFT), lower bound and binding term, ideal 1/N, measured on fake arms (1-4); CSV + interactive chart under `runs/scaling/` |
 | #16 | Plan validator | done (`scheduler/check.py`), run after every re-plan |
-| #17 | Plan vs actual view | done: live screen `python -m hfteama.view` |
+| #17 | Plan vs actual view | done: on the dashboard (Orchestra), `python -m hfteama.demo` |
 | #18 | Re-split policy questions | open |
 | new | VLM decomposer, step check, re-scan | done; step check wired as `Executor(verifier=...)`. Real run on the RTX 4060 (Qwen3-VL-4B, 4-bit, synthetic table image, `scripts/vlm_smoke.py`): sorting by colour right on the first try, 12 s (once at Go); step check correct, 2.8 s per call; peak VRAM 3.1 GB. Not yet on a real camera photo |
 | new | VLM pipeline into the live screen | done on fake data (Aravind, 22 Nov): `hfteama.perception.live` (`plan_from_camera`, `verifier`, `rescan_hook`), demo `--rescan` / `--rescan-every`. Tested on rendered tag frames; not yet on the real C920 |

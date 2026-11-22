@@ -13,7 +13,7 @@ Hackathon project (48 h, weekend of 21-22 Nov 2026). Umbrella issue: #1.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"              # + sched (OR-Tools), view (Dash/Plotly), sim (MuJoCo) as needed
+pip install -e ".[dev]"              # + sched (OR-Tools), view (the dashboard: FastAPI), sim (MuJoCo) as needed
 pytest                               # all tests (fast, no hardware)
 pytest tests/test_interfaces.py -k bound   # one test
 ruff check . && ruff format --check .      # CI runs `ruff check .` and `pytest` on every push
@@ -53,7 +53,8 @@ tasks/<name>/*.json --> taskgraph (load, validate) --> scheduler (plan + lower b
 | `src/hfteama/scheduler/` | `Plan`, `lower_bound` (done); HEFT, CP-SAT, checker (todo) | Ops (#6-#9, #12, #16) |
 | `src/hfteama/executor/` | dispatch, resource locks, re-split (stub) | Ops (#10, #11) |
 | `src/hfteama/events.py` | append-only JSONL event log | Ops (#5) |
-| `src/hfteama/view/` | live Gantt, finish time, bottleneck (stub) | Ops (#17) |
+| `src/hfteama/orchestra/` | the dashboard: API + screen (robots, Gantt, map, controls) | Ops (#17) |
+| `src/hfteama/view/state.py` | event log -> screen numbers (finish, limit, plan vs actual) | Ops (#17) |
 | `tasks/` | one folder per task (`sort/sort12.json`, `assemble/assemble3.json`) | whoever adds the task |
 | `research/` | background report and sourced notes (read before choosing an approach) | - |
 

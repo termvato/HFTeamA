@@ -14,7 +14,9 @@ Orchestra is a browser dashboard for the plug-and-produce stack. It shows, live:
 
 It reads the orchestrator; it does not replace it. The executor, scheduler, discovery and Action's
 arm workers stay as they are. Orchestra adds a small API inside the demo process and a front end.
-The current Dash screen (`hfteama.view`) keeps working on port 8050 until Orchestra covers the demo.
+**Since 22 Nov Orchestra is the only screen**, on port 8050: the Dash screen (`hfteama.view.app`)
+is gone, and its Gantt, table map and what-if row moved here (section 7). `view/state.py` stays:
+it turns the event log into the numbers this screen shows.
 
 ---
 
@@ -71,7 +73,7 @@ Two facts shape the design:
 
 1. **Everything runs in one process** on the demo laptop (decided 17:55, Blockers #3 in
    `OPERATIONS_STATUS.md`). The executor, watcher and workers are Python objects in
-   `python -m hfteama.demo`. So the API lives in that process, next to Dash, and calls them directly.
+   `python -m hfteama.demo`. So the API lives in that process and calls them directly.
    No separate service, no IPC.
 2. **The event log is the record; the snapshot is the present.** The log says what happened (and
    lets a browser that reconnects catch up). The executor snapshot and worker states say what is true
@@ -103,8 +105,7 @@ flowchart LR
         R["Rig<br/>go / plug / remove"]
         WK["arm workers<br/>fake / sim / real"]
         LOG[("events.jsonl")]
-        DASH["Dash screen :8050<br/>(existing)"]
-        subgraph O["hfteama.orchestra  :8060"]
+        subgraph O["hfteama.orchestra  :8050"]
             API["REST + SSE<br/>FastAPI"]
             HUB["StateHub<br/>log tail, snapshot, nodes"]
             TEL["TelemetryHub<br/>joints, FK, IK monitor"]
@@ -115,7 +116,6 @@ flowchart LR
 
     EX --> LOG
     LOG --> HUB
-    LOG --> DASH
     EX -- snapshot --> HUB
     W -- joined / present --> HUB
     WK -- read_joints --> TEL
@@ -136,11 +136,11 @@ flowchart LR
 
 | Topic | Decision | Why |
 |---|---|---|
-| Where the API runs | In the demo process, started by `python -m hfteama.demo ... --orchestra` on its own thread (uvicorn), port 8060 | The executor and watcher are in-process objects; one process on the laptop is already decided |
+| Where the API runs | In the demo process: `python -m hfteama.demo` always serves it (uvicorn), port 8050; `python -m hfteama.runner --view` on a thread | The executor and watcher are in-process objects; one process on the laptop is already decided |
 | Server framework | FastAPI + uvicorn, new extra `orchestra` in `pyproject.toml` | Typed request/response models, SSE through a streaming response, `TestClient` for tests |
 | Push | One SSE stream, `GET /api/stream`, typed events (section 5) | One connection per browser; reconnects resume from the last event-log line |
 | Commands | `POST` per command, JSON body, JSON answer `{accepted, message, command_id}` | Each command is checked, confirmed in the UI and written to an audit file |
-| Source of truth for the run | The event log, through the existing `view/state.build()` | The Dash screen and Orchestra show the same numbers; no second interpretation of the log |
+| Source of truth for the run | The event log, through the existing `view/state.build()` | One interpretation of the log, shared by every view and the tests |
 | Source of truth for "now" | `Executor.snapshot()`, worker `state()` and `heartbeat()`, `ArmWatcher.joined()` | The log does not hold who is busy or how fresh a heartbeat is |
 | 3D | Server-side MuJoCo FK per link, browser places STL meshes | One kinematic model for IK, sim and display |
 | Front end | Plain HTML, CSS and JavaScript in `src/hfteama/orchestra/static/`: no build step, no npm, no CDN (revised 21 Nov; React + Vite was the first plan) | The demo laptop has no Node.js, and the stage may have no internet. FastAPI serves the folder at `/`; it also opens straight from disk in demo mode |
@@ -236,7 +236,7 @@ Per backend:
 
 ## 5. API contract
 
-Base URL `http://127.0.0.1:8060`. All JSON. Times are run seconds (since Go) unless named `wall`.
+Base URL `http://127.0.0.1:8050`. All JSON. Times are run seconds (since Go) unless named `wall`.
 
 ### 5.1 Read
 
@@ -282,7 +282,12 @@ Base URL `http://127.0.0.1:8060`. All JSON. Times are run seconds (since Go) unl
 
 Also used by the UI when present (all optional): per node `color`, `task_elapsed`, `task_estimate`,
 `waiting_for` (e.g. `"bowl"`), `unblocked`, `left_at`; `run.paused`. `replanning` comes from
-`view.state.Screen.replanning` and `replan_text()`, so both screens word it the same way.
+`view.state.Screen.replanning` and `replan_text()`.
+
+Added 22 Nov for the one dashboard: `run.unblocked_note` ("Arm X made 3 more steps possible"),
+`schedule` (`now`, `finish`, `plan` and `actual` bars `{task, arm, start, end, state}`, state `ok`,
+`running`, `failed`, `timeout`) and `scene` (the table map: `arms` with `xy`, `r_min`, `r_max`;
+`bins`; `objects` with `xy` and their `tasks`), or `null` without a `--table`.
 
 ### 5.2 Stream: `GET /api/stream` (SSE)
 
@@ -386,12 +391,17 @@ A 30 / 70 split pane (decided 21 Nov). The divider can be dragged between 20 % a
   graphs of the six joints over the last 20 s** (one small graph per joint, value beside it, amber
   within 5° of a limit), steps done, heartbeat, and its controls (Remove, or under ⋯: remove now,
   simulate unplug, fail next pick).
-- Minimal by rule (revised 21 Nov): object chips, the what-if row (now a tooltip on the
-  countdown), TCP coordinates, per-step history and the activity box border were removed. Go shows
+- Minimal by rule (revised 21 Nov): object chips, TCP coordinates, per-step history and the activity box border were removed. Go shows
   only before the run and Pause only during it. The activity list shows the last five lines. An arm that is lost or removed keeps its card, dimmed, at the end, with the
   reason and "Plug in again". A dashed slot invites the next arm while any is unplugged.
-- The 3D table view, the Gantt and the task table (sections 4.2 to 4.4) are not on this screen
-  yet; they come with M3. The Dash screen on port 8050 still has the Gantt.
+- One dashboard (22 Nov): under the task bar, the what-if row (the whole batch with 1..N arms, the
+  current count outlined), then **Plan vs actual** (a Gantt, one lane per arm: the plan faint,
+  done green, running in the accent, failed red; a line for now and a dashed one for the predicted
+  finish) and **Who takes what** (the table from above: each arm's reach rings, the bins, every
+  object in the colour of the arm it is planned for, faded once sorted; shown with `--table`).
+  Both are plain SVG in `static/js/schedule.js`, drawn at the pane's width, in both themes; demo
+  mode draws them too. The 3D table view and the task table (sections 4.3, 4.4) are still to come
+  with M3.
 
 Rules:
 
@@ -473,8 +483,8 @@ tests/
 | Python deps (extra `orchestra`) | `fastapi`, `uvicorn` |
 | Front end | Plain HTML, CSS and JavaScript, classic scripts (so it also runs from `file://`); system fonts; no chart library. For 3D (M3), `three` is vendored into `static/vendor/`, not loaded from a CDN |
 | Demo mode | Open `static/index.html` straight from disk, or add `?demo=1`. Used automatically when `/api/config` does not answer. Labelled "demo data" on screen; it simulates `hacklab6` on the hacklab table, it is not the executor. `?autoplay=once` (or `loop`) plays the demo script: Go, second arm joins, third joins, one grasp fails. `?speed=2` speeds up the clock |
-| Live mode | Served by the API: `?api=http://host:8060` to point elsewhere, `?token=...` for the operator token |
-| Run | `python -m hfteama.demo --backend fake --plugged rakesh_follower --orchestra`, then open http://127.0.0.1:8060 (Dash stays on 8050) |
+| Live mode | Served by the API: `?api=http://host:8050` to point elsewhere, `?token=...` for the operator token |
+| Run | `python -m hfteama.demo --backend fake --plugged rakesh_follower`, then open http://127.0.0.1:8050 |
 
 Performance targets: event log read incrementally (the Dash screen re-reads the whole file every
 0.5 s; fine for one run, not for long ones); state event at most 4 per second; joints coalesced;
@@ -527,10 +537,10 @@ Ordered so the demo gets the most from the first hours. Each ends with something
 | 3 | Two people press conflicting buttons | Commands are serialised by the executor's inbox; the feed shows who did what; one operator token for the demo |
 | 4 | IK monitor and the driver disagree (the driver seeds from the current joints) | Display the monitor as a check, not as the driver's own result; if it matters, ask Action for an `on_ik(target, result)` callback in the driver |
 | 5 | Node.js on the Windows demo laptop | Resolved: the front end has no build step (section 9) |
-| 6 | Port 8060 or the browser blocked on the stage network | Everything is on localhost by default; the projector shows the laptop's own browser |
+| 6 | Port 8050 or the browser blocked on the stage network | Everything is on localhost by default; the projector shows the laptop's own browser |
 | 7 | Third arm id and base pose not known yet (Blockers #6) | The node strip shows a placeholder slot from `teleop_pairs.json`; 3D omits arms without a base pose |
 | 8 | Who owns Orchestra | Proposed: Operations (Aravind), with Vato reviewing G1 to G5 in the executor and demo runner. To confirm on #21 |
-| 9 | Should Orchestra replace the Dash screen for the demo | Decide after M1 is shown; until then both run |
+| 9 | Should Orchestra replace the Dash screen for the demo | Decided 22 Nov: yes. One dashboard on :8050; the Dash screen was removed |
 
 ---
 

@@ -1,8 +1,8 @@
 """StateHub: everything the Orchestra screen shows, from the running demo process.
 
 Two sources (docs/ORCHESTRA_DASHBOARD.md, section 1):
-- the event log, the record of what happened, read incrementally and turned into the same
-  `view.state.Screen` the Dash screen uses, so both screens show the same numbers;
+- the event log, the record of what happened, read incrementally and turned into a
+  `view.state.Screen` (countdown, limit, what-if, plan against actual, table map);
 - the present: `Executor.snapshot()`, each worker's `state()` and `heartbeat()`, and which USB
   serials the `ArmWatcher` saw in its last scan.
 
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from hfteama.events import Event, EventLog
-from hfteama.view.state import build, replan_text
+from hfteama.view.state import Bar, Screen, build, replan_text
 
 # Arm colours for the screen, by the word the table config uses for the arm ("black arm, ...").
 COLOURS = {
@@ -80,6 +80,24 @@ def steps_info(graph: Any) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def schedule(sc: Screen) -> dict[str, Any]:
+    """Plan against actual for the Gantt: the current plan's bars, every finished step, and the
+    steps running now (their end is 'now'). Run seconds, rounded so an idle state stays equal."""
+
+    def bar(b: Bar) -> dict[str, Any]:
+        out = {"task": b.task, "arm": b.arm, "start": round(b.start, 2), "end": round(b.end, 2)}
+        if b.kind != "plan":
+            out["state"] = "running" if b.kind == "running" else (b.outcome or "ok")
+        return out
+
+    return {
+        "now": round(sc.now, 2),
+        "finish": sc.finish if sc.phase in ("running", "finished") else None,
+        "plan": [bar(b) for b in sc.plan],
+        "actual": [bar(b) for b in sc.actual],
+    }
 
 
 class StateHub:
@@ -338,7 +356,10 @@ class StateHub:
                 "blocked": sc.blocked,
                 "plan_version": snap["plan_version"],
                 "whatif": {str(k): v for k, v in sc.whatif.items()},
+                "unblocked_note": sc.unblocked_note,
             },
+            "schedule": schedule(sc),
+            "scene": sc.scene or None,
             "nodes": {
                 "known": len(self.arm_ids),
                 "connected": sum(1 for n in items if n["connected"]),

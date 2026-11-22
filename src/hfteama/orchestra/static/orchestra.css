@@ -151,6 +151,59 @@ button { font: inherit; color: inherit; }
 .limit { color: var(--ink-2); font-size: 13.5px; }
 .limit:empty { display: none; }
 
+/* what-if: the whole batch with 1..N arms, the current count outlined */
+.whatif { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+.whatif .wi-h { align-self: center; color: var(--muted); font-size: 12.5px; margin-right: 2px; }
+.wi { border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; display: grid; min-width: 72px; background: var(--card); }
+.wi b { font: 600 15px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.wi span { color: var(--muted); font-size: 11.5px; }
+.wi.cur { border-color: var(--active); box-shadow: inset 0 0 0 1px var(--active); }
+
+/* ------------------------------------------------------------------ right: plan and table */
+
+.schedule { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.schedule:has(> .map-panel[hidden]) { grid-template-columns: minmax(0, 1fr); }
+/* with the camera: the plan on its own row, the map and the camera side by side under it */
+.schedule:has(> .cam-panel:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.schedule:has(> .cam-panel:not([hidden])) > .gantt-panel { grid-column: 1 / -1; }
+.cam { width: 100%; border-radius: 8px; overflow: hidden; background: var(--sunk); aspect-ratio: 16 / 9; }
+.cam img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.cam-panel.stale .cam img { opacity: .45; }
+@media (max-width: 1180px) { .schedule, .schedule:has(> .cam-panel:not([hidden])) { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 10px; min-width: 0; }
+.p-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.p-head h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.legend { color: var(--muted); font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-left: 8px; }
+.lg-plan { background: color-mix(in srgb, var(--active) 18%, transparent); border: 1px solid color-mix(in srgb, var(--active) 40%, transparent); }
+.lg-ok { background: var(--ok); }
+.lg-running { background: var(--active); }
+.lg-failed { background: var(--bad); }
+.gantt, .map { width: 100%; overflow: hidden; }
+.gantt svg, .map svg { display: block; }
+.gantt svg text, .map svg text { font-family: var(--sans); }
+.g-alt { fill: var(--sunk); opacity: .55; }
+.g-grid { stroke: var(--line); stroke-width: 1; }
+.g-tick { fill: var(--faint); font: 11px var(--mono) !important; }
+.g-lane { fill: var(--ink-2); font: 600 12px var(--mono) !important; }
+.g-lane.gone { fill: var(--faint); }
+.g-plan { fill: color-mix(in srgb, var(--active) 16%, transparent); stroke: color-mix(in srgb, var(--active) 35%, transparent); }
+.g-plan-t { fill: var(--muted); font-size: 10.5px; }
+.g-act-t { fill: #fff; font-size: 10.5px; font-weight: 600; pointer-events: none; }
+.g-ok { fill: var(--ok); }
+.g-running { fill: var(--active); }
+.g-failed, .g-arm_down { fill: var(--bad); }
+.g-timeout { fill: var(--warn); }
+.g-now { stroke: var(--ink); stroke-width: 1.5; }
+.g-finish { stroke: var(--active); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.map svg { background: var(--sunk); border-radius: 8px; }
+.m-bin { fill: color-mix(in srgb, var(--warn) 14%, transparent); stroke: var(--warn); stroke-width: 1.5; }
+.m-bin-t { fill: var(--warn); font-size: 11px; font-weight: 600; }
+.m-arm { fill: var(--ink-2); font: 600 11px var(--mono) !important; }
+.m-arm.gone { fill: var(--faint); }
+.m-obj { stroke: var(--card); stroke-width: 1.5; }
+.m-obj-t { fill: var(--ink-2); font-size: 10.5px; }
+
 /* ------------------------------------------------------------------ right: robot cards */
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; align-items: start; }

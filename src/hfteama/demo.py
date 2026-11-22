@@ -1,10 +1,11 @@
-"""The demo runner: executor + plug-in detection + live screen, on fake, simulated or real arms.
+"""The demo runner: executor + plug-in detection + the dashboard, on fake, simulated or real arms.
 
     python -m hfteama.demo --backend fake --plugged rakesh_follower     # no hardware
     python -m hfteama.demo --backend real                               # arms join when plugged in
     python -m hfteama.demo --backend fake --planner pkg.module:function # batch from a planner hook
 
-Then open http://127.0.0.1:8050 and press Go.
+Then open the dashboard, http://127.0.0.1:8050, and press Go. It is the one screen (Orchestra,
+`hfteama.orchestra`): robots, the run, plan against actual, the table map and the controls.
 
 - Which arms exist: the followers in Hardware's `configs/teleop_pairs.json` (USB serial -> arm id).
 - Arms join and leave through `hfteama.discovery.ArmWatcher`: by USB serial (`--watch`, default for
@@ -42,6 +43,8 @@ from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
 
 BACKENDS = ("fake", "sim", "real", "sorter")
+DEFAULT_POSES = "tasks/sort/poses.json"
+SORTER_POSES = "tasks/sorter_boxes/poses_real.json"
 
 
 def hook(spec: str) -> Callable[..., Any]:
@@ -277,7 +280,12 @@ def main(argv: list[str] | None = None) -> None:
     )
     ap.add_argument("--pairs", default="configs/teleop_pairs.json")
     ap.add_argument("--arms-config", default="configs/real_arms.json")
-    ap.add_argument("--poses", default="tasks/sort/poses.json")
+    ap.add_argument(
+        "--poses",
+        default=None,
+        help=f"named poses (default {DEFAULT_POSES}; --backend sorter: {SORTER_POSES}, from "
+        "`hfteama sort export`: each arm's carry pose and drop point)",
+    )
     ap.add_argument("--plugged", default="", help="arm ids to plug in at start (comma separated)")
     ap.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None)
     ap.add_argument("--method", default="auto", choices=["auto", "greedy", "heft", "cpsat"])
@@ -292,22 +300,30 @@ def main(argv: list[str] | None = None) -> None:
         help="metres two arms keep apart where both can reach (0 = off; needs --table)",
     )
     ap.add_argument("--log", default=None)
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8050)
+    # the dashboard (Orchestra) is always served; the --orchestra-* spellings are the old ones
+    ap.add_argument("--host", "--orchestra-host", dest="host", default="127.0.0.1")
+    ap.add_argument("--port", "--orchestra-port", dest="port", type=int, default=8050)
     ap.add_argument(
-        "--orchestra", action="store_true", help="also serve the Orchestra dashboard (port 8060)"
+        "--token",
+        "--orchestra-token",
+        dest="token",
+        default=None,
+        help="operator token, needed for commands when --host is not 127.0.0.1",
     )
-    ap.add_argument("--orchestra-host", default="127.0.0.1")
-    ap.add_argument("--orchestra-port", type=int, default=8060)
-    ap.add_argument("--orchestra-token", default=None, help="needed off 127.0.0.1 for commands")
+    ap.add_argument("--orchestra", action="store_true", help=argparse.SUPPRESS)  # always on now
     args = ap.parse_args(argv)
-
-    from hfteama.view.app import create_app
 
     clock = Clock(args.scale if args.backend == "fake" else 1.0)
     known = followers_from_pairs(args.pairs)
     if args.backend == "sorter":  # the camera hooks then see the boxes as the sorter grasps them
         os.environ.setdefault("HFTEAMA_DETECTOR", "sorter")
+        # real picks and places take 10-16 s: a lower estimate lets the watchdog (3 x estimate)
+        # cut every step off mid-motion (runs 22 Nov 07:38 and 07:45: all picks timed out)
+        os.environ.setdefault("HFTEAMA_MIN_STEP", "15")
+        os.environ.setdefault("HFTEAMA_NEAREST", "6")  # each box to its nearest arm
+    if args.poses is None:
+        sorter = args.backend == "sorter" and Path(SORTER_POSES).exists()
+        args.poses = SORTER_POSES if sorter else DEFAULT_POSES
     graph = hook(args.planner)() if args.planner else load(args.task)
     verifier = hook(args.verifier)() if args.verifier else None
     scene = None
@@ -348,25 +364,23 @@ def main(argv: list[str] | None = None) -> None:
         watcher.start()
     print(f"arms: {', '.join(known.values())} | backend: {args.backend} | USB watch: {watch}")
     print(f"event log: {path}")
-    if args.orchestra:
-        from hfteama.orchestra import StateHub
-        from hfteama.orchestra.server import start
+    from hfteama.orchestra import StateHub
+    from hfteama.orchestra.server import start
 
-        hub = StateHub(
-            log,
-            ex,
-            watcher,
-            rig,
-            clock,
-            args.backend,
-            args.pairs,
-            table_path=args.table,
-            watching=watch,
-            task_name=Path(args.task).stem if not args.planner else "",
-        )
-        start(hub, rig, args.orchestra_host, args.orchestra_port, args.orchestra_token)
-        print(f"Orchestra: http://{args.orchestra_host}:{args.orchestra_port}/")
-    create_app(log, controls=rig, clock=clock).run(host=args.host, port=args.port, debug=False)
+    hub = StateHub(
+        log,
+        ex,
+        watcher,
+        rig,
+        clock,
+        args.backend,
+        args.pairs,
+        table_path=args.table,
+        watching=watch,
+        task_name=Path(args.task).stem if not args.planner else "",
+    )
+    print(f"dashboard: http://{args.host}:{args.port}/  (press Go there)")
+    start(hub, rig, args.host, args.port, args.token, block=True)
 
 
 if __name__ == "__main__":

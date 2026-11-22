@@ -12,7 +12,10 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 sched = ["ortools>=9.10"]
-view = ["dash>=2.17", "plotly>=5.22"]
+# The dashboard (hfteama.orchestra, served by python -m hfteama.demo / runner --view).
+view = ["fastapi>=0.115", "uvicorn>=0.30"]
+# scripts/scaling_benchmark.py writes its chart with Plotly.
+bench = ["plotly>=5.22"]
 sim = ["mujoco>=4.0.1"]
 # Local Qwen VLM from Hugging Face (decomposer, step check). Install torch for your GPU first.
 vlm = ["transformers>=4.57", "accelerate>=1.0", "torch>=2.4", "torchvision", "bitsandbytes>=0.45", "pillow>=10.0"]
@@ -21,19 +24,17 @@ camera = ["opencv-python>=4.7,<5", "imageio-ffmpeg>=0.5"]
 # Plug-in detection (hfteama.discovery): USB serial numbers, on Linux, macOS and Windows.
 arms = ["pyserial>=3.5"]
 # Real arms through the sorter (docs/hardware/sorter.md): overhead camera, Feetech followers via
-# LeRobot (the version the rig runs), planner, live screen, Rerun viewer. scripts/setup_sorter.sh
+# LeRobot (the version the rig runs), planner, dashboard, Rerun viewer. scripts/setup_sorter.sh
 # (OpenCV comes with LeRobot as opencv-python-headless: with ArUco; a second cv2 would clash.)
 sorter = [
     "pyserial>=3.5",
     "lerobot[feetech]==0.7.0",
     "ortools>=9.10",
-    "dash>=2.17",
-    "plotly>=5.22",
-    "rerun-sdk>=0.33",
-    "fastapi>=0.115",  # the Orchestra dashboard (runner --orchestra)
+    "fastapi>=0.115",
     "uvicorn>=0.30",
+    "rerun-sdk>=0.33",
 ]
-# Orchestra dashboard API (python -m hfteama.demo ... --orchestra).
+# Old name of the view extra, kept so existing install commands work.
 orchestra = ["fastapi>=0.115", "uvicorn>=0.30"]
 # Real arms: LeRobot installed from source (see docs/plan.md), not pinned here.
 dev = [

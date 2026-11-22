@@ -2,7 +2,7 @@
  * joined it. Renders one screen model (from js/live.js or js/demo.js); never talks to arms itself.
  *
  * URL options:  ?demo=1  demo data even if the API answers   ?autoplay=once|loop  scripted story
- *               ?speed=2 demo clock speed-up                  ?api=http://host:8060  API base URL
+ *               ?speed=2 demo clock speed-up                  ?api=http://host:8050  API base URL
  *               ?token=... operator token for commands (spec section 5.3)
  */
 (function () {
@@ -155,12 +155,6 @@
       setText($('big'), clock(r.big));
       setText($('big-label'), n ? `estimate · ${plural(n, 'arm')}` : 'plug in an arm');
     }
-    // the what-if row lives in a tooltip: one hover away, not on screen
-    const wi = Object.entries(r.whatif || {}).map(([k, v]) => {
-      const f = typeof v === 'object' && v ? v : { finish: v, blocked: 0 };
-      return `${plural(Number(k), 'arm')}: ${f.blocked ? `${f.blocked} out of reach` : clock(f.finish)}`;
-    });
-    $('big').parentElement.title = wi.length ? `Whole batch, what if\n${wi.join('\n')}` : '';
 
     const objs = m.task.objects || [];
     const pct = m.task.total ? (100 * m.task.done) / m.task.total : 0;
@@ -190,7 +184,8 @@
       setText($('replan-head'), m.replanning.head);
       setText($('replan-detail'), m.replanning.detail || '');
     }
-    setText($('limit'), r.phase === 'finished' ? '' : r.limit || '');
+    const limit = [r.limit, r.unblocked_note].filter(Boolean).join(' ');
+    setText($('limit'), r.phase === 'finished' ? '' : limit);
     $('real-banner').hidden = m.backend !== 'real';
   }
 
@@ -488,6 +483,7 @@
     renderConn(m);
     renderLeft(m);
     renderTask(m);
+    O.renderSchedule(m);
     renderCards(m);
     renderFeed(m);
   }
@@ -549,7 +545,7 @@
     });
   }
 
-  const realArms = () => M && M.backend === 'real';
+  const realArms = () => M && (M.backend === 'real' || M.backend === 'sorter');
 
   async function plugNext(armId) {
     const id = typeof armId === 'string' ? armId : (M && (M.nodes.find((n) => !n.connected && !n.joined) || {}).arm_id);
@@ -581,10 +577,12 @@
     $('btn-stop').addEventListener('click', async () => {
       const yes = await confirmDialog(
         'Stop all arms?',
-        "Every arm finishes its step and places a part it holds, then parks and turns torque off. This is a software stop. In an emergency, switch off the followers' 12 V supply.",
+        "Every arm stops its current step now, goes back to its home pose, then turns torque off. This is a software stop. In an emergency, switch off the followers' 12 V supply.",
         realArms(),
       );
-      if (yes) run('stop_all', { abort: false });
+      // abort: cancel the running step (a real step can take 15 s; waiting for it to end
+      // looked like Stop all doing nothing)
+      if (yes) run('stop_all', { abort: true });
     });
     $('btn-auto').addEventListener('click', () => startDemo('once'));
     $('btn-reset').addEventListener('click', () => startDemo(''));
@@ -609,6 +607,7 @@
       const move = (ev) => set((ev.clientX / app.clientWidth) * 100);
       const up = () => {
         sp.classList.remove('drag');
+        if (M) O.renderSchedule(M);
         sp.removeEventListener('pointermove', move);
         sp.removeEventListener('pointerup', up);
       };
@@ -659,6 +658,35 @@
     source.start(render);
   }
 
+  // ------------------------------------------------------------------ live camera
+  // The overhead camera next to the table map: an MJPEG stream from the same feed the scans use.
+  // Shown once the server has a camera; dimmed when frames stop, reconnected when they return.
+  function wireCamera(base) {
+    const panel = $('cam-panel');
+    const img = $('cam-img');
+    const state = $('cam-state');
+    let streaming = false;
+    const connect = () => { img.src = `${base}/api/camera/stream?t=${Date.now()}`; streaming = true; };
+    img.addEventListener('error', () => { streaming = false; });
+    async function poll() {
+      try {
+        const r = await fetch(`${base}/api/camera`, { cache: 'no-store' });
+        const c = r.ok ? await r.json() : { available: false };
+        panel.hidden = !c.available;
+        if (c.available) {
+          const stale = c.age_s === null || c.age_s > 3;
+          panel.classList.toggle('stale', stale);
+          setText(state, stale ? (c.error || 'waiting for frames…') : `${c.device}, live`);
+          if (!streaming || (stale && c.age_s !== null)) connect();
+        }
+      } catch (e) {
+        panel.classList.add('stale');
+      }
+    }
+    poll();
+    setInterval(poll, 2000);
+  }
+
   async function boot() {
     wireSplitter();
     wireTheme();
@@ -669,9 +697,10 @@
       if (config) {
         source = O.LiveSource(config, base);
         source.start(render);
+        wireCamera(base);
         return;
       }
-      O.demoReason = 'Start the API with python -m hfteama.demo --orchestra.';
+      O.demoReason = 'Start a run with python -m hfteama.demo and open the address it prints.';
     } else if (base === null) {
       O.demoReason = 'Serve the page from the Orchestra API for live data.';
     }
@@ -679,5 +708,10 @@
   }
 
   setInterval(() => { if (M && M.source === 'live') render(M); }, 1000); // stale check ticks on
+  let resizeT = null;
+  window.addEventListener('resize', () => { // the Gantt and map are drawn at the pane's width
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { if (M) O.renderSchedule(M); }, 120);
+  });
   boot();
 })();

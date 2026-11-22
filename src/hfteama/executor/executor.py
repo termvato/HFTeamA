@@ -349,7 +349,21 @@ class Executor:
         worker = self._workers.pop(arm)
         self._active.discard(arm)
         self._parking.discard(arm)
-        threading.Thread(target=worker.park, name=f"park-{arm}", daemon=True).start()
+
+        def park() -> None:
+            # a park that could not finish (bus error, step that would not stop) was silent
+            # before: the screen and the log now say whether the arm reached home, torque off
+            try:
+                worker.park()
+                error = getattr(worker, "park_error", None)
+            except Exception as exc:  # noqa: BLE001  (park never raises by contract; belt and braces)
+                error = repr(exc)
+            with self._lock:  # the loop writes the log under this lock: one writer at a time
+                self._emit(
+                    Event("arm_parked", arm=arm, data={"ok": not error, "error": error or ""})
+                )
+
+        threading.Thread(target=park, name=f"park-{arm}", daemon=True).start()
         self._emit(Event("arm_removed", arm=arm))
         self._replan("arm_removed", force=True, extra={"arm": arm})
 

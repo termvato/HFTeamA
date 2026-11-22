@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orchestra</title>
-  <meta name="description" content="Operator dashboard for the HFTeamA plug-and-produce orchestrator: robots, status, task and per-arm detail.">
+  <meta name="description" content="Operator dashboard for the HFTeamA plug-and-produce orchestrator: robots, status, task, plan against actual, the table, and per-arm detail.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5d73'/%3E%3Cpath d='M8 22c3-8 5-12 8-12s5 4 8 12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="orchestra.css">
 </head>
@@ -64,6 +64,25 @@
         </div>
         <div id="replan" class="replan" hidden><b id="replan-head"></b> <span id="replan-detail"></span></div>
         <p id="limit" class="limit"></p>
+        <div id="whatif" class="whatif" hidden></div>
+      </section>
+
+      <section id="schedule" class="schedule" aria-label="Plan and table" hidden>
+        <div id="gantt-panel" class="panel gantt-panel">
+          <div class="p-head">
+            <h2>Plan vs actual</h2>
+            <span class="legend" aria-hidden="true"><i class="lg-plan"></i>plan <i class="lg-ok"></i>done <i class="lg-running"></i>running <i class="lg-failed"></i>failed</span>
+          </div>
+          <div id="gantt" class="gantt"></div>
+        </div>
+        <div id="map-panel" class="panel map-panel">
+          <div class="p-head"><h2>Who takes what</h2><span class="legend">top view of the table</span></div>
+          <div id="map" class="map"></div>
+        </div>
+        <div id="cam-panel" class="panel cam-panel" hidden>
+          <div class="p-head"><h2>Camera</h2><span id="cam-state" class="legend">overhead, live</span></div>
+          <div class="cam"><img id="cam-img" alt="Live overhead camera view of the table" /></div>
+        </div>
       </section>
 
       <section id="cards" class="cards" aria-label="Robots on this task"></section>
@@ -103,6 +122,7 @@
   </script>
   <script src="js/demo.js"></script>
   <script src="js/live.js"></script>
+  <script src="js/schedule.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -207,3 +207,41 @@ def test_screen_is_served(rig) -> None:
     page = client.get("/")
     assert page.status_code == 200 and "Orchestra" in page.text
     assert client.get("/js/live.js").status_code == 200
+
+
+def test_state_carries_plan_against_actual_and_what_if(rig) -> None:
+    usb, watcher, ex, client, _ = rig
+    plug_usb(usb, watcher, "5B79014975")
+    st = client.get("/api/state").json()
+    sched = st["schedule"]
+    assert sched["plan"] and not sched["actual"] and sched["finish"] is None  # estimate only
+    assert {b["arm"] for b in sched["plan"]} == {"rakesh_follower"}
+    assert all(b["end"] >= b["start"] for b in sched["plan"])
+    assert st["run"]["whatif"]  # the whole batch with 1..N arms
+    plug_usb(usb, watcher, "5A7A015861")
+    client.post("/api/run/go")
+    assert ex.wait(timeout=10)
+    sched = client.get("/api/state").json()["schedule"]
+    assert len(sched["actual"]) == 12 and {b["state"] for b in sched["actual"]} == {"ok"}
+    assert sched["finish"] == pytest.approx(max(b["end"] for b in sched["actual"]), abs=0.5)
+
+
+def test_state_carries_the_table_map(rig) -> None:
+    from hfteama.demo import table_scene
+    from hfteama.events import Event
+
+    _, _, ex, client, _ = rig
+    assert client.get("/api/state").json()["scene"] is None  # nothing logged: no map
+    ex.log.write(Event("scene", data=table_scene(TASK, str(TABLE), list(KNOWN.values()))))
+    scene = client.get("/api/state").json()["scene"]
+    assert {a["id"] for a in scene["arms"]} == set(KNOWN.values())
+    assert scene["bins"] and len(scene["objects"]) == 6
+
+
+def test_page_has_the_one_dashboard(rig) -> None:
+    _, _, _, client, _ = rig
+    page = client.get("/").text
+    for part in ('id="gantt"', 'id="map"', 'id="whatif"', 'id="cards"', 'id="robot-list"'):
+        assert part in page, part
+    for js in ("demo", "live", "schedule", "app"):
+        assert client.get(f"/js/{js}.js").status_code == 200, js

@@ -9,7 +9,7 @@ The flow, and where a human stands between the code and the arms:
 2. REAL only: print what is about to happen and wait for the typed word `yes`. Connecting an arm
    enables its torque, so it holds whatever pose it is in: support it first.
 3. Connect each arm (`--arms`), print the estimate (predicted finish, what limits it).
-4. REAL only: wait for the typed word `go` (or the Go button with `--view` / `--orchestra`).
+4. REAL only: wait for the typed word `go` (or the dashboard's Go button with `--view`).
    Real arms: Qwen checks each place from the overhead camera (`--no-vlm` to skip it).
 5. Run. Ctrl-C does NOT kill anything: it asks every arm for a slow stop (finish the step, lower,
    torque off). A second Ctrl-C is ignored with a reminder. When the batch ends the arms are parked.
@@ -47,7 +47,7 @@ This will CONNECT the arms and then MOVE THEM.
 
 
 class _RealRig:
-    """Controls for the live screens (Dash `--view`, Orchestra `--orchestra`): Go starts the
+    """Controls for the dashboard (`--view`, served by hfteama.orchestra): Go starts the
     executor; Remove / Stop all is a slow stop per arm, and when no arm is left in the run the
     runner parks everything and exits, exactly as one Ctrl-C does."""
 
@@ -200,15 +200,13 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
     ap.add_argument("--method", default="heft", choices=("greedy", "heft", "cpsat"))
     ap.add_argument("--log", default=None, help="event log (default runs/<time>/events.jsonl)")
     ap.add_argument(
-        "--view", action="store_true", help="serve the live screen; its Go button starts"
-    )
-    ap.add_argument("--port", type=int, default=8050)
-    ap.add_argument(
-        "--orchestra",
+        "--view",
+        "--orchestra",  # the old name: there is one dashboard now
+        dest="view",
         action="store_true",
-        help="serve the Orchestra dashboard: its Go starts the run, Stop all is a slow stop",
+        help="serve the dashboard: its Go starts the run, Stop all is a slow stop",
     )
-    ap.add_argument("--orchestra-port", type=int, default=8060)
+    ap.add_argument("--port", "--orchestra-port", dest="port", type=int, default=8050)
     ap.add_argument(
         "--no-rescan",
         action="store_true",
@@ -330,15 +328,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         print(f"estimate: finish in {plan.makespan:.0f} s; limit: {plan.binding or 'n/a'}")
         rig = _RealRig(ex, watcher, made, arm_ids or list(known.values()), stop_requested.set)
         if args.view:
-            _serve(log, rig, clock, args.port)
-            print(f"live screen: http://127.0.0.1:{args.port}  (press Go there to start)")
-        if args.orchestra:
-            _serve_orchestra(log, ex, watcher, rig, clock, args)
+            _serve(log, ex, watcher, rig, clock, args)
             print(
-                f"Orchestra: http://127.0.0.1:{args.orchestra_port}  (Go there starts the run; "
+                f"dashboard: http://127.0.0.1:{args.port}  (Go there starts the run; "
                 "Stop all = slow stop, then park)"
             )
-        screen = args.view or args.orchestra  # a screen's Go button starts the run
+        screen = args.view  # the dashboard's Go button starts the run
         if not screen and real and ask("Type 'go' to start the batch: ").strip() != "go":
             print("not started: parking the arms.")
             _park_all(ex, watcher, made)
@@ -393,7 +388,7 @@ def _park_all(
     )
 
 
-def _serve_orchestra(log, ex, watcher, rig, clock, args) -> None:
+def _serve(log, ex, watcher, rig, clock, args) -> None:
     from hfteama.orchestra import StateHub
     from hfteama.orchestra.server import start
 
@@ -408,16 +403,7 @@ def _serve_orchestra(log, ex, watcher, rig, clock, args) -> None:
         watching=args.watch,
         task_name=Path(args.task).stem,
     )
-    start(hub, rig, "127.0.0.1", args.orchestra_port)
-
-
-def _serve(log: EventLog, rig: _RealRig, clock: Clock, port: int) -> None:
-    from hfteama.view.app import create_app
-
-    app = create_app(log, controls=rig, clock=clock)
-    threading.Thread(
-        target=lambda: app.run(host="127.0.0.1", port=port, debug=False), daemon=True
-    ).start()
+    start(hub, rig, "127.0.0.1", args.port)
 
 
 if __name__ == "__main__":

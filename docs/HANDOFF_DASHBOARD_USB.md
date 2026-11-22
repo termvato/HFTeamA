@@ -6,13 +6,13 @@ connects to the stack").
 
 ## Read this first
 
-There are two screens, both live from the same run: the Dash screen (http://127.0.0.1:8050) and
-the Orchestra page (http://127.0.0.1:8060, with `--orchestra`).
+There is one screen, the dashboard (Orchestra), at http://127.0.0.1:8050. Every `python -m
+hfteama.demo` run serves it; no flag needed. (Until 22 Nov there were two: a Dash screen on :8050
+and Orchestra on :8060 with `--orchestra`. The flag is still accepted and does nothing.)
 
 | You want | Works today? | Go to |
 |---|---|---|
-| Plug a follower in by USB and see it **join** the run live; pull the cable and see it **leave** (the arm does not move) | **Yes**, on both screens | Steps 1 to 3 |
-| The same on the **Orchestra** page (30 / 70 layout, robot cards) | **Yes**, add `--orchestra` | Steps 3 and 6 |
+| Plug a follower in by USB and see it **join** the run live; pull the cable and see it **leave** (the arm does not move) | **Yes** | Steps 1 to 3, the page: Step 6 |
 | The real arms **do the work**, joining and leaving by USB | **Not yet.** Needs Action's code merged, measured config files, and the staged first-motion checks. No real arm has moved under the orchestrator yet | Steps 4 and 5 |
 
 Rules that apply to every step:
@@ -93,15 +93,15 @@ that this step does not see.
 ## Step 3. Watch the arms join and leave live (no motion)
 
 ```powershell
-python -m hfteama.demo --backend fake --watch --task tasks/sort/hacklab6.json --table configs/hacklab_table.json --orchestra
+python -m hfteama.demo --backend fake --watch --task tasks/sort/hacklab6.json --table configs/hacklab_table.json
 ```
 
-Open http://127.0.0.1:8060 (Orchestra) and/or http://127.0.0.1:8050 (Dash). Both show the same run.
+Open the dashboard, http://127.0.0.1:8050.
 
 | Do | You should see within about 1 second |
 |---|---|
-| Plug in a follower | Orchestra: the counter goes `0 / 2` → `1 / 2` and the arm's card appears. Dash feed: "Arm rakesh_follower joined"; the estimate updates |
-| Press **Go** | The countdown starts; the plan splits the six objects over the joined arms |
+| Plug in a follower | The counter goes `0 / 2` → `1 / 2`, the arm's card appears, the feed says "Arm rakesh_follower joined"; the estimate and the plan (Gantt) update |
+| Press **Go** | The countdown starts; the plan splits the six objects over the joined arms (map: each object in its arm's colour) |
 | Plug in the second follower mid-run | It joins; feed "Re-split: finish now …"; the countdown drops |
 | Pull a follower's USB cable | Feed: "Arm … lost (unplugged), moving its work"; its steps go to the other arm |
 
@@ -140,7 +140,7 @@ Open http://127.0.0.1:8050. USB detection is on by default with `--backend real`
 **Safety: plugging a follower in now connects to it at once and turns its torque on**, with no
 prompt. The arm holds whatever pose it is in, so support a raised arm before plugging in. Then:
 
-- **Remove** in the screen's arm controls is a slow stop: finish the step, park, torque off.
+- **Remove** on the arm's card is a slow stop: finish the step, park, torque off.
 - Pulling the USB cable drops the arm from the run immediately, but does not park it: the arm
   stays where it stopped. Use Remove to take an arm out on purpose.
 - The on-screen controls are software stops. **The emergency stop is the follower's 12 V supply.**
@@ -150,17 +150,18 @@ The runner starts even without LeRobot or a complete config (checked 21 Nov). Th
 only when an arm is plugged in: the console logs `arm <id> could not start: …` and the arm does not
 join. Read that line; the Troubleshooting table lists the usual causes.
 
-## Step 6. The Orchestra page
+## Step 6. The dashboard
 
-Add `--orchestra` to the Step 3 or Step 5 command, then open http://127.0.0.1:8060. It runs in the
-same process as the Dash screen and shows the same run.
+Open http://127.0.0.1:8050 while the Step 3 or Step 5 command runs. It is served by the same
+process as the run.
 
 | On the page | Where it comes from |
 |---|---|
 | `n / 2 robots joined`, each robot's state on the left | the USB watcher (cable in or out) and the executor (joined, working, stopping, lost) |
-| The task on top, the countdown, the limit in words | the event log, through the same code as the Dash screen |
+| The task on top, the countdown, the limit in words, the what-if for 1..N arms | the event log (`view/state.py`) |
+| Plan vs actual (one lane per arm) and who takes what (top view of the table, with `--table`) | the event log: plan bars, finished and running steps, the `scene` event |
 | One card per robot that joined: current step, steps done, heartbeat | the executor and the arm's worker |
-| **Live** at the top left | the page has a live link. **Demo** means it is not connected to a run (it was opened as a file, or the runner is not running with `--orchestra`) |
+| **Live** at the top left | the page has a live link. **Demo** means it is not connected to a run (it was opened as a file, or no run is serving it) |
 
 Controls on the page: Go, Pause / Resume, Stop all (slow stop), and per robot Remove (slow stop)
 and, under ⋯, Remove now, Simulate unplug (not on real arms) and Fail its next pick (fake arms
@@ -169,7 +170,7 @@ whose USB serial it does not see. Every command, accepted or refused, is written
 `commands.jsonl` next to the run's event log.
 
 The page listens on this laptop only. To open it from another machine, add
-`--orchestra-host 0.0.0.0 --orchestra-token <secret>`; commands then need that token
+`--host 0.0.0.0 --token <secret>`; commands then need that token
 (open the page once with `?token=<secret>`).
 
 Joint graphs and the IK line on the cards need joint readings from the arm. They are not wired yet
@@ -185,7 +186,7 @@ Joint graphs and the IK line on the cards need joint readings from the arm. They
 | A serial is printed, but the arm never joins | It is a leader, or a follower whose serial is not in `configs/teleop_pairs.json` | Use the follower. A new follower needs its serial added there (Hardware) |
 | `hfteama pairs` says `not connected` | Same as above, or the 12 V supply is off | Check cable and supply |
 | `ModuleNotFoundError: No module named 'serial'` | Extra `arms` missing | `pip install -e ".[arms]"` |
-| `ModuleNotFoundError: No module named 'dash'` | Extra `view` missing | `pip install -e ".[view]"` |
+| `the dashboard needs FastAPI and uvicorn` and the runner exits | Extra `view` missing | `pip install -e ".[view]"` |
 | `hfteama` is not recognised | The virtual environment is not active, or Step 1 was skipped | `& $HOME\venvs\hfteama\Scripts\Activate.ps1`, then `pip install -e ".[view,arms,sched]"` |
 | `--backend real needs Action's arm code …` and the runner exits | Step 4a not done | `git merge origin/action-arm-skills` |
 | Console: `arm rakesh_follower could not start: 'rakesh_follower'` (the arm id in quotes) | No entry for that arm in `configs/real_arms.json` | Step 4d |
@@ -195,7 +196,7 @@ Joint graphs and the IK line on the cards need joint readings from the arm. They
 | A robot shows as joined with nothing plugged in, and Device Manager still lists "USB-Enhanced-SERIAL CH343 (COMx)" | Windows missed the unplug and kept a stale entry (seen 21 Nov) | Handled since 21 Nov 21:20: on Windows the watcher opens each listed port (at most every 3 s) and treats one that cannot be opened as unplugged, with the reason "port not answering". A port another program holds still counts as present. To clear the entry itself: admin PowerShell `pnputil /scan-devices`, or Device Manager → uninstall that COM port, or restart |
 | An arm joins and is dropped again about 1.5 s later | Heartbeat lost: the arm stopped answering on the bus | Check the 12 V supply and the cable; replug |
 | Page at :8050 does not load | Runner not running, or port 8050 taken | Look at the console; or add `--port 8051` and open that |
-| The Orchestra page says "Demo" | The page is not connected to a run | Start the runner with `--orchestra` and open http://127.0.0.1:8060 (not the file) |
+| The page says "Demo" | The page is not connected to a run | Start the runner and open http://127.0.0.1:8050 (not the file) |
 
 ---
 

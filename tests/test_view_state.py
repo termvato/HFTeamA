@@ -99,7 +99,6 @@ def test_replanning_moment_shows_before_and_after(tmp_path: Path) -> None:
 def test_table_map_from_the_real_layout(tmp_path: Path) -> None:
     from hfteama.demo import with_table
     from hfteama.events import Event
-    from hfteama.view.app import table_map
 
     root = Path(__file__).parent.parent
     graph = load(root / "tasks" / "sort" / "hacklab6.json")
@@ -113,4 +112,6 @@ def test_table_map_from_the_real_layout(tmp_path: Path) -> None:
     ex = Executor(resolved, log, clock=clock)
     ex.add_arm(fake("rakesh_follower", clock))
     sc = build(log.read())
-    assert sc.scene["objects"] and len(table_map(sc).data) == 2 + 6  # arms + objects
+    # the dashboard's map draws this as is: 2 arms with reach, the bowl, 6 objects with their steps
+    assert len(sc.scene["arms"]) == 2 and len(sc.scene["objects"]) == 6
+    assert all(o["xy"] and o["tasks"] for o in sc.scene["objects"])

@@ -138,7 +138,7 @@
         };
       });
       S = { phase: 'estimate', paused: false, now: 0, story: 0, storyStep: 0, finishedAt: null, finishedStory: null,
-        tasks, arms, bowlBy: null, feed: [], replan: null };
+        tasks, arms, bowlBy: null, feed: [], replan: null, bars: [] };
       // One arm is plugged in when the screen opens (as in the demo plan, step 1).
       joinNow('rakesh_follower', true);
       feed('Demo data: an in-browser stand-in for the orchestrator', 'info');
@@ -275,6 +275,7 @@
         }
         if (S.bowlBy === step.id) S.bowlBy = null;
         a.history.unshift({ task: step.id, outcome: 'moved' });
+        bar(a, 'failed');
         a.run = null;
       }
       if (a.held) {
@@ -361,11 +362,18 @@
       }
     }
 
+    // one finished (or abandoned) step on the Gantt
+    function bar(a, state) {
+      const r = a.run;
+      if (r) S.bars.push({ task: r.step.id, arm: a.c.arm_id, start: r.start, end: S.now, state });
+    }
+
     function finishStep(a) {
       const step = a.run.step;
+      const fail = step.skill === 'pick' && a.failNext;
+      bar(a, fail ? 'failed' : 'ok');
       a.run = null;
       if (step.skill === 'place' && S.bowlBy === step.id) S.bowlBy = null;
-      const fail = step.skill === 'pick' && a.failNext;
       if (fail) {
         a.failNext = false;
         a.failed += 1;
@@ -544,6 +552,25 @@
         run: {
           phase: S.phase, paused: S.paused, now: S.now, remaining, big,
           limit: S.phase === 'finished' ? '' : limitText(p, joined.length), whatif,
+        },
+        schedule: {
+          now: S.now,
+          finish: S.phase === 'running' ? p.finish : S.phase === 'finished' ? S.finishedAt : null,
+          plan: [], // the demo source has no per-step plan; its estimate is in run.big / whatif
+          actual: [
+            ...S.bars,
+            ...Object.values(S.arms).filter((a) => a.run).map((a) => ({ task: a.run.step.id, arm: a.c.arm_id, start: a.run.start, end: S.now, state: 'running' })),
+          ],
+        },
+        scene: {
+          arms: CATALOG.map((c) => ({ id: c.arm_id, xy: panAxis(c), r_min: REACH.r_min, r_max: REACH.r_max })),
+          bins: [{ id: BOWL.id, xy: BOWL.xyz.slice(0, 2), radius: 0.12 }],
+          // the arm an object goes to: who has it, else the nearest joined arm that reaches it
+          objects: OBJECTS.map((o, i) => {
+            const near = joined.filter((id) => reaches(S.arms[id].c, o.xyz))
+              .sort((x, y) => dist(S.arms[x].c.base, o.xyz) - dist(S.arms[y].c.base, o.xyz))[0];
+            return { id: o.id, label: o.label, xy: o.xyz.slice(0, 2), tasks: ['pick_' + o.id, 'place_' + o.id], arm: objects[i].arm || near || null };
+          }),
         },
         replanning: S.replan ? { head: S.phase === 'running' && S.now - S.replan.startedAt < 1.2 ? S.replan.head.split(':')[0] + ': re-planning…' : S.replan.head, detail: S.replan.detail } : null,
         counts, nodes, feed: S.feed.slice(0, 12),

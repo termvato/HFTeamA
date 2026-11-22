@@ -1,8 +1,8 @@
 """Orchestra API (docs/ORCHESTRA_DASHBOARD.md, section 5): REST + Server-Sent Events + commands.
 
-Runs inside `python -m hfteama.demo ... --orchestra`, next to the executor, and serves the screen in
-`static/` at `/`. Reads go through `StateHub`; commands go through the demo's `Rig` (the same calls
-the Dash screen's arm controls make) and are written to `commands.jsonl` next to the event log.
+Runs inside `python -m hfteama.demo` (or the runner with `--view`), next to the executor, and serves
+the screen in `static/` at `/`. Reads go through `StateHub`; commands go through the demo's `Rig`
+and are written to `commands.jsonl` next to the event log.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from hfteama.orchestra.hub import StateHub
@@ -173,6 +173,58 @@ def create_app(hub: StateHub, rig: Any, token: str | None = None) -> FastAPI:
             return refuse("resume", None, "Not paused")
         hub.ex.resume()
         return answer("resume", None, True, "Resumed")
+
+    def camera_feed() -> Any:
+        try:
+            from hfteama.perception.camera import active_feed
+        except ImportError:  # no Pillow / camera extra: no feed
+            return None
+        return active_feed()
+
+    @app.get("/api/camera")
+    def camera_info() -> JSONResponse:
+        cam = camera_feed()
+        if cam is None:
+            return JSONResponse({"available": False, "device": "", "age_s": None, "error": ""})
+        return JSONResponse(
+            {"available": True, "device": cam.device, "age_s": cam.age, "error": cam.error}
+        )
+
+    @app.get("/api/camera.jpg")
+    def camera_jpg() -> Response:
+        cam = camera_feed()
+        data = cam.jpeg() if cam is not None else None
+        if data is None:
+            return JSONResponse({"error": "no camera frame"}, status_code=404)
+        return Response(data, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/camera/stream")
+    async def camera_stream() -> Response:
+        """MJPEG (multipart/x-mixed-replace): an <img> shows it live, about 4 frames a second."""
+        cam = camera_feed()
+        if cam is None:
+            return JSONResponse({"error": "no camera"}, status_code=404)
+
+        async def frames() -> AsyncIterator[bytes]:
+            last = b""
+            while True:
+                data = await asyncio.to_thread(cam.jpeg)
+                if data and data is not last:
+                    last = data
+                    yield (
+                        b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                        + str(len(data)).encode()
+                        + b"\r\n\r\n"
+                        + data
+                        + b"\r\n"
+                    )
+                await asyncio.sleep(0.25)
+
+        return StreamingResponse(
+            frames(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.post("/api/run/stop-all")
     async def stop_all(request: Request) -> JSONResponse:

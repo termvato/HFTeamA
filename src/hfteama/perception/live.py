@@ -27,11 +27,16 @@ The hooks take no arguments, so they are configured by environment variables:
     HFTEAMA_TABLE      table layout (default configs/hacklab_table.json)
     HFTEAMA_CAMERA     camera device name (default: "camera.name" in the table file)
     HFTEAMA_IMAGE      a frame file or stream URL instead of the camera (dry runs)
+    HFTEAMA_FEED       1 (default): keep the camera open, shown live on the dashboard; 0: one
+                       ffmpeg run per frame
     HFTEAMA_DETECTOR   auto | tags | vlm | sorter (auto = tags if the table file has a "tags"
                        section; sorter = the box tags located by Hardware's calibrated camera
                        (C922 intrinsics + 4 reference tags), what the real arms grasp with)
     HFTEAMA_TRAVEL     seconds per metre from an arm to its step (default 4.0)
     HFTEAMA_CLEARANCE  metres two arms keep apart where both reach (default 0.15, 0 = off)
+    HFTEAMA_MIN_STEP   seconds: no step estimated below this (default 0; `--backend sorter`: 15)
+    HFTEAMA_NEAREST    other arms' durations x this, so each box goes to its nearest arm
+                       (default 1 = off; `--backend sorter`: 6)
 
 Needs the `camera` extra, plus `vlm` unless every box is a listed tag with a bin.
 """
@@ -39,6 +44,7 @@ Needs the `camera` extra, plus `vlm` unless every box is a listed tag with a bin
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 from collections.abc import Callable
@@ -58,6 +64,49 @@ from hfteama.taskgraph import Task, TaskGraph
 DETECTORS = ("auto", "tags", "vlm", "sorter")
 
 
+def prefer_nearest(
+    graph: TaskGraph, arms: list[Any], min_step_s: float = 0.0, far_factor: float = 1.0
+) -> TaskGraph:
+    """Per-arm durations for a resolved graph: each object to its nearest arm.
+
+    min_step_s: no step is estimated below this (real arms: a pick or a place takes 10-16 s; a
+    lower estimate makes the executor's watchdog, 3 x the estimate, cut the step off mid-motion).
+    far_factor: every arm but the nearest one (pan axis to the group's first points) gets its
+    duration times this, so the planner gives each object to its nearest arm and only falls back
+    to a farther one when the nearest is gone or would idle far longer than the batch. Steps that
+    must run on the same arm (`same_arm_as`) share one nearest arm. 1 = off."""
+    from dataclasses import replace
+
+    from hfteama.registry.reachability import _same_arm_groups, task_points
+
+    by_id = {a.arm_id: a for a in arms}
+    nearest: dict[str, str] = {}
+    if far_factor > 1.0:
+        for group in _same_arm_groups(graph):
+            roots = [tid for tid in group if graph.tasks[tid].same_arm_as is None] or sorted(group)
+            pts = next((p for t in roots if (p := task_points(graph.tasks[t]))), [])
+            allowed = graph.tasks[roots[0]].allowed_arms
+            cands = [by_id[a] for a in (allowed if allowed != "*" else by_id) if a in by_id]
+            if not pts or len(cands) < 2:
+                continue
+            best = min(
+                cands,
+                key=lambda a: sum(math.dist(a.pan_axis_xy, p[:2]) for p in pts),
+            )
+            for tid in group:
+                nearest[tid] = best.arm_id
+    tasks = {}
+    for tid, t in graph.tasks.items():
+        ids = t.allowed_arms if t.allowed_arms != "*" else tuple(by_id)
+        durations = {a: max(t.duration_on(a), min_step_s) for a in ids}
+        if tid in nearest:
+            durations = {
+                a: d if a == nearest[tid] else d * far_factor for a, d in durations.items()
+            }
+        tasks[tid] = replace(t, duration=max(t.duration, min_step_s), durations=durations)
+    return TaskGraph(name=graph.name, tasks=tasks)
+
+
 class LivePipeline:
     """One camera, one table, one VLM (loaded on first use). Thread-safe: the planner, the
     verifier and the re-scan share the camera and the GPU, so they run one at a time."""
@@ -72,6 +121,8 @@ class LivePipeline:
         vlm: Any = None,
         image_side: int = 1920,
         object_height_m: float = 0.02,
+        min_step_s: float = 0.0,
+        far_factor: float = 1.0,
     ) -> None:
         from hfteama.perception.decomposer import load_bins
         from hfteama.perception.tags import TagConfig
@@ -99,6 +150,8 @@ class LivePipeline:
         self.clearance_m = clearance_m or None
         self.image_side = image_side
         self.object_height_m = object_height_m
+        self.min_step_s = min_step_s
+        self.far_factor = far_factor
         self._vlm = vlm
         self._lock = threading.RLock()
         self.calib: Any = None
@@ -163,9 +216,10 @@ class LivePipeline:
         return build_scene(self._detector().detect(image), self.calib, previous)
 
     def resolved(self, source: TaskGraph) -> TaskGraph:
-        return resolve(
+        graph = resolve(
             source, self.arms, travel_s_per_m=self.travel_s_per_m, clearance_m=self.clearance_m
         ).graph
+        return prefer_nearest(graph, self.arms, self.min_step_s, self.far_factor)
 
     def scene_data(self, graph: TaskGraph) -> dict[str, Any]:
         from hfteama.demo import table_scene
@@ -264,6 +318,8 @@ def from_env() -> LivePipeline:
         device=os.environ.get("HFTEAMA_CAMERA") or cam.get("name"),
         image=os.environ.get("HFTEAMA_IMAGE"),
         size=tuple(cam.get("size", (1920, 1080))),
+        # kept open, so the dashboard shows the camera live next to the table map
+        feed=os.environ.get("HFTEAMA_FEED", "1") != "0",
     )
     return LivePipeline(
         table,
@@ -271,6 +327,8 @@ def from_env() -> LivePipeline:
         detector=os.environ.get("HFTEAMA_DETECTOR", "auto"),
         travel_s_per_m=float(os.environ.get("HFTEAMA_TRAVEL", "4.0")),
         clearance_m=float(os.environ.get("HFTEAMA_CLEARANCE", "0.15")),
+        min_step_s=float(os.environ.get("HFTEAMA_MIN_STEP", "0")),
+        far_factor=float(os.environ.get("HFTEAMA_NEAREST", "1")),
     )
 
 

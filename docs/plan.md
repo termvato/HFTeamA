@@ -144,7 +144,7 @@ Try it without hardware: `python -m hfteama.demo --backend fake --table configs/
 | `src/hfteama/discovery.py` | plug-in detection: arms join and leave by USB serial |
 | `src/hfteama/demo.py` | the demo runner: `python -m hfteama.demo` |
 | `src/hfteama/events.py` | event log |
-| `src/hfteama/view/` | live screen |
+| `src/hfteama/orchestra/` | the dashboard (API + screen); `view/state.py` turns the event log into its numbers |
 | `tasks/` | one folder per task |
 | `configs/` | pairs and calibrations (Hardware), table layout, arm positions (`real_arms.json`, Action's format) |
 | `scripts/` | benchmarks and tools |
@@ -165,5 +165,5 @@ Try it without hardware: `python -m hfteama.demo --backend fake --table configs/
 ```bash
 pip install -e ".[dev,sched,view,arms]"   # add sim for MuJoCo, vlm and camera for the VLM
 pytest
-python -m hfteama.demo --backend fake --plugged rakesh_follower   # then http://127.0.0.1:8050
+python -m hfteama.demo --backend fake --plugged rakesh_follower   # dashboard: http://127.0.0.1:8050
 ```
