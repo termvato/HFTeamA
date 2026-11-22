@@ -3,6 +3,8 @@
 - [`plan.md`](plan.md): the main plan: teams, where teams meet, checkpoints, demo, safety.
 - [`map.html`](map.html): one-page visual map (architecture, what happens when an arm is plugged in,
   speed-up limits, who builds what). Live at https://termvato.github.io/HFTeamA/map.html
+- [`VIEW_DASHBOARD_REMOTE.md`](VIEW_DASHBOARD_REMOTE.md): watching the dashboard from another
+  laptop on the same Wi-Fi (view only, e.g. to screen-record a run).
 - [`../tasks/README.md`](../tasks/README.md): how to add a task.
 - [`../research/`](../research/): background report and notes.
 
