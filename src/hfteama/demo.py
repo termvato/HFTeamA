@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -30,12 +31,12 @@ from typing import Any
 
 from hfteama.arms.fake import FakeArm
 from hfteama.clock import Clock
-from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs
+from hfteama.discovery import ArmWatcher, connected_serials, followers_from_pairs, port_answers
 from hfteama.events import Event, EventLog
 from hfteama.executor import PLACE_SKILLS, Executor
 from hfteama.taskgraph import Task, TaskGraph, load
 
-BACKENDS = ("fake", "sim", "real")
+BACKENDS = ("fake", "sim", "real", "sorter")
 
 
 def hook(spec: str) -> Callable[..., Any]:
@@ -56,7 +57,9 @@ def fake_factory(clock: Clock, noise: float = 0.1) -> Callable[[str], Any]:
     return make
 
 
-def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[[str], Any]:
+def action_factory(
+    backend: str, poses_path: str, arms_config: str, pairs: str | None = None
+) -> Callable[[str], Any]:
     """Action's worker on its sim or real driver. Imported here, so `fake` needs none of it."""
     try:
         from hfteama.arms import generic_skills  # noqa: F401  (registers the skills)
@@ -68,6 +71,10 @@ def action_factory(backend: str, poses_path: str, arms_config: str) -> Callable[
             f"action-arm-skills), which is not in this checkout: {e}"
         ) from e
     poses = Poses.load(poses_path)
+    if backend == "sorter":  # real arms through Hardware's calibrated sorter IK (#19)
+        from hfteama.sorter.bridge import sorter_worker_factory
+
+        return sorter_worker_factory(poses, pairs_config=pairs)
     if backend == "real":
         from hfteama.arms.real import from_config
 
@@ -191,6 +198,7 @@ def build(
     scan: Callable[[], Any] | None = None,
     verifier: Callable[..., Any] | None = None,
     method: str = "heft",
+    verify: Callable[[str], bool] | None = None,
 ) -> tuple[Executor, ArmWatcher, Rig]:
     """Wire executor, watcher and controls. `scan=None` means manual plug-in only."""
     arm_ids = list(known.values())
@@ -203,7 +211,7 @@ def build(
         verifier=verifier,
         verify_skills=PLACE_SKILLS if verifier else None,
     )
-    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()))
+    watcher = ArmWatcher(ex, known, factory, scan=scan or (lambda: ()), verify=verify)
     return ex, watcher, Rig(ex, watcher, arm_ids)
 
 
@@ -252,8 +260,8 @@ def main(argv: list[str] | None = None) -> None:
     if args.backend == "fake":
         factory = fake_factory(clock)
     else:
-        factory = action_factory(args.backend, args.poses, args.arms_config)
-    watch = args.watch if args.watch is not None else args.backend == "real"
+        factory = action_factory(args.backend, args.poses, args.arms_config, args.pairs)
+    watch = args.watch if args.watch is not None else args.backend in ("real", "sorter")
     path = Path(args.log or f"runs/{time.strftime('%Y%m%d-%H%M%S')}/events.jsonl")
     log = EventLog(path)
     ex, watcher, rig = build(
@@ -263,6 +271,8 @@ def main(argv: list[str] | None = None) -> None:
         factory,
         clock=clock,
         scan=connected_serials if watch else None,
+        # Windows can keep listing an unplugged board: open the port before trusting it
+        verify=port_answers if watch and sys.platform == "win32" else None,
         verifier=verifier,
         method=args.method,
     )
