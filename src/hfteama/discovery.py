@@ -146,7 +146,10 @@ class ArmWatcher:
             self._joined.add(arm_id)
         try:
             worker = self.factory(arm_id)
-        except Exception as e:  # e.g. the arm refused to start; keep watching the others
+        # e.g. the arm refused to start; keep watching the others. SystemExit too: the sorter's
+        # connect refuses that way (calibration differs, not connected), and uncaught it ended
+        # this thread silently (22 Nov: no more USB scans, the screen stopped following plugs)
+        except (Exception, SystemExit) as e:
             with self._lock:
                 self._joined.discard(arm_id)
             log.error("arm %s could not start: %s", arm_id, e)

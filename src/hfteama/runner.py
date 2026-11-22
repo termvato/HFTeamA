@@ -180,6 +180,61 @@ class _ProcessProbe:
             late_sum, late_max, n, self._scan_max = 0.0, 0.0, 0, 0.0
 
 
+WARM_SKILLS = ("pick", "place", "pick_place")
+
+
+def _warm_ik(graph, workers: dict[str, SkillWorker], poses: Poses, stop: threading.Event) -> None:
+    """Before Go: solve each arm's IK for every step it may take, so its first moves after Go
+    start at once (22 Nov 12:17: 20 s and 36 s of IK before the arms' first moves, then 35 s
+    before a later one; the planner itself takes ~1 ms).
+
+    It makes the reach checks a skill makes before it moves (generic_skills: every waypoint
+    through `ArmDriver.reachable`), plus the sorter bridge's drop over the bowl. Those fill the
+    arm driver's IK cache, and the moves reuse the same entries. Nothing moves and the bus is
+    not used. A step whose check fails here fails the same way at run time, so failures are
+    only counted. Not covered: the short vertical lines (seeded from the live pose). An arm that
+    joins later (USB, --watch) is not warmed."""
+    from hfteama.arms import generic_skills as gs
+
+    for arm_id, worker in workers.items():
+        drv = getattr(worker, "_driver", None)
+        if drv is None or not hasattr(drv, "reachable"):
+            continue
+        carry = gs._carry_point(poses, arm_id)
+        steps = [t for t in graph.tasks.values() if t.skill in WARM_SKILLS and t.can_run_on(arm_id)]
+        if not steps:
+            continue
+        print(f"IK for {arm_id}: solving {len(steps)} steps before Go...", flush=True)
+        t0, bad = time.perf_counter(), 0
+        for task in steps:
+            if stop.is_set():
+                print("IK warm-up interrupted.")
+                return
+            try:
+                points, drops = [], []
+                if task.skill in ("pick", "pick_place"):
+                    p = gs.pick_point(task, poses, arm_id)
+                    points += gs._pick_waypoints(p, gs.pick_yaw(task), carry)
+                if task.skill in ("place", "pick_place"):
+                    drops = gs._place_waypoints(gs.place_point(task, poses, arm_id), carry)
+                    points += drops
+                if not all(drv.reachable(w, yaw) for w, yaw in points):
+                    bad += 1
+                # carrying a box, the sorter bridge solves the bowl as a drop, a separate
+                # cache entry the reach check does not fill (offline: the first pick's IK
+                # 2.8 s -> 0 s with it, hacklab's whole batch 7.0 s -> 2.3 s)
+                if hasattr(drv, "_command"):
+                    for w, _ in drops:
+                        drv._command(w, None, "drop")
+            except Exception:  # noqa: BLE001  (the step reports it at run time, as before)
+                bad += 1
+        took = time.perf_counter() - t0
+        if hasattr(drv, "_ik_s"):  # the motion log's per-move IK time: count run time only
+            drv._ik_s = 0.0
+        note = f" ({bad} out of this arm's reach)" if bad else ""
+        print(f"IK for {arm_id}: ready in {took:.0f} s{note}", flush=True)
+
+
 def _vlm_place_check(cam: _Overhead):
     """Qwen confirms each place from a fresh overhead frame (the architecture's VLM layer).
     Returns (verifier, unload)."""
@@ -419,7 +474,12 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
             made[arm_id] = factory(arm_id)
             return made[arm_id]
 
-        watcher = ArmWatcher(ex, known=known, factory=tracked, scan=probe.timed_scan)
+        def refused(arm_id: str, e: BaseException) -> None:
+            print(f"{arm_id} could not join: {e or type(e).__name__}", flush=True)
+
+        watcher = ArmWatcher(
+            ex, known=known, factory=tracked, scan=probe.timed_scan, on_error=refused
+        )
         for arm_id in arm_ids:
             if not watcher.plug(arm_id):
                 print(f"could not start {arm_id}: aborting (nothing has moved).")
@@ -428,9 +488,14 @@ def main(argv: list[str] | None = None, ask: Callable[[str], str] = input) -> in
         for spec in args.inject:
             arm_id, kind = spec.split(":")
             table.inject(arm_id, kind)  # type: ignore[arg-type,union-attr]
+        probe.start()
+        # before the dashboard (and its Go) is up, so no arm moves while its IK is solved
+        _warm_ik(graph, dict(made), poses, stop_requested)
+        if stop_requested.is_set():
+            _park_all(ex, watcher, made)
+            return 130
         if args.watch:
             watcher.start()
-        probe.start()
 
         plan = ex.estimate()
         print(f"estimate: finish in {plan.makespan:.0f} s; limit: {plan.binding or 'n/a'}")
