@@ -5,8 +5,9 @@ it splits the work by reach and time, keeps the arms out of each other's way, an
 when an arm joins, a grasp misses or an arm drops out. No new training and no re-programming per
 arm setup.
 
-Built by six people in a 34-hour hackathon (HackLab #2, Berlin, 21-22 November 2026, Hugging Face
-"Desk Hero" track) on SO-101 arms that cost about 100 dollars each.
+**Winner of the Hugging Face "Desk Hero" track at HackLab #2, Berlin (21-22 November 2026).**
+
+Built by six people in the 34-hour hackathon, on SO-101 arms that cost about 100 dollars each.
 
 | | |
 |---|---|
